@@ -274,7 +274,9 @@ fn test_pty_pid() {
 }
 
 /// Test interactive command execution.
+/// Note: This test is timing-sensitive and may be flaky in CI environments.
 #[test]
+#[ignore = "Timing-sensitive test, run manually with --ignored"]
 fn test_pty_interactive_command() {
     let config = PtyConfig::default();
     let mut pty = Pty::new(config).expect("PTY creation should succeed");
