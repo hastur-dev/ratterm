@@ -5,7 +5,7 @@
 set -e
 
 VERSION="0.1.0"
-REPO="OWNER/ratterm"  # Update this with your GitHub username/repo
+REPO="hastur-dev/ratterm"
 BINARY_NAME="rat"
 INSTALL_DIR="${RATTERM_INSTALL_DIR:-$HOME/.local/bin}"
 

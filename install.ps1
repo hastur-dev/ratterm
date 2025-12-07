@@ -9,7 +9,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $Version = "0.1.0"
-$Repo = "OWNER/ratterm"  # Update with your GitHub username/repo
+$Repo = "hastur-dev/ratterm"
 $BinaryName = "rat"
 $AppName = "ratterm"
 
