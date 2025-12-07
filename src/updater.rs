@@ -10,7 +10,7 @@ use std::io::{self, Write};
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// GitHub repository for updates.
-const REPO: &str = "OWNER/ratterm"; // Update with your GitHub username/repo
+const REPO: &str = "hastur-dev/ratterm";
 
 /// Update check result.
 #[derive(Debug)]
