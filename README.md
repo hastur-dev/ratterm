@@ -51,14 +51,17 @@ rat --update     # Check for updates
 - Alternate screen buffer support
 
 ### Code Editor
-- Vim, Emacs, and Default keybinding modes (configurable in `~/.ratrc`)
+- **Four keybinding modes**: Vim, Emacs, VSCode, and Default (configurable in `~/.ratrc`)
 - Modal editing (Normal, Insert, Visual, Command modes in Vim mode)
+- VSCode-style editing features: multi-cursor support, line operations, smart comments
 - Undo/redo support
 - File browser (`Ctrl+O`)
 - Search in file (`Ctrl+F`)
 - Multiple file tabs (`Alt+Shift+Left/Right` to switch)
 
 ### General
+- **Command Palette** (`Ctrl+Shift+P`) for quick access to all commands
+- **Mode Switcher** (`Ctrl+Shift+Tab`) to cycle between Vim/Emacs/Default/VSCode editor modes
 - Resizable split panes (`Alt+[` / `Alt+]`)
 - Clipboard support (`Ctrl+Shift+C` to copy, `Ctrl+V` to paste)
 - Save confirmation on exit
@@ -69,6 +72,8 @@ rat --update     # Check for updates
 ### Global
 | Key | Action |
 |-----|--------|
+| `Ctrl+Shift+P` | Open Command Palette |
+| `Ctrl+Shift+Tab` | Switch Editor Mode (cycles through Vim/Emacs/Default/VSCode) |
 | `Alt+Left` | Focus terminal pane |
 | `Alt+Right` | Focus editor pane |
 | `Alt+Up/Down` | Switch between split terminals |
@@ -137,19 +142,78 @@ rat --update     # Check for updates
 | `Ctrl+Z/Y` | Undo/Redo |
 | `Ctrl+S` | Save |
 
+### Editor (VSCode Mode)
+
+VSCode mode provides a familiar editing experience for VSCode users with standard keyboard shortcuts.
+
+#### Navigation
+| Key | Action |
+|-----|--------|
+| Arrow keys | Move cursor |
+| `Home/End` | Line start/end |
+| `Ctrl+Home/End` | Buffer start/end |
+| `Ctrl+Left/Right` | Word navigation |
+| `PageUp/Down` | Page navigation |
+
+#### Selection
+| Key | Action |
+|-----|--------|
+| `Shift+Arrow` | Extend selection |
+| `Shift+Home/End` | Select to line start/end |
+| `Ctrl+Shift+Left/Right` | Select word |
+| `Ctrl+A` | Select all |
+| `Ctrl+L` | Select line |
+
+#### Editing
+| Key | Action |
+|-----|--------|
+| `Ctrl+Z` | Undo |
+| `Ctrl+Y` / `Ctrl+Shift+Z` | Redo |
+| `Ctrl+S` | Save |
+| `Ctrl+D` | Duplicate line |
+| `Ctrl+Shift+K` | Delete line |
+| `Alt+Up/Down` | Move line up/down |
+| `Ctrl+/` | Toggle comment |
+| `Ctrl+]` / `Ctrl+[` | Indent/Outdent |
+| `Tab` | Indent |
+| `Shift+Tab` | Outdent |
+
 ## Configuration
 
 Ratterm reads configuration from `~/.ratrc` on startup.
 
 ```bash
-# Keybinding mode: vim, emacs, or default
+# Keybinding mode: vim, emacs, vscode, or default
 mode = vim
+
+# For VSCode mode, use:
+# mode = vscode
 
 # Custom keybindings (optional)
 # quit = ctrl+q
 # copy = ctrl+shift+c
 # paste = ctrl+v
 ```
+
+### VSCode Settings Import
+
+When using VSCode mode, Ratterm can automatically import settings from your existing VSCode installation. The following settings are supported:
+
+| VSCode Setting | Description |
+|----------------|-------------|
+| `editor.tabSize` | Number of spaces per tab |
+| `editor.insertSpaces` | Use spaces instead of tabs |
+| `editor.wordWrap` | Word wrap mode (off/on/bounded) |
+| `editor.cursorStyle` | Cursor style (line/block/underline) |
+| `editor.lineNumbers` | Line numbers mode (off/on/relative) |
+| `files.autoSave` | Auto-save mode |
+| `files.trimTrailingWhitespace` | Trim trailing whitespace on save |
+| `files.insertFinalNewline` | Insert final newline on save |
+
+Settings are loaded from:
+- **Windows**: `%APPDATA%\Code\User\settings.json`
+- **macOS**: `~/Library/Application Support/Code/User/settings.json`
+- **Linux**: `~/.config/Code/User/settings.json`
 
 ## Environment Variables
 
@@ -162,7 +226,7 @@ mode = vim
 
 - **Windows**: Windows 10 1809+ (ConPTY support)
 - **Linux/macOS**: Standard POSIX PTY support
-- **Rust**: 1.75+ (for building from source)
+- **Rust**: 1.85+ (for building from source, Rust 2024 Edition)
 
 ## Development
 

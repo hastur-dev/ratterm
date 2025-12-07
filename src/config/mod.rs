@@ -3,12 +3,15 @@
 //! Handles loading and parsing the .ratrc configuration file.
 
 mod keybindings;
+pub mod shell;
+pub mod vscode;
 
 use std::fs;
 use std::io::{self, Write};
 use std::path::PathBuf;
 
 pub use keybindings::{KeyAction, KeyBinding, KeybindingMode, Keybindings};
+pub use shell::{ShellDetector, ShellInfo, ShellInstallInfo, ShellInstaller, ShellType};
 
 /// Default .ratrc file content with all commands documented.
 const DEFAULT_RATRC: &str = r#"# Ratatui Full IDE Configuration File
@@ -16,9 +19,18 @@ const DEFAULT_RATRC: &str = r#"# Ratatui Full IDE Configuration File
 # This file is read on application startup.
 # Lines starting with '#' are comments.
 #
+# Shell Configuration
+# -------------------
+# Set the preferred shell: powershell, bash, cmd, zsh, fish, or system
+# Windows: powershell (default), bash (requires Git Bash), cmd
+# Linux: bash (default), zsh, fish, powershell (requires PowerShell Core)
+# macOS: zsh (default), bash, fish, powershell (requires PowerShell Core)
+# shell = system
+shell = system
+
 # Keybinding Mode
 # ---------------
-# Set the keybinding mode: vim, emacs, or default
+# Set the keybinding mode: vim, emacs, vscode, or default
 # mode = default
 mode = vim
 
@@ -92,6 +104,8 @@ mode = vim
 pub struct Config {
     /// Keybinding mode (vim, emacs, default).
     pub mode: KeybindingMode,
+    /// Preferred shell type.
+    pub shell: ShellType,
     /// Custom keybindings.
     pub keybindings: Keybindings,
     /// Path to config file.
@@ -102,6 +116,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             mode: KeybindingMode::Vim,
+            shell: ShellType::System,
             keybindings: Keybindings::default(),
             config_path: Self::default_config_path(),
         }
@@ -217,7 +232,18 @@ impl Config {
                 self.mode = match value.to_lowercase().as_str() {
                     "vim" => KeybindingMode::Vim,
                     "emacs" => KeybindingMode::Emacs,
+                    "vscode" | "vs" | "code" => KeybindingMode::VsCode,
                     _ => KeybindingMode::Default,
+                };
+            }
+            "shell" => {
+                self.shell = match value.to_lowercase().as_str() {
+                    "powershell" | "pwsh" | "ps" => ShellType::PowerShell,
+                    "bash" => ShellType::Bash,
+                    "cmd" | "command" => ShellType::Cmd,
+                    "zsh" => ShellType::Zsh,
+                    "fish" => ShellType::Fish,
+                    _ => ShellType::System,
                 };
             }
             _ => {

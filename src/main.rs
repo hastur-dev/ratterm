@@ -51,7 +51,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Handle --version flag
     if args.iter().any(|a| a == "--version" || a == "-v") {
-        println!("ratterm v{}", VERSION);
+        println!("ratterm v{VERSION}");
         return Ok(());
     }
 
@@ -60,18 +60,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let updater = Updater::new();
         match updater.check() {
             UpdateStatus::Available(version) => {
-                println!("Updating to v{}...", version);
+                println!("Updating to v{version}...");
                 if let Err(e) = updater.update(&version) {
-                    eprintln!("Update failed: {}", e);
+                    eprintln!("Update failed: {e}");
                     std::process::exit(1);
                 }
                 println!("Update complete! Please restart ratterm.");
             }
             UpdateStatus::UpToDate => {
-                println!("ratterm v{} is up to date.", VERSION);
+                println!("ratterm v{VERSION} is up to date.");
             }
             UpdateStatus::Failed(e) => {
-                eprintln!("Update check failed: {}", e);
+                eprintln!("Update check failed: {e}");
                 std::process::exit(1);
             }
             UpdateStatus::Disabled => {
@@ -82,12 +82,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Check for updates on startup (unless --no-update)
-    if !args.iter().any(|a| a == "--no-update") {
-        if updater::check_for_updates() {
+    if !args.iter().any(|a| a == "--no-update")
+        && updater::check_for_updates() {
             // User updated, exit so they can restart
             return Ok(());
         }
-    }
 
     // Get file path (skip flags)
     let file_path = args.iter()
@@ -124,7 +123,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Open file if provided
     if let Some(path) = file_path {
         if let Err(e) = app.open_file(&path) {
-            app.set_status(format!("Error opening {}: {}", path, e));
+            app.set_status(format!("Error opening {path}: {e}"));
         }
     }
 

@@ -12,7 +12,7 @@ use std::time::Duration;
 use crossterm::event::{self, Event};
 
 use crate::clipboard::Clipboard;
-use crate::config::{Config, KeybindingMode};
+use crate::config::{Config, KeybindingMode, ShellType};
 use crate::editor::Editor;
 use crate::filebrowser::FileBrowser;
 use crate::terminal::{pty::PtyError, TerminalMultiplexer};
@@ -21,7 +21,10 @@ use crate::ui::{
     editor_widget::EditorWidget,
     file_picker::FilePickerWidget,
     layout::{FocusedPane, SplitLayout},
-    popup::{Popup, PopupKind, PopupWidget},
+    popup::{
+        CommandPalette, ModeSwitcher, ModeSwitcherWidget, Popup, PopupKind, PopupWidget,
+        ShellInstallPrompt, ShellInstallPromptWidget, ShellSelector, ShellSelectorWidget,
+    },
     statusbar::StatusBar,
     terminal_tabs::TerminalTabBar,
     terminal_widget::TerminalWidget,
@@ -65,6 +68,14 @@ pub struct App {
     mode: AppMode,
     /// Popup dialog.
     popup: Popup,
+    /// Command palette for VSCode-style command access.
+    command_palette: CommandPalette,
+    /// Mode switcher for cycling through editor keybinding modes.
+    mode_switcher: Option<ModeSwitcher>,
+    /// Shell selector for choosing terminal shell.
+    shell_selector: Option<ShellSelector>,
+    /// Shell install prompt for unavailable shells.
+    shell_install_prompt: Option<ShellInstallPrompt>,
     /// Open files (tabs).
     open_files: Vec<OpenFile>,
     /// Current file index.
@@ -77,8 +88,7 @@ pub struct App {
     last_error: Option<String>,
     /// Clipboard.
     clipboard: Clipboard,
-    /// Configuration (will be used for keybinding modes).
-    #[allow(dead_code)]
+    /// Configuration.
     config: Config,
 }
 
@@ -94,14 +104,18 @@ impl App {
         // Load configuration
         let config = Config::load().unwrap_or_default();
 
+        // Get the shell path from config
+        let shell_path = config.shell.get_shell_path();
+
         // Subtract 4 from height: 1 for status bar + 1 for tab bar + 2 for borders
-        let terminals = match TerminalMultiplexer::new(cols / 2, rows.saturating_sub(4)) {
-            Ok(t) => Some(t),
-            Err(e) => {
-                tracing::warn!("Failed to create terminal: {}", e);
-                None
-            }
-        };
+        let terminals =
+            match TerminalMultiplexer::with_shell(cols / 2, rows.saturating_sub(4), shell_path) {
+                Ok(t) => Some(t),
+                Err(e) => {
+                    tracing::warn!("Failed to create terminal: {}", e);
+                    None
+                }
+            };
 
         let editor = Editor::new(cols / 2, rows.saturating_sub(4));
         let file_browser = FileBrowser::default();
@@ -113,6 +127,10 @@ impl App {
             layout: SplitLayout::new(),
             mode: AppMode::Normal,
             popup: Popup::new(PopupKind::SearchInFile),
+            command_palette: CommandPalette::new(),
+            mode_switcher: None,
+            shell_selector: None,
+            shell_install_prompt: None,
             open_files: Vec::new(),
             current_file_idx: 0,
             running: true,
@@ -149,8 +167,24 @@ impl App {
     /// Adds a new terminal tab.
     pub fn add_terminal_tab(&mut self) {
         if let Some(ref mut terminals) = self.terminals {
-            match terminals.add_tab() {
-                Ok(idx) => self.set_status(format!("Created terminal tab {}", idx + 1)),
+            let shell_path = self.config.shell.get_shell_path();
+            let shell_name = self.config.shell.display_name();
+            match terminals.add_tab_with_shell(shell_path.clone()) {
+                Ok(idx) => {
+                    if let Some(ref path) = shell_path {
+                        self.set_status(format!(
+                            "Created terminal {} with {} ({})",
+                            idx + 1,
+                            shell_name,
+                            path.display()
+                        ));
+                    } else {
+                        self.set_status(format!(
+                            "Created terminal {} with system default",
+                            idx + 1
+                        ));
+                    }
+                }
                 Err(e) => self.set_status(format!("Cannot create tab: {}", e)),
             }
         }
@@ -188,7 +222,8 @@ impl App {
     /// Creates a horizontal split in the terminal.
     pub fn split_terminal_horizontal(&mut self) {
         if let Some(ref mut terminals) = self.terminals {
-            match terminals.split_horizontal() {
+            let shell_path = self.config.shell.get_shell_path();
+            match terminals.split_horizontal_with_shell(shell_path) {
                 Ok(()) => self.set_status("Split horizontal"),
                 Err(e) => self.set_status(format!("Cannot split: {}", e)),
             }
@@ -198,7 +233,8 @@ impl App {
     /// Creates a vertical split in the terminal.
     pub fn split_terminal_vertical(&mut self) {
         if let Some(ref mut terminals) = self.terminals {
-            match terminals.split_vertical() {
+            let shell_path = self.config.shell.get_shell_path();
+            match terminals.split_vertical_with_shell(shell_path) {
                 Ok(()) => self.set_status("Split vertical"),
                 Err(e) => self.set_status(format!("Cannot split: {}", e)),
             }
@@ -310,7 +346,21 @@ impl App {
     }
 
     /// Shows the file browser.
+    ///
+    /// The file browser will open in the terminal's current working directory
+    /// if available, otherwise in its current directory.
     pub fn show_file_browser(&mut self) {
+        // Try to get the terminal's current working directory
+        if let Some(ref terminals) = self.terminals {
+            if let Some(terminal) = terminals.active_terminal() {
+                let cwd = terminal.current_working_dir();
+                // Change to the terminal's CWD if it's different
+                if cwd.is_dir() && cwd != self.file_browser.path() {
+                    let _ = self.file_browser.change_dir(&cwd);
+                }
+            }
+        }
+
         let _ = self.file_browser.refresh();
         self.file_browser.show();
         self.mode = AppMode::FileBrowser;
@@ -334,6 +384,12 @@ impl App {
             }
         }
 
+        // Initialize command palette with all commands
+        if matches!(kind, PopupKind::CommandPalette) {
+            self.command_palette.filter("");
+            self.popup.set_results(self.command_palette.results());
+        }
+
         self.popup.show();
         self.mode = AppMode::Popup;
     }
@@ -341,11 +397,141 @@ impl App {
     /// Hides the popup.
     pub fn hide_popup(&mut self) {
         self.popup.hide();
+        self.mode_switcher = None; // Clear mode switcher when hiding popup
+        self.shell_selector = None; // Clear shell selector when hiding popup
+        self.shell_install_prompt = None; // Clear shell install prompt when hiding popup
         self.mode = if self.file_browser.is_visible() {
             AppMode::FileBrowser
         } else {
             AppMode::Normal
         };
+    }
+
+    /// Shows the mode switcher popup.
+    pub fn show_mode_switcher(&mut self) {
+        self.mode_switcher = Some(ModeSwitcher::new(self.config.mode));
+        self.popup.set_kind(PopupKind::ModeSwitcher);
+        self.popup.clear();
+        self.popup.show();
+        self.mode = AppMode::Popup;
+    }
+
+    /// Cycles to the next editor mode in the mode switcher.
+    pub fn cycle_mode_next(&mut self) {
+        if let Some(ref mut switcher) = self.mode_switcher {
+            switcher.next();
+        }
+    }
+
+    /// Cycles to the previous editor mode in the mode switcher.
+    pub fn cycle_mode_prev(&mut self) {
+        if let Some(ref mut switcher) = self.mode_switcher {
+            switcher.prev();
+        }
+    }
+
+    /// Applies the selected mode from the mode switcher and closes it.
+    pub fn apply_mode_switch(&mut self) {
+        if let Some(ref switcher) = self.mode_switcher {
+            let new_mode = switcher.selected_mode();
+            self.config.mode = new_mode;
+            self.set_status(format!(
+                "Switched to {} mode",
+                crate::ui::popup::ModeSwitcher::mode_name(new_mode)
+            ));
+        }
+        self.hide_popup();
+    }
+
+    /// Cancels the mode switch and reverts to the original mode.
+    pub fn cancel_mode_switch(&mut self) {
+        self.hide_popup();
+    }
+
+    /// Returns true if the mode switcher is currently active.
+    #[must_use]
+    pub fn is_mode_switcher_active(&self) -> bool {
+        self.mode_switcher.is_some() && self.popup.kind().is_mode_switcher()
+    }
+
+    /// Shows the shell selector popup.
+    pub fn show_shell_selector(&mut self) {
+        self.shell_selector = Some(ShellSelector::new(self.config.shell));
+        self.popup.set_kind(PopupKind::ShellSelector);
+        self.popup.clear();
+        self.popup.show();
+        self.mode = AppMode::Popup;
+    }
+
+    /// Cycles to the next shell in the shell selector.
+    pub fn cycle_shell_next(&mut self) {
+        if let Some(ref mut selector) = self.shell_selector {
+            selector.next();
+        }
+    }
+
+    /// Cycles to the previous shell in the shell selector.
+    pub fn cycle_shell_prev(&mut self) {
+        if let Some(ref mut selector) = self.shell_selector {
+            selector.prev();
+        }
+    }
+
+    /// Applies the selected shell from the selector.
+    /// If the shell is not available, shows the install prompt instead.
+    pub fn apply_shell_selection(&mut self) {
+        if let Some(ref selector) = self.shell_selector {
+            let selected_shell = selector.selected_shell();
+
+            if !selector.is_selected_available() {
+                // Shell not available - show install prompt
+                self.shell_install_prompt = Some(ShellInstallPrompt::new(selected_shell));
+                self.popup.set_kind(PopupKind::ShellInstallPrompt);
+                self.shell_selector = None;
+                return;
+            }
+
+            // Shell is available - apply the selection
+            self.config.shell = selected_shell;
+
+            // Show status with path info
+            if let Some(path) = selected_shell.get_shell_path() {
+                self.set_status(format!(
+                    "Shell set to {} ({}) - create new tab to use",
+                    selected_shell.display_name(),
+                    path.display()
+                ));
+            } else {
+                self.set_status(format!(
+                    "Shell set to {} - create new tab to use",
+                    selected_shell.display_name()
+                ));
+            }
+        }
+        self.hide_popup();
+    }
+
+    /// Cancels the shell selection.
+    pub fn cancel_shell_selection(&mut self) {
+        self.hide_popup();
+    }
+
+    /// Returns true if the shell selector is currently active.
+    #[must_use]
+    pub fn is_shell_selector_active(&self) -> bool {
+        self.shell_selector.is_some() && self.popup.kind().is_shell_selector()
+    }
+
+    /// Returns true if the shell install prompt is currently active.
+    #[must_use]
+    pub fn is_shell_install_prompt_active(&self) -> bool {
+        self.shell_install_prompt.is_some() && self.popup.kind().is_shell_install_prompt()
+    }
+
+    /// Returns the current shell configuration.
+    #[must_use]
+    pub fn current_shell(&self) -> ShellType {
+        self.config.shell
     }
 
     /// Switches to the next open file.
@@ -450,6 +636,11 @@ impl App {
         self.set_status(format!("Closed {}", closed_name));
     }
 
+    /// Closes the current file (alias for close_editor_tab).
+    pub fn close_current_file(&mut self) {
+        self.close_editor_tab();
+    }
+
     /// Handles terminal resize.
     pub fn resize(&mut self, cols: u16, rows: u16) {
         let areas = self
@@ -516,6 +707,10 @@ impl App {
                 .take(10)
                 .map(|e| e.name().to_string())
                 .collect(),
+            PopupKind::CommandPalette => {
+                self.command_palette.filter(&input);
+                self.command_palette.results()
+            }
             _ => Vec::new(),
         };
 
@@ -583,6 +778,111 @@ impl App {
                 // This is handled by handle_confirmation_key, not execute_popup_action
                 self.hide_popup();
             }
+            PopupKind::CommandPalette => {
+                let selected_idx = self
+                    .popup
+                    .results()
+                    .iter()
+                    .position(|r| self.popup.selected_result() == Some(r))
+                    .unwrap_or(0);
+
+                if let Some(cmd) = self.command_palette.get_command(selected_idx) {
+                    let cmd_id = cmd.id.to_string();
+                    self.hide_popup();
+                    self.execute_command(&cmd_id);
+                } else {
+                    self.hide_popup();
+                }
+            }
+            PopupKind::ModeSwitcher => {
+                // Mode switcher is handled by apply_mode_switch, not execute_popup_action
+                self.apply_mode_switch();
+            }
+            PopupKind::ShellSelector => {
+                // Shell selector is handled by apply_shell_selection
+                self.apply_shell_selection();
+            }
+            PopupKind::ShellInstallPrompt => {
+                // Just close the install prompt
+                self.hide_popup();
+            }
+        }
+    }
+
+    /// Executes a command by its ID.
+    fn execute_command(&mut self, command_id: &str) {
+        match command_id {
+            // File commands
+            "file.new" => self.show_popup(PopupKind::CreateFile),
+            "file.newFolder" => self.show_popup(PopupKind::CreateFolder),
+            "file.open" => self.show_file_browser(),
+            "file.save" => {
+                if let Err(e) = self.editor.save() {
+                    self.set_status(format!("Error saving: {}", e));
+                } else {
+                    self.set_status("File saved".to_string());
+                }
+            }
+            "file.close" => self.close_current_file(),
+
+            // Edit commands
+            "edit.undo" => self.editor.undo(),
+            "edit.redo" => self.editor.redo(),
+            "edit.copy" => {
+                if let Some(text) = self.editor.selected_text() {
+                    self.copy_to_clipboard(&text);
+                }
+            }
+            "edit.paste" => {
+                if let Some(text) = self.paste_from_clipboard() {
+                    self.editor.insert_str(&text);
+                }
+            }
+            "edit.selectAll" => self.editor.select_all(),
+            "edit.selectLine" => self.editor.select_line(),
+            "edit.duplicateLine" => self.editor.duplicate_line(),
+            "edit.deleteLine" => self.editor.delete_line(),
+            "edit.moveLineUp" => self.editor.move_line_up(),
+            "edit.moveLineDown" => self.editor.move_line_down(),
+            "edit.toggleComment" => self.editor.toggle_comment(),
+            "edit.indent" => self.editor.indent(),
+            "edit.outdent" => self.editor.outdent(),
+
+            // Search commands
+            "search.inFile" => self.show_popup(PopupKind::SearchInFile),
+            "search.inFiles" => self.show_popup(PopupKind::SearchInFiles),
+            "search.files" => self.show_popup(PopupKind::SearchFiles),
+            "search.directories" => self.show_popup(PopupKind::SearchDirectories),
+
+            // View commands
+            "view.focusTerminal" => self.layout.set_focused(FocusedPane::Terminal),
+            "view.focusEditor" => self.layout.set_focused(FocusedPane::Editor),
+            "view.toggleFocus" => self.layout.toggle_focus(),
+            "view.splitLeft" => self.layout.move_split_left(),
+            "view.splitRight" => self.layout.move_split_right(),
+
+            // Terminal commands
+            "terminal.new" => self.add_terminal_tab(),
+            "terminal.split" => self.split_terminal_horizontal(),
+            "terminal.close" => self.close_terminal_tab(),
+            "terminal.nextTab" => {
+                if let Some(ref mut terminals) = self.terminals {
+                    terminals.next_tab();
+                }
+            }
+            "terminal.prevTab" => {
+                if let Some(ref mut terminals) = self.terminals {
+                    terminals.prev_tab();
+                }
+            }
+            "terminal.selectShell" => self.show_shell_selector(),
+
+            // Application commands
+            "app.quit" => self.running = false,
+            "app.commandPalette" => self.show_popup(PopupKind::CommandPalette),
+            "app.switchEditorMode" => self.show_mode_switcher(),
+
+            _ => self.set_status(format!("Unknown command: {}", command_id)),
         }
     }
 
@@ -710,8 +1010,22 @@ impl App {
 
         // Render popup if visible
         if self.popup.is_visible() {
-            let popup_widget = PopupWidget::new(&self.popup);
-            frame.render_widget(popup_widget, area);
+            // Use special widget for mode switcher
+            if let Some(ref switcher) = self.mode_switcher {
+                let widget = ModeSwitcherWidget::new(switcher);
+                frame.render_widget(widget, area);
+            } else if let Some(ref selector) = self.shell_selector {
+                // Use special widget for shell selector
+                let widget = ShellSelectorWidget::new(selector);
+                frame.render_widget(widget, area);
+            } else if let Some(ref prompt) = self.shell_install_prompt {
+                // Use special widget for shell install prompt
+                let widget = ShellInstallPromptWidget::new(prompt);
+                frame.render_widget(widget, area);
+            } else {
+                let popup_widget = PopupWidget::new(&self.popup);
+                frame.render_widget(popup_widget, area);
+            }
         }
     }
 

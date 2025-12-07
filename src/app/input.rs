@@ -83,6 +83,32 @@ impl App {
                 self.show_file_browser();
                 true
             }
+            // Ctrl+Shift+P or Ctrl+P: Command Palette
+            (m, KeyCode::Char('p') | KeyCode::Char('P'))
+                if m == KeyModifiers::CONTROL | KeyModifiers::SHIFT =>
+            {
+                self.show_popup(PopupKind::CommandPalette);
+                true
+            }
+            // Ctrl+P also opens command palette (VSCode style)
+            (KeyModifiers::CONTROL, KeyCode::Char('p')) => {
+                self.show_popup(PopupKind::CommandPalette);
+                true
+            }
+            // Ctrl+Shift+Tab: Mode Switcher
+            (m, KeyCode::Tab) | (m, KeyCode::BackTab)
+                if m == KeyModifiers::CONTROL | KeyModifiers::SHIFT =>
+            {
+                if self.is_mode_switcher_active() {
+                    // Already open, cycle to next mode
+                    self.cycle_mode_next();
+                } else {
+                    // Open mode switcher and immediately select next mode
+                    self.show_mode_switcher();
+                    self.cycle_mode_next();
+                }
+                true
+            }
             // Ctrl+Shift+C: Copy (works in both editor and terminal)
             (m, KeyCode::Char('c') | KeyCode::Char('C'))
                 if m == KeyModifiers::CONTROL | KeyModifiers::SHIFT =>
@@ -266,6 +292,24 @@ impl App {
             return;
         }
 
+        // Handle mode switcher specially
+        if self.popup.kind().is_mode_switcher() {
+            self.handle_mode_switcher_key(key);
+            return;
+        }
+
+        // Handle shell selector specially
+        if self.popup.kind().is_shell_selector() {
+            self.handle_shell_selector_key(key);
+            return;
+        }
+
+        // Handle shell install prompt specially
+        if self.popup.kind().is_shell_install_prompt() {
+            self.handle_shell_install_prompt_key(key);
+            return;
+        }
+
         match (key.modifiers, key.code) {
             (KeyModifiers::NONE, KeyCode::Esc) => {
                 self.hide_popup();
@@ -309,6 +353,75 @@ impl App {
             (KeyModifiers::NONE, KeyCode::Char(c)) | (KeyModifiers::SHIFT, KeyCode::Char(c)) => {
                 self.popup.insert_char(c);
                 self.update_popup_results();
+            }
+            _ => {}
+        }
+    }
+
+    /// Handles keys for the mode switcher popup.
+    fn handle_mode_switcher_key(&mut self, key: KeyEvent) {
+        match (key.modifiers, key.code) {
+            // Escape - Cancel and revert
+            (KeyModifiers::NONE, KeyCode::Esc) => {
+                self.cancel_mode_switch();
+            }
+            // Enter - Apply selected mode
+            (KeyModifiers::NONE, KeyCode::Enter) => {
+                self.apply_mode_switch();
+            }
+            // Tab or Down - Cycle to next mode
+            (KeyModifiers::NONE, KeyCode::Tab)
+            | (KeyModifiers::NONE, KeyCode::Down)
+            | (KeyModifiers::NONE, KeyCode::Char('j')) => {
+                self.cycle_mode_next();
+            }
+            // Shift+Tab or Up - Cycle to previous mode
+            (KeyModifiers::SHIFT, KeyCode::Tab)
+            | (KeyModifiers::SHIFT, KeyCode::BackTab)
+            | (KeyModifiers::NONE, KeyCode::BackTab)
+            | (KeyModifiers::NONE, KeyCode::Up)
+            | (KeyModifiers::NONE, KeyCode::Char('k')) => {
+                self.cycle_mode_prev();
+            }
+            // Ctrl+Shift+Tab - Continue cycling (already handled in global keys but just in case)
+            (m, KeyCode::Tab) | (m, KeyCode::BackTab)
+                if m == KeyModifiers::CONTROL | KeyModifiers::SHIFT =>
+            {
+                self.cycle_mode_next();
+            }
+            _ => {}
+        }
+    }
+
+    /// Handles keys for the shell selector popup.
+    fn handle_shell_selector_key(&mut self, key: KeyEvent) {
+        match (key.modifiers, key.code) {
+            // Escape - Cancel
+            (KeyModifiers::NONE, KeyCode::Esc) => {
+                self.cancel_shell_selection();
+            }
+            // Enter - Apply selected shell
+            (KeyModifiers::NONE, KeyCode::Enter) => {
+                self.apply_shell_selection();
+            }
+            // Down or j - Next shell
+            (KeyModifiers::NONE, KeyCode::Down) | (KeyModifiers::NONE, KeyCode::Char('j')) => {
+                self.cycle_shell_next();
+            }
+            // Up or k - Previous shell
+            (KeyModifiers::NONE, KeyCode::Up) | (KeyModifiers::NONE, KeyCode::Char('k')) => {
+                self.cycle_shell_prev();
+            }
+            _ => {}
+        }
+    }
+
+    /// Handles keys for the shell install prompt popup.
+    fn handle_shell_install_prompt_key(&mut self, key: KeyEvent) {
+        match (key.modifiers, key.code) {
+            // Escape or Enter - Close the prompt
+            (KeyModifiers::NONE, KeyCode::Esc) | (KeyModifiers::NONE, KeyCode::Enter) => {
+                self.hide_popup();
             }
             _ => {}
         }
@@ -528,6 +641,7 @@ impl App {
             KeybindingMode::Vim => self.handle_editor_key_vim(key),
             KeybindingMode::Emacs => self.handle_editor_key_emacs(key),
             KeybindingMode::Default => self.handle_editor_key_default(key),
+            KeybindingMode::VsCode => self.handle_editor_key_vscode(key),
         }
     }
 
@@ -712,6 +826,154 @@ impl App {
             }
             (KeyModifiers::NONE, KeyCode::Tab) => {
                 self.editor.insert_str("    ");
+            }
+            // Character input
+            (KeyModifiers::NONE, KeyCode::Char(c)) | (KeyModifiers::SHIFT, KeyCode::Char(c)) => {
+                self.editor.insert_char(c);
+            }
+            _ => {}
+        }
+    }
+
+    /// Handles editor keys in VSCode mode (non-modal, VSCode-like keybindings).
+    fn handle_editor_key_vscode(&mut self, key: KeyEvent) {
+        // VSCode mode is always in "insert" mode with standard shortcuts
+        match (key.modifiers, key.code) {
+            // Navigation with arrow keys
+            (KeyModifiers::NONE, KeyCode::Left) => {
+                self.editor.move_left();
+            }
+            (KeyModifiers::NONE, KeyCode::Right) => {
+                self.editor.move_right();
+            }
+            (KeyModifiers::NONE, KeyCode::Up) => {
+                self.editor.move_up();
+            }
+            (KeyModifiers::NONE, KeyCode::Down) => {
+                self.editor.move_down();
+            }
+            (KeyModifiers::NONE, KeyCode::Home) => {
+                self.editor.move_to_line_start();
+            }
+            (KeyModifiers::NONE, KeyCode::End) => {
+                self.editor.move_to_line_end();
+            }
+            (KeyModifiers::NONE, KeyCode::PageUp) => {
+                self.editor.page_up();
+            }
+            (KeyModifiers::NONE, KeyCode::PageDown) => {
+                self.editor.page_down();
+            }
+            // Ctrl+arrow for word navigation
+            (KeyModifiers::CONTROL, KeyCode::Left) => {
+                self.editor.move_word_left();
+            }
+            (KeyModifiers::CONTROL, KeyCode::Right) => {
+                self.editor.move_word_right();
+            }
+            // Ctrl+Home/End for buffer navigation
+            (KeyModifiers::CONTROL, KeyCode::Home) => {
+                self.editor.move_to_buffer_start();
+            }
+            (KeyModifiers::CONTROL, KeyCode::End) => {
+                self.editor.move_to_buffer_end();
+            }
+            // Shift+arrow for selection (VSCode style)
+            (KeyModifiers::SHIFT, KeyCode::Left) => {
+                self.editor.select_left();
+            }
+            (KeyModifiers::SHIFT, KeyCode::Right) => {
+                self.editor.select_right();
+            }
+            (KeyModifiers::SHIFT, KeyCode::Up) => {
+                self.editor.select_up();
+            }
+            (KeyModifiers::SHIFT, KeyCode::Down) => {
+                self.editor.select_down();
+            }
+            // Ctrl+Shift+arrow for word selection
+            (m, KeyCode::Left) if m == KeyModifiers::CONTROL | KeyModifiers::SHIFT => {
+                self.editor.select_word_left();
+            }
+            (m, KeyCode::Right) if m == KeyModifiers::CONTROL | KeyModifiers::SHIFT => {
+                self.editor.select_word_right();
+            }
+            // Shift+Home/End for line selection
+            (KeyModifiers::SHIFT, KeyCode::Home) => {
+                self.editor.select_to_line_start();
+            }
+            (KeyModifiers::SHIFT, KeyCode::End) => {
+                self.editor.select_to_line_end();
+            }
+            // Ctrl+A for select all
+            (KeyModifiers::CONTROL, KeyCode::Char('a')) => {
+                self.editor.select_all();
+            }
+            // Ctrl+L for select line (VSCode)
+            (KeyModifiers::CONTROL, KeyCode::Char('l')) => {
+                self.editor.select_line();
+            }
+            // Standard shortcuts
+            (KeyModifiers::CONTROL, KeyCode::Char('z')) => {
+                self.editor.undo();
+            }
+            (KeyModifiers::CONTROL, KeyCode::Char('y')) => {
+                self.editor.redo();
+            }
+            // Ctrl+Shift+Z also for redo (VSCode alternative)
+            (m, KeyCode::Char('z') | KeyCode::Char('Z'))
+                if m == KeyModifiers::CONTROL | KeyModifiers::SHIFT =>
+            {
+                self.editor.redo();
+            }
+            (KeyModifiers::CONTROL, KeyCode::Char('s')) => {
+                if let Err(e) = self.editor.save() {
+                    self.set_status(format!("Error saving: {}", e));
+                }
+            }
+            // Ctrl+D for duplicate line or add selection to next match
+            (KeyModifiers::CONTROL, KeyCode::Char('d')) => {
+                self.editor.duplicate_line();
+            }
+            // Ctrl+Shift+K for delete line (VSCode)
+            (m, KeyCode::Char('k') | KeyCode::Char('K'))
+                if m == KeyModifiers::CONTROL | KeyModifiers::SHIFT =>
+            {
+                self.editor.delete_line();
+            }
+            // Alt+Up/Down for move line up/down
+            (KeyModifiers::ALT, KeyCode::Up) => {
+                self.editor.move_line_up();
+            }
+            (KeyModifiers::ALT, KeyCode::Down) => {
+                self.editor.move_line_down();
+            }
+            // Ctrl+/ for toggle comment (common VSCode binding)
+            (KeyModifiers::CONTROL, KeyCode::Char('/')) => {
+                self.editor.toggle_comment();
+            }
+            // Ctrl+] for indent, Ctrl+[ for outdent
+            (KeyModifiers::CONTROL, KeyCode::Char(']')) => {
+                self.editor.indent();
+            }
+            (KeyModifiers::CONTROL, KeyCode::Char('[')) => {
+                self.editor.outdent();
+            }
+            // Standard editing keys
+            (KeyModifiers::NONE, KeyCode::Backspace) => {
+                self.editor.backspace();
+            }
+            (KeyModifiers::NONE, KeyCode::Delete) => {
+                self.editor.delete();
+            }
+            (KeyModifiers::NONE, KeyCode::Enter) => {
+                self.editor.insert_char('\n');
+            }
+            (KeyModifiers::NONE, KeyCode::Tab) => {
+                self.editor.insert_str("    ");
+            }
+            (KeyModifiers::SHIFT, KeyCode::Tab) => {
+                self.editor.outdent();
             }
             // Character input
             (KeyModifiers::NONE, KeyCode::Char(c)) | (KeyModifiers::SHIFT, KeyCode::Char(c)) => {

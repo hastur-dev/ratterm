@@ -46,9 +46,8 @@ impl AnsiParser {
             csi_intermediates: &mut self.csi_intermediates,
         };
 
-        for byte in input {
-            self.parser.advance(&mut performer, *byte);
-        }
+        // VTE 0.15 takes a slice directly
+        self.parser.advance(&mut performer, input);
 
         performer.flush_text();
 
@@ -268,6 +267,17 @@ impl<'a> ParserPerformer<'a> {
                     self.actions.push(ParsedAction::SetTitle(title));
                 }
             }
+            "7" => {
+                // OSC 7: Set current working directory
+                // Format: OSC 7 ; file://<host>/<path> ST
+                if data.len() > 1 {
+                    let uri = String::from_utf8_lossy(data[1]).to_string();
+                    // Parse file:// URI to get the path
+                    if let Some(path) = parse_file_uri(&uri) {
+                        self.actions.push(ParsedAction::SetCwd(path));
+                    }
+                }
+            }
             "8" => {
                 if data.len() >= 2 {
                     let params = String::from_utf8_lossy(data[1]);
@@ -288,6 +298,68 @@ impl<'a> ParserPerformer<'a> {
             _ => {}
         }
     }
+}
+
+/// Parses a file:// URI to extract the path.
+fn parse_file_uri(uri: &str) -> Option<String> {
+    let uri = uri.trim();
+
+    // Handle file:// URI
+    if let Some(rest) = uri.strip_prefix("file://") {
+        // Skip the host part (usually localhost or empty)
+        // Format: file://[host]/path or file:///path
+        let path = if rest.starts_with('/') {
+            // file:///path (no host)
+            rest.to_string()
+        } else if let Some(slash_pos) = rest.find('/') {
+            // file://host/path
+            rest[slash_pos..].to_string()
+        } else {
+            return None;
+        };
+
+        // On Windows, paths might be like /C:/Users/...
+        #[cfg(windows)]
+        {
+            let path = path.trim_start_matches('/');
+            // URL decode the path
+            Some(url_decode(path))
+        }
+
+        #[cfg(not(windows))]
+        {
+            Some(url_decode(&path))
+        }
+    } else {
+        // Not a file:// URI, might be a plain path
+        Some(uri.to_string())
+    }
+}
+
+/// Simple URL decoding for file paths.
+fn url_decode(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    let mut chars = s.chars().peekable();
+
+    while let Some(c) = chars.next() {
+        if c == '%' {
+            // Try to read two hex digits
+            let hex: String = chars.by_ref().take(2).collect();
+            if hex.len() == 2 {
+                if let Ok(byte) = u8::from_str_radix(&hex, 16) {
+                    result.push(byte as char);
+                    continue;
+                }
+            }
+            // Invalid encoding, keep as-is
+            result.push('%');
+            result.push_str(&hex);
+        } else {
+            result.push(c);
+        }
+    }
+
+    result
 }
 
 impl<'a> vte::Perform for ParserPerformer<'a> {

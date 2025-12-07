@@ -257,6 +257,15 @@ impl Pty {
         self.running
     }
 
+    /// Returns the current working directory of the PTY process.
+    ///
+    /// This attempts to read the CWD from the process. On Windows, this
+    /// uses the process handle, on Unix it reads from /proc.
+    #[must_use]
+    pub fn current_working_dir(&self) -> Option<PathBuf> {
+        self.pid.and_then(|pid| get_process_cwd(pid))
+    }
+
     /// Resizes the PTY.
     ///
     /// # Errors
@@ -381,6 +390,245 @@ impl Drop for Pty {
         // Don't block on join during drop - let thread die with process
         let _ = self.reader_thread.take();
     }
+}
+
+/// Gets the current working directory of a process by PID.
+///
+/// On Windows, this uses NtQueryInformationProcess to read the process's PEB
+/// and extract the current directory from the RTL_USER_PROCESS_PARAMETERS.
+#[cfg(windows)]
+fn get_process_cwd(pid: u32) -> Option<PathBuf> {
+    use std::ffi::OsString;
+    use std::mem;
+    use std::os::windows::ffi::OsStringExt;
+    use std::ptr;
+
+    // Windows API bindings
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn OpenProcess(access: u32, inherit: i32, pid: u32) -> *mut std::ffi::c_void;
+        fn CloseHandle(handle: *mut std::ffi::c_void) -> i32;
+        fn ReadProcessMemory(
+            process: *mut std::ffi::c_void,
+            base: *const std::ffi::c_void,
+            buffer: *mut std::ffi::c_void,
+            size: usize,
+            read: *mut usize,
+        ) -> i32;
+    }
+
+    #[link(name = "ntdll")]
+    unsafe extern "system" {
+        fn NtQueryInformationProcess(
+            process: *mut std::ffi::c_void,
+            info_class: u32,
+            info: *mut std::ffi::c_void,
+            info_length: u32,
+            return_length: *mut u32,
+        ) -> i32;
+    }
+
+    const PROCESS_QUERY_INFORMATION: u32 = 0x0400;
+    const PROCESS_VM_READ: u32 = 0x0010;
+    const PROCESS_BASIC_INFORMATION: u32 = 0;
+
+    #[repr(C)]
+    struct ProcessBasicInformation {
+        reserved1: *mut std::ffi::c_void,
+        peb_base_address: *mut std::ffi::c_void,
+        reserved2: [*mut std::ffi::c_void; 2],
+        unique_process_id: usize,
+        reserved3: *mut std::ffi::c_void,
+    }
+
+    #[repr(C)]
+    struct UnicodeString {
+        length: u16,
+        maximum_length: u16,
+        buffer: *mut u16,
+    }
+
+    // Offsets for x64 Windows
+    #[cfg(target_pointer_width = "64")]
+    const PEB_PROCESS_PARAMETERS_OFFSET: usize = 0x20;
+    #[cfg(target_pointer_width = "64")]
+    const RTL_USER_PROCESS_PARAMETERS_CWD_OFFSET: usize = 0x38;
+
+    // Offsets for x86 Windows
+    #[cfg(target_pointer_width = "32")]
+    const PEB_PROCESS_PARAMETERS_OFFSET: usize = 0x10;
+    #[cfg(target_pointer_width = "32")]
+    const RTL_USER_PROCESS_PARAMETERS_CWD_OFFSET: usize = 0x24;
+
+    unsafe {
+        // Open the process with query and read permissions
+        let handle = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, 0, pid);
+        if handle.is_null() {
+            return None;
+        }
+
+        let result = (|| -> Option<PathBuf> {
+            // Get process basic information to find PEB address
+            let mut pbi: ProcessBasicInformation = mem::zeroed();
+            let mut return_length: u32 = 0;
+            let status = NtQueryInformationProcess(
+                handle,
+                PROCESS_BASIC_INFORMATION,
+                &mut pbi as *mut _ as *mut std::ffi::c_void,
+                mem::size_of::<ProcessBasicInformation>() as u32,
+                &mut return_length,
+            );
+            if status != 0 {
+                return None;
+            }
+
+            // Read ProcessParameters pointer from PEB
+            let mut process_params_ptr: *mut std::ffi::c_void = ptr::null_mut();
+            let params_addr =
+                (pbi.peb_base_address as usize + PEB_PROCESS_PARAMETERS_OFFSET) as *const _;
+            let mut bytes_read: usize = 0;
+            if ReadProcessMemory(
+                handle,
+                params_addr,
+                &mut process_params_ptr as *mut _ as *mut _,
+                mem::size_of::<*mut std::ffi::c_void>(),
+                &mut bytes_read,
+            ) == 0
+            {
+                return None;
+            }
+
+            // Read CurrentDirectory UNICODE_STRING from RTL_USER_PROCESS_PARAMETERS
+            let cwd_addr =
+                (process_params_ptr as usize + RTL_USER_PROCESS_PARAMETERS_CWD_OFFSET) as *const _;
+            let mut cwd_unicode: UnicodeString = mem::zeroed();
+            if ReadProcessMemory(
+                handle,
+                cwd_addr,
+                &mut cwd_unicode as *mut _ as *mut _,
+                mem::size_of::<UnicodeString>(),
+                &mut bytes_read,
+            ) == 0
+            {
+                return None;
+            }
+
+            // Read the actual path string
+            if cwd_unicode.buffer.is_null() || cwd_unicode.length == 0 {
+                return None;
+            }
+
+            let len = (cwd_unicode.length / 2) as usize; // length is in bytes, convert to u16 count
+            let mut path_buffer: Vec<u16> = vec![0u16; len];
+            if ReadProcessMemory(
+                handle,
+                cwd_unicode.buffer as *const _,
+                path_buffer.as_mut_ptr() as *mut _,
+                cwd_unicode.length as usize,
+                &mut bytes_read,
+            ) == 0
+            {
+                return None;
+            }
+
+            // Convert to OsString and PathBuf
+            // Remove trailing backslash if present (except for root like "C:\")
+            let os_string = OsString::from_wide(&path_buffer);
+            let mut path = PathBuf::from(os_string);
+
+            // Clean up trailing backslash for non-root paths
+            if let Some(path_str) = path.to_str() {
+                if path_str.len() > 3 && path_str.ends_with('\\') {
+                    path = PathBuf::from(&path_str[..path_str.len() - 1]);
+                }
+            }
+
+            Some(path)
+        })();
+
+        CloseHandle(handle);
+        result
+    }
+}
+
+/// Gets the current working directory of a process by PID.
+///
+/// On Linux, this reads the /proc/<pid>/cwd symlink.
+#[cfg(target_os = "linux")]
+fn get_process_cwd(pid: u32) -> Option<PathBuf> {
+    let proc_path = format!("/proc/{}/cwd", pid);
+    std::fs::read_link(&proc_path).ok()
+}
+
+/// Gets the current working directory of a process by PID.
+///
+/// On macOS, this uses the proc_pidinfo API via libproc.
+#[cfg(target_os = "macos")]
+fn get_process_cwd(pid: u32) -> Option<PathBuf> {
+    use std::ffi::CStr;
+    use std::os::raw::{c_char, c_int};
+
+    // libproc bindings for macOS
+    #[link(name = "proc", kind = "dylib")]
+    unsafe extern "C" {
+        fn proc_pidinfo(
+            pid: c_int,
+            flavor: c_int,
+            arg: u64,
+            buffer: *mut c_char,
+            buffersize: c_int,
+        ) -> c_int;
+    }
+
+    const PROC_PIDVNODEPATHINFO: c_int = 9;
+    const MAXPATHLEN: usize = 1024;
+
+    // vnode_info_path structure (simplified - we only need the path at the start)
+    #[repr(C)]
+    struct VnodeInfoPath {
+        // The actual structure is larger, but we only need the cwd path
+        // which starts at offset 152 (vip_path in struct vnode_info_path)
+        _padding: [u8; 152],
+        vip_path: [c_char; MAXPATHLEN],
+    }
+
+    unsafe {
+        let mut info: VnodeInfoPath = std::mem::zeroed();
+        let size = std::mem::size_of::<VnodeInfoPath>() as c_int;
+
+        let result = proc_pidinfo(
+            pid as c_int,
+            PROC_PIDVNODEPATHINFO,
+            0,
+            &mut info as *mut _ as *mut c_char,
+            size,
+        );
+
+        if result <= 0 {
+            return None;
+        }
+
+        // Convert C string to PathBuf
+        let path_cstr = CStr::from_ptr(info.vip_path.as_ptr());
+        path_cstr.to_str().ok().map(PathBuf::from)
+    }
+}
+
+/// Gets the current working directory of a process by PID.
+///
+/// Returns `None` on unsupported Unix platforms (FreeBSD, etc.).
+#[cfg(all(unix, not(any(target_os = "linux", target_os = "macos"))))]
+fn get_process_cwd(_pid: u32) -> Option<PathBuf> {
+    // Other Unix platforms - return None and rely on OSC 7
+    None
+}
+
+/// Gets the current working directory of a process by PID.
+///
+/// Returns `None` on unsupported platforms.
+#[cfg(not(any(windows, unix)))]
+fn get_process_cwd(_pid: u32) -> Option<PathBuf> {
+    None
 }
 
 #[cfg(test)]
