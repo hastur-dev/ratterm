@@ -1,5 +1,7 @@
 # Ratterm
 
+#
+
 A split-terminal TUI application with a PTY-based terminal emulator and code editor.
 
 ```

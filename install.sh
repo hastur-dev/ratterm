@@ -59,7 +59,7 @@ get_latest_version() {
     fi
 
     if [ -n "$LATEST" ]; then
-        VERSION="$LATEST"
+        VERSION="0.1.0"
         info "Latest version: v$VERSION"
     else
         warn "Could not fetch latest version, using default: v$VERSION"
