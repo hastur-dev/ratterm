@@ -94,8 +94,8 @@ impl App {
         // Load configuration
         let config = Config::load().unwrap_or_default();
 
-        // Subtract 3 from height: 1 for tab bar + 2 for borders
-        let terminals = match TerminalMultiplexer::new(cols / 2, rows.saturating_sub(3)) {
+        // Subtract 4 from height: 1 for status bar + 1 for tab bar + 2 for borders
+        let terminals = match TerminalMultiplexer::new(cols / 2, rows.saturating_sub(4)) {
             Ok(t) => Some(t),
             Err(e) => {
                 tracing::warn!("Failed to create terminal: {}", e);
@@ -103,7 +103,7 @@ impl App {
             }
         };
 
-        let editor = Editor::new(cols / 2, rows.saturating_sub(3));
+        let editor = Editor::new(cols / 2, rows.saturating_sub(4));
         let file_browser = FileBrowser::default();
 
         Ok(Self {
