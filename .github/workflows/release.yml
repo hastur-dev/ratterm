@@ -24,27 +24,21 @@ jobs:
             target: x86_64-unknown-linux-gnu
             artifact_name: rat
             asset_name: rat-linux-x86_64
-            use_cross: false
-          - os: ubuntu-latest
-            target: aarch64-unknown-linux-gnu
-            artifact_name: rat
-            asset_name: rat-linux-aarch64
-            use_cross: true
+          # Note: aarch64-unknown-linux-gnu removed due to cross-compilation
+          # issues with wasmtime and tree-sitter. Consider adding when GitHub
+          # provides native ARM Linux runners.
           - os: macos-latest
             target: x86_64-apple-darwin
             artifact_name: rat
             asset_name: rat-macos-x86_64
-            use_cross: false
           - os: macos-latest
             target: aarch64-apple-darwin
             artifact_name: rat
             asset_name: rat-macos-aarch64
-            use_cross: false
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             artifact_name: rat.exe
             asset_name: rat-windows-x86_64.exe
-            use_cross: false
 
     runs-on: ${{ matrix.os }}
     steps:
@@ -55,16 +49,7 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      - name: Install cross
-        if: matrix.use_cross
-        run: cargo install cross --git https://github.com/cross-rs/cross
-
-      - name: Build with cross
-        if: matrix.use_cross
-        run: cross build --release --target ${{ matrix.target }}
-
-      - name: Build native
-        if: ${{ !matrix.use_cross }}
+      - name: Build
         run: cargo build --release --target ${{ matrix.target }}
 
       - name: Rename binary
