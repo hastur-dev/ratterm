@@ -18,7 +18,7 @@ use crate::config::{Config, KeybindingMode, ShellType};
 use crate::editor::Editor;
 use crate::extension::ExtensionManager;
 use crate::filebrowser::FileBrowser;
-use crate::terminal::{pty::PtyError, TerminalMultiplexer};
+use crate::terminal::{TerminalMultiplexer, pty::PtyError};
 use crate::theme::ThemePreset;
 use crate::ui::{
     editor_tabs::{EditorTabBar, EditorTabInfo},
@@ -172,7 +172,9 @@ impl App {
 
     /// Returns mutable reference to the active terminal.
     pub fn active_terminal_mut(&mut self) -> Option<&mut crate::terminal::Terminal> {
-        self.terminals.as_mut().and_then(|t| t.active_terminal_mut())
+        self.terminals
+            .as_mut()
+            .and_then(|t| t.active_terminal_mut())
     }
 
     /// Adds a new terminal tab.
@@ -520,7 +522,8 @@ impl App {
             self.add_terminal_tab();
 
             // Focus terminal pane
-            self.layout.set_focused(crate::ui::layout::FocusedPane::Terminal);
+            self.layout
+                .set_focused(crate::ui::layout::FocusedPane::Terminal);
 
             return;
         }
@@ -596,9 +599,12 @@ impl App {
 
         let extensions = manager.installed();
         if extensions.is_empty() {
-            self.set_status("No extensions installed. Use: rat ext install <user/repo>".to_string());
+            self.set_status(
+                "No extensions installed. Use: rat ext install <user/repo>".to_string(),
+            );
         } else {
-            let names: Vec<_> = extensions.values()
+            let names: Vec<_> = extensions
+                .values()
                 .map(|e| format!("{} v{}", e.name, e.version))
                 .collect();
             self.set_status(format!("Extensions: {}", names.join(", ")));
@@ -1067,8 +1073,8 @@ impl App {
 
                             let first_focused =
                                 is_focused && tab.split_focus == crate::terminal::SplitFocus::First;
-                            let second_focused =
-                                is_focused && tab.split_focus == crate::terminal::SplitFocus::Second;
+                            let second_focused = is_focused
+                                && tab.split_focus == crate::terminal::SplitFocus::Second;
 
                             let widget1 = TerminalWidget::new(&tab.terminal)
                                 .focused(first_focused)
@@ -1094,8 +1100,8 @@ impl App {
 
                             let first_focused =
                                 is_focused && tab.split_focus == crate::terminal::SplitFocus::First;
-                            let second_focused =
-                                is_focused && tab.split_focus == crate::terminal::SplitFocus::Second;
+                            let second_focused = is_focused
+                                && tab.split_focus == crate::terminal::SplitFocus::Second;
 
                             let widget1 = TerminalWidget::new(&tab.terminal)
                                 .focused(first_focused)

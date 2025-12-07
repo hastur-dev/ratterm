@@ -263,10 +263,8 @@ impl Config {
                 };
             }
             "auto_close_tabs_on_shell_change" => {
-                self.auto_close_tabs_on_shell_change = matches!(
-                    value.to_lowercase().as_str(),
-                    "true" | "yes" | "1" | "on"
-                );
+                self.auto_close_tabs_on_shell_change =
+                    matches!(value.to_lowercase().as_str(), "true" | "yes" | "1" | "on");
             }
             _ => {
                 // Try to parse as keybinding

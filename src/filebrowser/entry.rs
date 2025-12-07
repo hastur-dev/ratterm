@@ -159,33 +159,27 @@ impl SortOrder {
                     _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
                 }
             }),
-            Self::NameDesc => entries.sort_by(|a, b| {
-                match (a.is_directory(), b.is_directory()) {
-                    (true, false) => std::cmp::Ordering::Less,
-                    (false, true) => std::cmp::Ordering::Greater,
-                    _ => b.name.to_lowercase().cmp(&a.name.to_lowercase()),
-                }
+            Self::NameDesc => entries.sort_by(|a, b| match (a.is_directory(), b.is_directory()) {
+                (true, false) => std::cmp::Ordering::Less,
+                (false, true) => std::cmp::Ordering::Greater,
+                _ => b.name.to_lowercase().cmp(&a.name.to_lowercase()),
             }),
-            Self::ExtensionAsc => entries.sort_by(|a, b| {
-                match (a.is_directory(), b.is_directory()) {
+            Self::ExtensionAsc => {
+                entries.sort_by(|a, b| match (a.is_directory(), b.is_directory()) {
                     (true, false) => std::cmp::Ordering::Less,
                     (false, true) => std::cmp::Ordering::Greater,
                     _ => a.extension.cmp(&b.extension),
-                }
+                })
+            }
+            Self::SizeAsc => entries.sort_by(|a, b| match (a.is_directory(), b.is_directory()) {
+                (true, false) => std::cmp::Ordering::Less,
+                (false, true) => std::cmp::Ordering::Greater,
+                _ => a.size.cmp(&b.size),
             }),
-            Self::SizeAsc => entries.sort_by(|a, b| {
-                match (a.is_directory(), b.is_directory()) {
-                    (true, false) => std::cmp::Ordering::Less,
-                    (false, true) => std::cmp::Ordering::Greater,
-                    _ => a.size.cmp(&b.size),
-                }
-            }),
-            Self::SizeDesc => entries.sort_by(|a, b| {
-                match (a.is_directory(), b.is_directory()) {
-                    (true, false) => std::cmp::Ordering::Less,
-                    (false, true) => std::cmp::Ordering::Greater,
-                    _ => b.size.cmp(&a.size),
-                }
+            Self::SizeDesc => entries.sort_by(|a, b| match (a.is_directory(), b.is_directory()) {
+                (true, false) => std::cmp::Ordering::Less,
+                (false, true) => std::cmp::Ordering::Greater,
+                _ => b.size.cmp(&a.size),
             }),
         }
     }

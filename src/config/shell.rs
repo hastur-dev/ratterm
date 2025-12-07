@@ -404,8 +404,12 @@ impl ShellInstaller {
         {
             ShellInstallInfo {
                 name: "Git for Windows (includes Bash)".to_string(),
-                description: "Git for Windows provides Git Bash, a full Bash environment for Windows.".to_string(),
-                download_url: Some("https://github.com/git-for-windows/git/releases/latest".to_string()),
+                description:
+                    "Git for Windows provides Git Bash, a full Bash environment for Windows."
+                        .to_string(),
+                download_url: Some(
+                    "https://github.com/git-for-windows/git/releases/latest".to_string(),
+                ),
                 install_command: None,
                 manual_steps: vec![
                     "Download the installer from the URL above".to_string(),
@@ -597,7 +601,10 @@ mod tests {
 
     #[test]
     fn test_shell_type_from_config() {
-        assert_eq!(ShellType::from_config("powershell"), Some(ShellType::PowerShell));
+        assert_eq!(
+            ShellType::from_config("powershell"),
+            Some(ShellType::PowerShell)
+        );
         assert_eq!(ShellType::from_config("bash"), Some(ShellType::Bash));
         assert_eq!(ShellType::from_config("invalid"), None);
     }

@@ -9,10 +9,10 @@ use std::path::Path;
 use ratatui::style::Color;
 
 use super::{
+    TabThemePattern, ThemeManager,
     colors::{color_to_hex, parse_color},
     component::Theme,
     preset::ThemePreset,
-    TabThemePattern, ThemeManager,
 };
 
 /// Theme settings that can be persisted to .ratrc.
@@ -377,9 +377,15 @@ tab_themes = dark, dracula, nord
 
         let settings = ThemeSettings::parse(content);
         assert_eq!(settings.theme, Some("dracula".to_string()));
-        assert_eq!(settings.terminal_foreground, Some(Color::Rgb(248, 248, 242)));
+        assert_eq!(
+            settings.terminal_foreground,
+            Some(Color::Rgb(248, 248, 242))
+        );
         assert_eq!(settings.terminal_background, Some(Color::Rgb(40, 42, 54)));
-        assert_eq!(settings.tab_theme_pattern, Some(TabThemePattern::Sequential));
+        assert_eq!(
+            settings.tab_theme_pattern,
+            Some(TabThemePattern::Sequential)
+        );
         assert_eq!(settings.tab_themes, vec!["dark", "dracula", "nord"]);
     }
 
@@ -416,7 +422,10 @@ tab_themes = dark, dracula, nord
 
     #[test]
     fn test_find_section_for_key() {
-        assert_eq!(find_section_for_key("terminal.background"), Some("# Terminal"));
+        assert_eq!(
+            find_section_for_key("terminal.background"),
+            Some("# Terminal")
+        );
         assert_eq!(find_section_for_key("editor.foreground"), Some("# Editor"));
         assert_eq!(find_section_for_key("theme"), Some("# Theme"));
         assert_eq!(find_section_for_key("unknown"), None);

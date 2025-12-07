@@ -7,8 +7,10 @@ use std::sync::Arc;
 
 use wasmtime::{Config, Engine, Module};
 
-use super::api::{PluginCapability, PluginError, PluginInfo, PluginType, RattermPlugin, WidgetCell};
 use super::ExtensionError;
+use super::api::{
+    PluginCapability, PluginError, PluginInfo, PluginType, RattermPlugin, WidgetCell,
+};
 
 /// WASM plugin instance.
 pub struct WasmPlugin {

@@ -80,7 +80,11 @@ impl<'a> ParserPerformer<'a> {
 
     /// Gets parameter with default value.
     fn param(&self, index: usize, default: u16) -> u16 {
-        self.csi_params.get(index).copied().unwrap_or(default).max(1)
+        self.csi_params
+            .get(index)
+            .copied()
+            .unwrap_or(default)
+            .max(1)
     }
 
     /// Handles SGR (Select Graphic Rendition).
@@ -105,11 +109,17 @@ impl<'a> ParserPerformer<'a> {
             1 => self.actions.push(ParsedAction::SetAttr(vec![Attr::Bold])),
             2 => self.actions.push(ParsedAction::SetAttr(vec![Attr::Dim])),
             3 => self.actions.push(ParsedAction::SetAttr(vec![Attr::Italic])),
-            4 => self.actions.push(ParsedAction::SetAttr(vec![Attr::Underline])),
+            4 => self
+                .actions
+                .push(ParsedAction::SetAttr(vec![Attr::Underline])),
             5 => self.actions.push(ParsedAction::SetAttr(vec![Attr::Blink])),
-            7 => self.actions.push(ParsedAction::SetAttr(vec![Attr::Reverse])),
+            7 => self
+                .actions
+                .push(ParsedAction::SetAttr(vec![Attr::Reverse])),
             8 => self.actions.push(ParsedAction::SetAttr(vec![Attr::Hidden])),
-            9 => self.actions.push(ParsedAction::SetAttr(vec![Attr::Strikethrough])),
+            9 => self
+                .actions
+                .push(ParsedAction::SetAttr(vec![Attr::Strikethrough])),
             30..=37 => {
                 let color = Color::from_standard((param - 30) as u8);
                 self.actions.push(ParsedAction::SetFg(color));
@@ -178,12 +188,22 @@ impl<'a> ParserPerformer<'a> {
 
         match action {
             'A' => self.actions.push(ParsedAction::CursorUp(self.param(0, 1))),
-            'B' => self.actions.push(ParsedAction::CursorDown(self.param(0, 1))),
-            'C' => self.actions.push(ParsedAction::CursorForward(self.param(0, 1))),
-            'D' => self.actions.push(ParsedAction::CursorBack(self.param(0, 1))),
+            'B' => self
+                .actions
+                .push(ParsedAction::CursorDown(self.param(0, 1))),
+            'C' => self
+                .actions
+                .push(ParsedAction::CursorForward(self.param(0, 1))),
+            'D' => self
+                .actions
+                .push(ParsedAction::CursorBack(self.param(0, 1))),
             'H' | 'f' => {
                 let row = self.param(0, 1);
-                let col = if self.csi_params.len() > 1 { self.param(1, 1) } else { 1 };
+                let col = if self.csi_params.len() > 1 {
+                    self.param(1, 1)
+                } else {
+                    1
+                };
                 self.actions.push(ParsedAction::CursorPosition(row, col));
             }
             'J' => {
@@ -195,16 +215,26 @@ impl<'a> ParserPerformer<'a> {
                 self.actions.push(ParsedAction::EraseLine(mode));
             }
             'S' => self.actions.push(ParsedAction::ScrollUp(self.param(0, 1))),
-            'T' => self.actions.push(ParsedAction::ScrollDown(self.param(0, 1))),
+            'T' => self
+                .actions
+                .push(ParsedAction::ScrollDown(self.param(0, 1))),
             'm' => self.handle_sgr(),
             's' => self.actions.push(ParsedAction::SaveCursor),
             'u' => self.actions.push(ParsedAction::RestoreCursor),
             'h' => self.handle_csi_h(has_question),
             'l' => self.handle_csi_l(has_question),
-            'L' => self.actions.push(ParsedAction::InsertLines(self.param(0, 1))),
-            'M' => self.actions.push(ParsedAction::DeleteLines(self.param(0, 1))),
-            '@' => self.actions.push(ParsedAction::InsertChars(self.param(0, 1))),
-            'P' => self.actions.push(ParsedAction::DeleteChars(self.param(0, 1))),
+            'L' => self
+                .actions
+                .push(ParsedAction::InsertLines(self.param(0, 1))),
+            'M' => self
+                .actions
+                .push(ParsedAction::DeleteLines(self.param(0, 1))),
+            '@' => self
+                .actions
+                .push(ParsedAction::InsertChars(self.param(0, 1))),
+            'P' => self
+                .actions
+                .push(ParsedAction::DeleteChars(self.param(0, 1))),
             'n' => {
                 if self.param(0, 0) == 6 {
                     self.actions.push(ParsedAction::DeviceStatusReport);
@@ -380,7 +410,8 @@ impl<'a> vte::Perform for ParserPerformer<'a> {
         }
     }
 
-    fn hook(&mut self, _params: &vte::Params, _intermediates: &[u8], _ignore: bool, _action: char) {}
+    fn hook(&mut self, _params: &vte::Params, _intermediates: &[u8], _ignore: bool, _action: char) {
+    }
 
     fn put(&mut self, _byte: u8) {}
 

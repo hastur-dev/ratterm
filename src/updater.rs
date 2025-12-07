@@ -77,7 +77,12 @@ impl Updater {
         // Use a simple blocking HTTP request
         // In production, you might want to use reqwest or ureq
         let output = std::process::Command::new("curl")
-            .args(["-fsSL", "-H", "Accept: application/vnd.github.v3+json", &url])
+            .args([
+                "-fsSL",
+                "-H",
+                "Accept: application/vnd.github.v3+json",
+                &url,
+            ])
             .output()
             .map_err(|e| format!("Failed to run curl: {}", e))?;
 
@@ -124,8 +129,8 @@ impl Updater {
         );
 
         // Get current executable path
-        let current_exe = env::current_exe()
-            .map_err(|e| format!("Failed to get current exe path: {}", e))?;
+        let current_exe =
+            env::current_exe().map_err(|e| format!("Failed to get current exe path: {}", e))?;
 
         let backup_path = current_exe.with_extension("old");
         let temp_path = current_exe.with_extension("new");
@@ -161,12 +166,11 @@ impl Updater {
         }
 
         // Move new executable into place
-        fs::rename(&temp_path, &current_exe)
-            .map_err(|e| {
-                // Try to restore backup
-                let _ = fs::rename(&backup_path, &current_exe);
-                format!("Failed to install new exe: {}", e)
-            })?;
+        fs::rename(&temp_path, &current_exe).map_err(|e| {
+            // Try to restore backup
+            let _ = fs::rename(&backup_path, &current_exe);
+            format!("Failed to install new exe: {}", e)
+        })?;
 
         // Remove backup
         let _ = fs::remove_file(&backup_path);

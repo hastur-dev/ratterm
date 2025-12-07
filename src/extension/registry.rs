@@ -108,7 +108,7 @@ impl GitHubRegistry {
     }
 
     /// Gets the latest release for a repository.
-    pub fn get_latest_release(&self, owner: &str, repo: &str) -> Result<GitHubRelease, ExtensionError> {
+    fn get_latest_release(&self, owner: &str, repo: &str) -> Result<GitHubRelease, ExtensionError> {
         let url = format!(
             "https://api.github.com/repos/{}/{}/releases/latest",
             owner, repo
@@ -134,7 +134,7 @@ impl GitHubRegistry {
     }
 
     /// Gets repository information.
-    pub fn get_repo_info(&self, owner: &str, repo: &str) -> Result<GitHubRepo, ExtensionError> {
+    fn get_repo_info(&self, owner: &str, repo: &str) -> Result<GitHubRepo, ExtensionError> {
         let url = format!("https://api.github.com/repos/{}/{}", owner, repo);
 
         let response = self
@@ -192,8 +192,9 @@ impl GitHubRegistry {
         repo: &str,
         version: &str,
     ) -> Result<PathBuf, ExtensionError> {
-        let cache = super::cache_dir()
-            .ok_or_else(|| ExtensionError::Registry("Could not determine cache directory".to_string()))?;
+        let cache = super::cache_dir().ok_or_else(|| {
+            ExtensionError::Registry("Could not determine cache directory".to_string())
+        })?;
 
         std::fs::create_dir_all(&cache)?;
 

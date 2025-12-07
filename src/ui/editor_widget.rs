@@ -63,10 +63,7 @@ impl<'a> EditorWidget<'a> {
             .theme
             .map(|t| t.line_numbers_bg)
             .unwrap_or(Color::Reset);
-        let current_line_fg = self
-            .theme
-            .map(|t| t.cursor)
-            .unwrap_or(Color::Yellow);
+        let current_line_fg = self.theme.map(|t| t.cursor).unwrap_or(Color::Yellow);
 
         let style = Style::default().fg(line_num_fg).bg(gutter_bg);
         let current_line_style = Style::default().fg(current_line_fg).bg(gutter_bg);
@@ -132,18 +129,9 @@ impl<'a> EditorWidget<'a> {
         let text_width = area.width.saturating_sub(gutter_width as u16 + 1);
 
         // Use theme colors if available
-        let text_fg = self
-            .theme
-            .map(|t| t.foreground)
-            .unwrap_or(Color::Reset);
-        let text_bg = self
-            .theme
-            .map(|t| t.background)
-            .unwrap_or(Color::Reset);
-        let selection_bg = self
-            .theme
-            .map(|t| t.selection)
-            .unwrap_or(Color::Blue);
+        let text_fg = self.theme.map(|t| t.foreground).unwrap_or(Color::Reset);
+        let text_bg = self.theme.map(|t| t.background).unwrap_or(Color::Reset);
+        let selection_bg = self.theme.map(|t| t.selection).unwrap_or(Color::Blue);
 
         let default_style = Style::default().fg(text_fg).bg(text_bg);
         let selection_style = Style::default().bg(selection_bg);
@@ -324,7 +312,11 @@ impl<'a> Widget for EditorWidget<'a> {
             .map(|p| p.display().to_string())
             .unwrap_or_else(|| "[No File]".to_string());
 
-        let modified = if self.editor.is_modified() { " [+]" } else { "" };
+        let modified = if self.editor.is_modified() {
+            " [+]"
+        } else {
+            ""
+        };
         let mode = match self.editor.mode() {
             EditorMode::Normal => " NORMAL",
             EditorMode::Insert => " INSERT",

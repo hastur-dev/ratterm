@@ -1,28 +1,36 @@
 //! Native plugin loading using libloading.
 //!
 //! Loads compiled native plugins (.dll/.so/.dylib) with security confirmations.
+//!
+//! Note: Native plugin support is experimental. Due to FFI safety constraints,
+//! plugins must export C-compatible functions rather than Rust trait objects.
 
+use std::ffi::c_void;
 use std::path::Path;
 
 use libloading::{Library, Symbol};
 
-use super::api::{PluginCapability, PluginError, PluginHost, PluginInfo, PluginType, RattermPlugin, WidgetCell};
 use super::ExtensionError;
+use super::api::{
+    PluginCapability, PluginError, PluginHost, PluginInfo, PluginType, RattermPlugin, WidgetCell,
+};
 
 /// Function signature for plugin initialization.
-type PluginInitFn = unsafe extern "C" fn() -> *mut dyn RattermPlugin;
+/// Returns an opaque pointer to the plugin instance.
+type PluginInitFn = unsafe extern "C" fn() -> *mut c_void;
 
 /// Function signature for plugin destruction.
-type PluginDestroyFn = unsafe extern "C" fn(*mut dyn RattermPlugin);
+/// Takes an opaque pointer to the plugin instance.
+type PluginDestroyFn = unsafe extern "C" fn(*mut c_void);
 
 /// Native plugin instance.
 pub struct NativePlugin {
     /// Plugin info.
     info: PluginInfo,
-    /// Loaded library.
+    /// Loaded library (kept alive for symbol validity).
     _library: Library,
-    /// Plugin instance pointer.
-    instance: Option<*mut dyn RattermPlugin>,
+    /// Plugin instance pointer (opaque for FFI safety).
+    _instance: Option<*mut c_void>,
     /// Destroy function.
     destroy_fn: Option<PluginDestroyFn>,
     /// Whether the plugin is loaded.
@@ -81,16 +89,21 @@ impl NativePlugin {
                 capabilities,
             },
             _library: library,
-            instance: Some(instance),
+            _instance: Some(instance),
             destroy_fn,
             loaded: false,
         })
+    }
+
+    /// Returns the instance pointer for cleanup.
+    fn take_instance(&mut self) -> Option<*mut c_void> {
+        self._instance.take()
     }
 }
 
 impl Drop for NativePlugin {
     fn drop(&mut self) {
-        if let Some(instance) = self.instance.take() {
+        if let Some(instance) = self.take_instance() {
             if let Some(destroy_fn) = self.destroy_fn {
                 unsafe {
                     destroy_fn(instance);
@@ -105,50 +118,32 @@ impl RattermPlugin for NativePlugin {
         self.info.clone()
     }
 
-    fn on_load(&mut self, host: &dyn PluginHost) -> Result<(), PluginError> {
-        if let Some(instance) = self.instance {
-            unsafe {
-                let plugin = &mut *instance;
-                plugin.on_load(host)?;
-            }
-        }
+    fn on_load(&mut self, _host: &dyn PluginHost) -> Result<(), PluginError> {
+        // Native plugins handle their own initialization in ratterm_plugin_init
         self.loaded = true;
         Ok(())
     }
 
     fn on_unload(&mut self) {
-        if let Some(instance) = self.instance {
-            unsafe {
-                let plugin = &mut *instance;
-                plugin.on_unload();
-            }
-        }
         self.loaded = false;
     }
 
-    fn execute_command(&mut self, cmd: &str, args: &[&str]) -> Result<(), PluginError> {
+    fn execute_command(&mut self, _cmd: &str, _args: &[&str]) -> Result<(), PluginError> {
         if !self.loaded {
             return Err(PluginError::Other("Plugin not loaded".to_string()));
         }
-        if let Some(instance) = self.instance {
-            unsafe {
-                let plugin = &mut *instance;
-                return plugin.execute_command(cmd, args);
-            }
-        }
-        Ok(())
+        // Native command execution would require additional FFI functions
+        // This is a placeholder for future implementation
+        Err(PluginError::Other(
+            "Native command execution not yet implemented".to_string(),
+        ))
     }
 
-    fn render_widget(&self, area: ratatui::layout::Rect) -> Option<Vec<WidgetCell>> {
+    fn render_widget(&self, _area: ratatui::layout::Rect) -> Option<Vec<WidgetCell>> {
         if !self.loaded {
             return None;
         }
-        if let Some(instance) = self.instance {
-            unsafe {
-                let plugin = &*instance;
-                return plugin.render_widget(area);
-            }
-        }
+        // Native widget rendering would require additional FFI functions
         None
     }
 }

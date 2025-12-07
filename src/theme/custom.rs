@@ -85,10 +85,12 @@ pub fn themes_dir() -> Option<PathBuf> {
 
 /// Ensures the themes directory exists.
 pub fn ensure_themes_dir() -> io::Result<PathBuf> {
-    let dir = themes_dir().ok_or_else(|| io::Error::new(
-        io::ErrorKind::NotFound,
-        "Could not determine home directory",
-    ))?;
+    let dir = themes_dir().ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::NotFound,
+            "Could not determine home directory",
+        )
+    })?;
 
     if !dir.exists() {
         fs::create_dir_all(&dir)?;
@@ -292,8 +294,14 @@ description = "A test theme"
         let theme = load_custom_theme(&path).expect("load theme");
 
         assert_eq!(theme.name(), "My Custom Theme");
-        assert_eq!(theme.terminal.background, ratatui::style::Color::Rgb(26, 26, 46));
-        assert_eq!(theme.editor.background, ratatui::style::Color::Rgb(22, 33, 62));
+        assert_eq!(
+            theme.terminal.background,
+            ratatui::style::Color::Rgb(26, 26, 46)
+        );
+        assert_eq!(
+            theme.editor.background,
+            ratatui::style::Color::Rgb(22, 33, 62)
+        );
     }
 
     #[test]
@@ -313,7 +321,10 @@ base = "dracula"
 
         assert_eq!(theme.name(), "Dracula Modified");
         // Background should be overridden
-        assert_eq!(theme.terminal.background, ratatui::style::Color::Rgb(30, 30, 46));
+        assert_eq!(
+            theme.terminal.background,
+            ratatui::style::Color::Rgb(30, 30, 46)
+        );
         // Other colors should come from dracula base
     }
 
@@ -336,7 +347,13 @@ fg = "#f8f8f2"
         let path = create_test_theme(dir.path(), "palette", content);
         let theme = load_custom_theme(&path).expect("load theme");
 
-        assert_eq!(theme.terminal.background, ratatui::style::Color::Rgb(40, 42, 54));
-        assert_eq!(theme.terminal.foreground, ratatui::style::Color::Rgb(248, 248, 242));
+        assert_eq!(
+            theme.terminal.background,
+            ratatui::style::Color::Rgb(40, 42, 54)
+        );
+        assert_eq!(
+            theme.terminal.foreground,
+            ratatui::style::Color::Rgb(248, 248, 242)
+        );
     }
 }

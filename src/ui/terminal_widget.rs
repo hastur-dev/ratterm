@@ -9,7 +9,7 @@ use ratatui::{
     widgets::{Block, Borders, Widget},
 };
 
-use crate::terminal::{grid::Grid, Terminal};
+use crate::terminal::{Terminal, grid::Grid};
 use crate::theme::TerminalTheme;
 
 /// Terminal widget for rendering.
@@ -65,14 +65,8 @@ impl<'a> TerminalWidget<'a> {
         let cols = grid.cols().min(area.width) as usize;
 
         // Get background color from theme
-        let bg_color = self
-            .theme
-            .map(|t| t.background)
-            .unwrap_or(Color::Reset);
-        let fg_color = self
-            .theme
-            .map(|t| t.foreground)
-            .unwrap_or(Color::Reset);
+        let bg_color = self.theme.map(|t| t.background).unwrap_or(Color::Reset);
+        let fg_color = self.theme.map(|t| t.foreground).unwrap_or(Color::Reset);
         let clear_style = Style::default().fg(fg_color).bg(bg_color);
 
         // Clear the entire terminal area first to prevent ghost characters when scrolling
@@ -185,9 +179,7 @@ impl<'a> TerminalWidget<'a> {
             .theme
             .map(|t| t.selection)
             .unwrap_or(Color::Rgb(38, 79, 120));
-        let selection_style = Style::default()
-            .bg(selection_color)
-            .fg(Color::White);
+        let selection_style = Style::default().bg(selection_color).fg(Color::White);
 
         for col in 0..cols {
             if let Some(cell) = row.cell(col as u16) {

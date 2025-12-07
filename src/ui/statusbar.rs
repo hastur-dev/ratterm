@@ -10,7 +10,7 @@ use ratatui::{
 };
 
 use crate::config::KeybindingMode;
-use crate::editor::{buffer::Position, EditorMode};
+use crate::editor::{EditorMode, buffer::Position};
 use crate::theme::StatusBarTheme;
 use crate::ui::layout::FocusedPane;
 

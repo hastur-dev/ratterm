@@ -83,7 +83,10 @@ impl SplitLayout {
 
     /// Moves split left (increases terminal size).
     pub fn move_split_left(&mut self) {
-        self.split_percent = self.split_percent.saturating_sub(RESIZE_STEP).max(MIN_PANE_SIZE);
+        self.split_percent = self
+            .split_percent
+            .saturating_sub(RESIZE_STEP)
+            .max(MIN_PANE_SIZE);
     }
 
     /// Moves split right (increases editor size).

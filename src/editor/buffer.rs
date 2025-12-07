@@ -5,8 +5,8 @@
 use ropey::Rope;
 use thiserror::Error;
 
-pub use super::edit::Position;
 use super::edit::Edit;
+pub use super::edit::Position;
 use super::find::{FindCaseInsensitiveIterator, FindIterator};
 
 /// Maximum undo history size.
@@ -234,7 +234,10 @@ impl Buffer {
         let end_idx = (idx + len).min(self.rope.len_chars());
         let deleted = self.rope.slice(idx..end_idx).to_string();
 
-        let edit = Edit::Delete { pos: idx, text: deleted };
+        let edit = Edit::Delete {
+            pos: idx,
+            text: deleted,
+        };
         self.push_edit(edit);
 
         self.rope.remove(idx..end_idx);

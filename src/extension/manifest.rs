@@ -150,13 +150,11 @@ impl NativeConfig {
 
 /// Loads an extension manifest from a file.
 pub fn load_manifest(path: &Path) -> Result<ExtensionManifest, ExtensionError> {
-    let content = fs::read_to_string(path).map_err(|e| {
-        ExtensionError::Manifest(format!("Failed to read manifest: {}", e))
-    })?;
+    let content = fs::read_to_string(path)
+        .map_err(|e| ExtensionError::Manifest(format!("Failed to read manifest: {}", e)))?;
 
-    let manifest: ExtensionManifest = toml::from_str(&content).map_err(|e| {
-        ExtensionError::Manifest(format!("Failed to parse manifest: {}", e))
-    })?;
+    let manifest: ExtensionManifest = toml::from_str(&content)
+        .map_err(|e| ExtensionError::Manifest(format!("Failed to parse manifest: {}", e)))?;
 
     validate_manifest(&manifest)?;
 

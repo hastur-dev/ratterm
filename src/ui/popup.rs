@@ -10,8 +10,8 @@ use ratatui::{
     widgets::{Block, Borders, Clear, Paragraph, Widget},
 };
 
-use fuzzy_matcher::skim::SkimMatcherV2;
 use fuzzy_matcher::FuzzyMatcher;
+use fuzzy_matcher::skim::SkimMatcherV2;
 
 use crate::config::{KeybindingMode, ShellDetector, ShellInstaller, ShellType};
 use crate::theme::ThemePreset;
@@ -414,8 +414,7 @@ impl<'a> Widget for PopupWidget<'a> {
 
         // Render error if any
         if let Some(ref error) = self.popup.error {
-            let error_para = Paragraph::new(error.as_str())
-                .style(Style::default().fg(Color::Red));
+            let error_para = Paragraph::new(error.as_str()).style(Style::default().fg(Color::Red));
             error_para.render(chunks[1], buf);
         }
 
@@ -505,7 +504,8 @@ impl CommandPalette {
     #[must_use]
     pub fn new() -> Self {
         let commands = Self::all_commands();
-        let filtered: Vec<(usize, i64)> = commands.iter().enumerate().map(|(i, _)| (i, 0)).collect();
+        let filtered: Vec<(usize, i64)> =
+            commands.iter().enumerate().map(|(i, _)| (i, 0)).collect();
 
         Self {
             commands,
@@ -530,30 +530,95 @@ impl CommandPalette {
             Command::new("edit.paste", "Paste", "Edit", Some("Ctrl+V")),
             Command::new("edit.selectAll", "Select All", "Edit", Some("Ctrl+A")),
             Command::new("edit.selectLine", "Select Line", "Edit", Some("Ctrl+L")),
-            Command::new("edit.duplicateLine", "Duplicate Line", "Edit", Some("Ctrl+D")),
-            Command::new("edit.deleteLine", "Delete Line", "Edit", Some("Ctrl+Shift+K")),
+            Command::new(
+                "edit.duplicateLine",
+                "Duplicate Line",
+                "Edit",
+                Some("Ctrl+D"),
+            ),
+            Command::new(
+                "edit.deleteLine",
+                "Delete Line",
+                "Edit",
+                Some("Ctrl+Shift+K"),
+            ),
             Command::new("edit.moveLineUp", "Move Line Up", "Edit", Some("Alt+Up")),
-            Command::new("edit.moveLineDown", "Move Line Down", "Edit", Some("Alt+Down")),
-            Command::new("edit.toggleComment", "Toggle Comment", "Edit", Some("Ctrl+/")),
+            Command::new(
+                "edit.moveLineDown",
+                "Move Line Down",
+                "Edit",
+                Some("Alt+Down"),
+            ),
+            Command::new(
+                "edit.toggleComment",
+                "Toggle Comment",
+                "Edit",
+                Some("Ctrl+/"),
+            ),
             Command::new("edit.indent", "Indent", "Edit", Some("Tab")),
             Command::new("edit.outdent", "Outdent", "Edit", Some("Shift+Tab")),
             // Search commands
             Command::new("search.inFile", "Find in File", "Search", Some("Ctrl+F")),
-            Command::new("search.inFiles", "Find in All Files", "Search", Some("Ctrl+Shift+F")),
-            Command::new("search.files", "Search Files", "Search", Some("Ctrl+Shift+E")),
-            Command::new("search.directories", "Search Directories", "Search", Some("Ctrl+Shift+D")),
+            Command::new(
+                "search.inFiles",
+                "Find in All Files",
+                "Search",
+                Some("Ctrl+Shift+F"),
+            ),
+            Command::new(
+                "search.files",
+                "Search Files",
+                "Search",
+                Some("Ctrl+Shift+E"),
+            ),
+            Command::new(
+                "search.directories",
+                "Search Directories",
+                "Search",
+                Some("Ctrl+Shift+D"),
+            ),
             // View commands
-            Command::new("view.focusTerminal", "Focus Terminal", "View", Some("Alt+Left")),
-            Command::new("view.focusEditor", "Focus Editor", "View", Some("Alt+Right")),
+            Command::new(
+                "view.focusTerminal",
+                "Focus Terminal",
+                "View",
+                Some("Alt+Left"),
+            ),
+            Command::new(
+                "view.focusEditor",
+                "Focus Editor",
+                "View",
+                Some("Alt+Right"),
+            ),
             Command::new("view.toggleFocus", "Toggle Focus", "View", Some("Alt+Tab")),
             Command::new("view.splitLeft", "Shrink Split", "View", Some("Alt+[")),
             Command::new("view.splitRight", "Expand Split", "View", Some("Alt+]")),
             // Terminal commands
             Command::new("terminal.new", "New Terminal", "Terminal", Some("Ctrl+T")),
-            Command::new("terminal.split", "Split Terminal", "Terminal", Some("Ctrl+S")),
-            Command::new("terminal.close", "Close Terminal", "Terminal", Some("Ctrl+W")),
-            Command::new("terminal.nextTab", "Next Terminal Tab", "Terminal", Some("Ctrl+Right")),
-            Command::new("terminal.prevTab", "Previous Terminal Tab", "Terminal", Some("Ctrl+Left")),
+            Command::new(
+                "terminal.split",
+                "Split Terminal",
+                "Terminal",
+                Some("Ctrl+S"),
+            ),
+            Command::new(
+                "terminal.close",
+                "Close Terminal",
+                "Terminal",
+                Some("Ctrl+W"),
+            ),
+            Command::new(
+                "terminal.nextTab",
+                "Next Terminal Tab",
+                "Terminal",
+                Some("Ctrl+Right"),
+            ),
+            Command::new(
+                "terminal.prevTab",
+                "Previous Terminal Tab",
+                "Terminal",
+                Some("Ctrl+Left"),
+            ),
             Command::new("terminal.selectShell", "Select Shell", "Terminal", None),
             // Theme commands
             Command::new("theme.select", "Select Theme", "Theme", None),
@@ -564,13 +629,28 @@ impl CommandPalette {
             Command::new("theme.nord", "Nord Theme", "Theme", None),
             // Extension commands
             Command::new("extension.list", "List Installed", "Extension", None),
-            Command::new("extension.install", "Install from GitHub", "Extension", None),
+            Command::new(
+                "extension.install",
+                "Install from GitHub",
+                "Extension",
+                None,
+            ),
             Command::new("extension.update", "Update All", "Extension", None),
             Command::new("extension.remove", "Remove Extension", "Extension", None),
             // Application commands
             Command::new("app.quit", "Quit", "Application", Some("Ctrl+Q")),
-            Command::new("app.commandPalette", "Command Palette", "Application", Some("Ctrl+Shift+P")),
-            Command::new("app.switchEditorMode", "Switch Editor Mode", "Application", Some("Ctrl+Shift+Tab")),
+            Command::new(
+                "app.commandPalette",
+                "Command Palette",
+                "Application",
+                Some("Ctrl+Shift+P"),
+            ),
+            Command::new(
+                "app.switchEditorMode",
+                "Switch Editor Mode",
+                "Application",
+                Some("Ctrl+Shift+Tab"),
+            ),
         ]
     }
 
@@ -578,7 +658,12 @@ impl CommandPalette {
     pub fn filter(&mut self, query: &str) {
         if query.is_empty() {
             // Show all commands when query is empty
-            self.filtered = self.commands.iter().enumerate().map(|(i, _)| (i, 0)).collect();
+            self.filtered = self
+                .commands
+                .iter()
+                .enumerate()
+                .map(|(i, _)| (i, 0))
+                .collect();
             return;
         }
 
@@ -588,7 +673,9 @@ impl CommandPalette {
             .enumerate()
             .filter_map(|(idx, cmd)| {
                 let search_text = format!("{} {}", cmd.category, cmd.label);
-                self.matcher.fuzzy_match(&search_text, query).map(|score| (idx, score))
+                self.matcher
+                    .fuzzy_match(&search_text, query)
+                    .map(|score| (idx, score))
             })
             .collect();
 
@@ -649,10 +736,7 @@ impl ModeSwitcher {
             KeybindingMode::VsCode,
         ];
 
-        let selected_index = modes
-            .iter()
-            .position(|m| *m == current_mode)
-            .unwrap_or(0);
+        let selected_index = modes.iter().position(|m| *m == current_mode).unwrap_or(0);
 
         Self {
             modes,
@@ -1103,10 +1187,7 @@ impl Widget for ShellInstallPromptWidget<'_> {
         Clear.render(popup_area, buf);
 
         // Draw border
-        let title = format!(
-            " {} Not Installed ",
-            self.prompt.shell_type.display_name()
-        );
+        let title = format!(" {} Not Installed ", self.prompt.shell_type.display_name());
         let block = Block::default()
             .title(title)
             .title_alignment(Alignment::Center)
@@ -1193,10 +1274,7 @@ impl ThemeSelector {
         let themes: Vec<ThemePreset> = ThemePreset::all().to_vec();
         let current = current_theme.unwrap_or(ThemePreset::Dark);
 
-        let selected_index = themes
-            .iter()
-            .position(|t| *t == current)
-            .unwrap_or(0);
+        let selected_index = themes.iter().position(|t| *t == current).unwrap_or(0);
 
         Self {
             themes,

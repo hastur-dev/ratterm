@@ -357,7 +357,10 @@ mod tests {
     fn test_preset_from_name() {
         assert_eq!(ThemePreset::from_name("dark"), Some(ThemePreset::Dark));
         assert_eq!(ThemePreset::from_name("LIGHT"), Some(ThemePreset::Light));
-        assert_eq!(ThemePreset::from_name("Dracula"), Some(ThemePreset::Dracula));
+        assert_eq!(
+            ThemePreset::from_name("Dracula"),
+            Some(ThemePreset::Dracula)
+        );
         assert_eq!(ThemePreset::from_name("invalid"), None);
     }
 

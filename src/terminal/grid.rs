@@ -99,7 +99,9 @@ impl Grid {
 
     /// Returns a mutable cell at the given position.
     fn cell_mut(&mut self, col: u16, row: u16) -> Option<&mut Cell> {
-        self.rows.get_mut(row as usize).and_then(|r| r.cell_mut(col))
+        self.rows
+            .get_mut(row as usize)
+            .and_then(|r| r.cell_mut(col))
     }
 
     /// Sets the cursor position.
@@ -348,7 +350,9 @@ impl Grid {
         if self.alternate_screen.is_none() {
             let main_screen = std::mem::replace(
                 &mut self.rows,
-                (0..self.visible_rows).map(|_| Row::new(self.cols)).collect(),
+                (0..self.visible_rows)
+                    .map(|_| Row::new(self.cols))
+                    .collect(),
             );
             self.alternate_screen = Some(main_screen);
             self.alternate_cursor = Some((self.cursor_col, self.cursor_row));

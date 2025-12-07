@@ -2,7 +2,7 @@
 //!
 //! Provides tab management and split views for terminal instances.
 
-use super::{pty::PtyError, Terminal};
+use super::{Terminal, pty::PtyError};
 
 /// Maximum number of terminal tabs.
 const MAX_TABS: usize = 10;
@@ -74,9 +74,7 @@ impl TerminalTab {
         match (self.split, self.split_focus) {
             (SplitDirection::None, _) => &self.terminal,
             (_, SplitFocus::First) => &self.terminal,
-            (_, SplitFocus::Second) => {
-                self.split_terminal.as_ref().unwrap_or(&self.terminal)
-            }
+            (_, SplitFocus::Second) => self.split_terminal.as_ref().unwrap_or(&self.terminal),
         }
     }
 
