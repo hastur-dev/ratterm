@@ -1,0 +1,391 @@
+//! Terminal emulator module.
+//!
+//! Provides PTY-based terminal emulation with ANSI escape sequence parsing.
+
+pub mod action;
+pub mod cell;
+pub mod grid;
+pub mod multiplexer;
+pub mod parser;
+pub mod pty;
+pub mod style;
+
+pub use multiplexer::{SplitDirection, SplitFocus, TabInfo, TerminalMultiplexer, TerminalTab};
+
+use self::grid::Grid;
+use self::parser::AnsiParser;
+use self::pty::{Pty, PtyConfig, PtyError};
+use self::style::Style;
+
+// Re-export types for public use
+pub use self::action::ParsedAction;
+pub use self::cell::CursorShape;
+
+/// Maximum processing iterations per update.
+const MAX_PROCESS_ITERATIONS: usize = 10_000;
+
+/// Terminal emulator combining PTY and grid.
+pub struct Terminal {
+    /// The PTY instance.
+    pty: Pty,
+    /// The terminal grid.
+    grid: Grid,
+    /// ANSI parser.
+    parser: AnsiParser,
+    /// Window title.
+    title: String,
+    /// Pending bell.
+    bell: bool,
+    /// Scroll view offset (0 = at cursor, positive = viewing scrollback).
+    scroll_offset: usize,
+    /// Current input line buffer for command interception.
+    input_buffer: String,
+}
+
+impl Terminal {
+    /// Creates a new terminal with default configuration.
+    ///
+    /// # Errors
+    /// Returns error if PTY creation fails.
+    pub fn new(cols: u16, rows: u16) -> Result<Self, PtyError> {
+        let config = PtyConfig::default().size(cols, rows);
+        Self::with_config(config)
+    }
+
+    /// Creates a new terminal with custom configuration.
+    ///
+    /// # Errors
+    /// Returns error if PTY creation fails.
+    pub fn with_config(config: PtyConfig) -> Result<Self, PtyError> {
+        assert!(config.cols > 0, "Columns must be positive");
+        assert!(config.rows > 0, "Rows must be positive");
+
+        let pty = Pty::new(config.clone())?;
+        let grid = Grid::new(config.cols, config.rows);
+        let parser = AnsiParser::new();
+
+        Ok(Self {
+            pty,
+            grid,
+            parser,
+            title: String::new(),
+            bell: false,
+            scroll_offset: 0,
+            input_buffer: String::new(),
+        })
+    }
+
+    /// Returns the terminal grid.
+    #[must_use]
+    pub const fn grid(&self) -> &Grid {
+        &self.grid
+    }
+
+    /// Returns the window title.
+    #[must_use]
+    pub fn title(&self) -> &str {
+        &self.title
+    }
+
+    /// Returns true if a bell was triggered since last check.
+    pub fn take_bell(&mut self) -> bool {
+        std::mem::take(&mut self.bell)
+    }
+
+    /// Returns true if the terminal is running.
+    #[must_use]
+    pub fn is_running(&self) -> bool {
+        self.pty.is_running()
+    }
+
+    /// Writes input to the terminal.
+    ///
+    /// # Errors
+    /// Returns error if write fails.
+    pub fn write(&mut self, data: &[u8]) -> Result<(), PtyError> {
+        self.pty.write(data)
+    }
+
+    /// Writes a character to the terminal.
+    ///
+    /// # Errors
+    /// Returns error if write fails.
+    pub fn write_char(&mut self, c: char) -> Result<(), PtyError> {
+        let mut buf = [0u8; 4];
+        let s = c.encode_utf8(&mut buf);
+        self.pty.write(s.as_bytes())
+    }
+
+    /// Resizes the terminal.
+    ///
+    /// # Errors
+    /// Returns error if resize fails.
+    pub fn resize(&mut self, cols: u16, rows: u16) -> Result<(), PtyError> {
+        self.pty.resize(cols, rows)?;
+        self.grid.resize(cols, rows);
+        Ok(())
+    }
+
+    /// Processes pending PTY output.
+    ///
+    /// # Errors
+    /// Returns error if read fails.
+    pub fn process(&mut self) -> Result<(), PtyError> {
+        let data = self.pty.read()?;
+
+        if data.is_empty() {
+            return Ok(());
+        }
+
+        let actions = self.parser.parse(&data);
+
+        let mut iterations = 0;
+        for action in actions {
+            if iterations >= MAX_PROCESS_ITERATIONS {
+                break;
+            }
+            self.apply_action(action);
+            iterations += 1;
+        }
+
+        Ok(())
+    }
+
+    /// Applies a parsed action to the grid.
+    fn apply_action(&mut self, action: ParsedAction) {
+        match action {
+            ParsedAction::Print(text) => {
+                for c in text.chars() {
+                    self.grid.write_char(c);
+                }
+            }
+            ParsedAction::CursorUp(n) => {
+                self.grid.move_cursor_up(n);
+            }
+            ParsedAction::CursorDown(n) => {
+                self.grid.move_cursor_down(n);
+            }
+            ParsedAction::CursorForward(n) => {
+                self.grid.move_cursor_right(n);
+            }
+            ParsedAction::CursorBack(n) => {
+                self.grid.move_cursor_left(n);
+            }
+            ParsedAction::CursorPosition(row, col) => {
+                // Terminal positions are 1-indexed
+                self.grid
+                    .set_cursor_pos(col.saturating_sub(1), row.saturating_sub(1));
+            }
+            ParsedAction::SetAttr(attrs) => {
+                let mut style = if attrs.is_empty() {
+                    Style::new()
+                } else {
+                    Style::new()
+                };
+                for attr in attrs {
+                    style = style.add_attr(attr);
+                }
+                self.grid.set_style(style);
+            }
+            ParsedAction::SetFg(color) => {
+                let current = Style::new().fg(color);
+                self.grid.set_style(current);
+            }
+            ParsedAction::SetBg(color) => {
+                let current = Style::new().bg(color);
+                self.grid.set_style(current);
+            }
+            ParsedAction::EraseDisplay(mode) => match mode {
+                0 => self.grid.clear_to_eos(),
+                1 => self.grid.clear_to_bos(),
+                2 | 3 => self.grid.clear(),
+                _ => {}
+            },
+            ParsedAction::EraseLine(mode) => match mode {
+                0 => self.grid.clear_to_eol(),
+                1 => self.grid.clear_to_bol(),
+                2 => self.grid.clear_line(),
+                _ => {}
+            },
+            ParsedAction::ScrollUp(n) => {
+                self.grid.scroll_up(n);
+            }
+            ParsedAction::ScrollDown(n) => {
+                self.grid.scroll_down(n);
+            }
+            ParsedAction::SaveCursor => {
+                self.grid.save_cursor();
+            }
+            ParsedAction::RestoreCursor => {
+                self.grid.restore_cursor();
+            }
+            ParsedAction::HideCursor => {
+                self.grid.set_cursor_visible(false);
+            }
+            ParsedAction::ShowCursor => {
+                self.grid.set_cursor_visible(true);
+            }
+            ParsedAction::EnterAlternateScreen => {
+                self.grid.enter_alternate_screen();
+            }
+            ParsedAction::ExitAlternateScreen => {
+                self.grid.exit_alternate_screen();
+            }
+            ParsedAction::Bell => {
+                self.bell = true;
+            }
+            ParsedAction::Backspace => {
+                self.grid.backspace();
+            }
+            ParsedAction::Tab => {
+                self.grid.tab();
+            }
+            ParsedAction::LineFeed => {
+                self.grid.newline();
+            }
+            ParsedAction::CarriageReturn => {
+                self.grid.carriage_return();
+            }
+            ParsedAction::SetTitle(title) => {
+                self.title = title;
+            }
+            ParsedAction::SetCursorShape(shape) => {
+                let cursor_shape = match shape {
+                    0 | 1 | 2 => CursorShape::Block,
+                    3 | 4 => CursorShape::Underline,
+                    5 | 6 => CursorShape::Bar,
+                    _ => CursorShape::Block,
+                };
+                self.grid.set_cursor_shape(cursor_shape);
+            }
+            ParsedAction::InsertLines(n) => {
+                self.grid.insert_lines(n);
+            }
+            ParsedAction::DeleteLines(n) => {
+                self.grid.delete_lines(n);
+            }
+            ParsedAction::InsertChars(n) => {
+                self.grid.insert_chars(n);
+            }
+            ParsedAction::DeleteChars(n) => {
+                self.grid.delete_chars(n);
+            }
+            ParsedAction::DeviceStatusReport => {
+                // Send cursor position report
+                let (col, row) = self.grid.cursor_pos();
+                let response = format!("\x1b[{};{}R", row + 1, col + 1);
+                let _ = self.pty.write(response.as_bytes());
+            }
+            ParsedAction::Hyperlink { .. } => {
+                // Hyperlinks not yet supported in rendering
+            }
+            ParsedAction::Unknown(_) => {
+                // Ignore unknown sequences
+            }
+        }
+    }
+
+    /// Shuts down the terminal.
+    ///
+    /// # Errors
+    /// Returns error if shutdown fails.
+    pub fn shutdown(&mut self) -> Result<(), PtyError> {
+        self.pty.shutdown()
+    }
+
+    /// Returns the current scroll view offset.
+    #[must_use]
+    pub const fn scroll_offset(&self) -> usize {
+        self.scroll_offset
+    }
+
+    /// Scrolls the view up (into scrollback history).
+    pub fn scroll_view_up(&mut self, lines: usize) {
+        let max_offset = self.grid.scrollback_len();
+        self.scroll_offset = (self.scroll_offset + lines).min(max_offset);
+    }
+
+    /// Scrolls the view down (toward current output).
+    pub fn scroll_view_down(&mut self, lines: usize) {
+        self.scroll_offset = self.scroll_offset.saturating_sub(lines);
+    }
+
+    /// Scrolls view to show the cursor (resets scroll offset).
+    pub fn scroll_to_cursor(&mut self) {
+        self.scroll_offset = 0;
+    }
+
+    /// Sends interrupt signal (Ctrl+C) and resets view to cursor.
+    ///
+    /// # Errors
+    /// Returns error if write fails.
+    pub fn send_interrupt(&mut self) -> Result<(), PtyError> {
+        self.scroll_to_cursor();
+        self.input_buffer.clear();
+        self.pty.write(&[0x03]) // ETX (Ctrl+C)
+    }
+
+    /// Processes a character input, checking for command interception.
+    /// Returns Some(command) if a special command was entered.
+    ///
+    /// # Errors
+    /// Returns error if write fails.
+    pub fn process_input(&mut self, c: char) -> Result<Option<String>, PtyError> {
+        // Reset scroll when typing
+        self.scroll_to_cursor();
+
+        match c {
+            '\r' | '\n' => {
+                // Check if input buffer contains an intercepted command
+                let command = self.check_command_intercept();
+                self.input_buffer.clear();
+
+                if command.is_some() {
+                    // Don't send to PTY, return the command
+                    return Ok(command);
+                }
+
+                // Normal enter - send to PTY
+                self.pty.write(&[b'\r'])?;
+            }
+            '\x7f' | '\x08' => {
+                // Backspace
+                self.input_buffer.pop();
+                self.pty.write(&[0x7f])?;
+            }
+            _ => {
+                self.input_buffer.push(c);
+                let mut buf = [0u8; 4];
+                let s = c.encode_utf8(&mut buf);
+                self.pty.write(s.as_bytes())?;
+            }
+        }
+
+        Ok(None)
+    }
+
+    /// Checks if the input buffer matches an interceptable command.
+    fn check_command_intercept(&self) -> Option<String> {
+        let trimmed = self.input_buffer.trim();
+
+        // Check for "open" command
+        if trimmed == "open" {
+            return Some("open".to_string());
+        }
+
+        // Check for "open <filename>" command
+        if let Some(rest) = trimmed.strip_prefix("open ") {
+            let filename = rest.trim();
+            if !filename.is_empty() {
+                return Some(format!("open {}", filename));
+            }
+        }
+
+        None
+    }
+
+    /// Clears the input buffer (e.g., after Ctrl+C).
+    pub fn clear_input_buffer(&mut self) {
+        self.input_buffer.clear();
+    }
+}

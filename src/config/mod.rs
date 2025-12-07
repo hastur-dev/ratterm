@@ -1,0 +1,244 @@
+//! Configuration module for ratatui-full-ide.
+//!
+//! Handles loading and parsing the .ratrc configuration file.
+
+mod keybindings;
+
+use std::fs;
+use std::io::{self, Write};
+use std::path::PathBuf;
+
+pub use keybindings::{KeyAction, KeyBinding, KeybindingMode, Keybindings};
+
+/// Default .ratrc file content with all commands documented.
+const DEFAULT_RATRC: &str = r#"# Ratatui Full IDE Configuration File
+# =====================================
+# This file is read on application startup.
+# Lines starting with '#' are comments.
+#
+# Keybinding Mode
+# ---------------
+# Set the keybinding mode: vim, emacs, or default
+# mode = default
+mode = vim
+
+# Global Keybindings
+# ------------------
+# Format: action = modifier+key
+# Modifiers: ctrl, alt, shift (combine with +)
+#
+# quit                  = ctrl+q           # Quit the application
+# focus_terminal        = alt+left         # Focus terminal pane
+# focus_editor          = alt+right        # Focus editor pane
+# toggle_focus          = alt+tab          # Toggle focus between panes
+# split_left            = alt+[            # Move split divider left
+# split_right           = alt+]            # Move split divider right
+
+# File Browser
+# ------------
+# open_file_browser     = ctrl+o           # Open file browser
+# next_file             = alt+shift+right  # Switch to next open file
+# prev_file             = alt+shift+left   # Switch to previous open file
+
+# Search & Create
+# ---------------
+# find_in_file          = ctrl+f           # Find in current file
+# find_in_files         = ctrl+shift+f     # Find in all files
+# search_directories    = ctrl+shift+d     # Search for directories
+# search_files          = ctrl+shift+e     # Search for files
+# new_file              = ctrl+n           # Create new file
+# new_folder            = ctrl+shift+n     # Create new folder
+
+# Clipboard
+# ---------
+# copy                  = ctrl+shift+c     # Copy selection or line
+# paste                 = ctrl+v           # Paste from clipboard
+
+# Terminal
+# --------
+# terminal_new_tab      = ctrl+t           # New terminal tab
+# terminal_split        = ctrl+s           # Split terminal horizontally
+# terminal_next_tab     = ctrl+right       # Next terminal tab
+# terminal_prev_tab     = ctrl+left        # Previous terminal tab
+# terminal_close_tab    = ctrl+w           # Close current terminal tab
+# terminal_interrupt    = ctrl+c           # Send interrupt (Ctrl+C)
+# terminal_scroll_up    = shift+pageup     # Scroll terminal up
+# terminal_scroll_down  = shift+pagedown   # Scroll terminal down
+
+# Editor (Normal Mode - Vim)
+# --------------------------
+# editor_insert         = i                # Enter insert mode
+# editor_append         = a                # Append after cursor
+# editor_visual         = v                # Enter visual mode
+# editor_command        = :                # Enter command mode
+# editor_left           = h                # Move cursor left
+# editor_right          = l                # Move cursor right
+# editor_up             = k                # Move cursor up
+# editor_down           = j                # Move cursor down
+# editor_line_start     = 0                # Move to line start
+# editor_line_end       = $                # Move to line end
+# editor_word_right     = w                # Move to next word
+# editor_word_left      = b                # Move to previous word
+# editor_buffer_start   = g                # Move to buffer start
+# editor_buffer_end     = G                # Move to buffer end
+# editor_delete         = x                # Delete character
+# editor_undo           = u                # Undo
+# editor_redo           = ctrl+r           # Redo
+# editor_save           = ctrl+s           # Save file
+"#;
+
+/// Application configuration.
+#[derive(Debug, Clone)]
+pub struct Config {
+    /// Keybinding mode (vim, emacs, default).
+    pub mode: KeybindingMode,
+    /// Custom keybindings.
+    pub keybindings: Keybindings,
+    /// Path to config file.
+    pub config_path: PathBuf,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            mode: KeybindingMode::Vim,
+            keybindings: Keybindings::default(),
+            config_path: Self::default_config_path(),
+        }
+    }
+}
+
+impl Config {
+    /// Returns the default config file path (~/.ratrc).
+    #[must_use]
+    pub fn default_config_path() -> PathBuf {
+        dirs::home_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join(".ratrc")
+    }
+
+    /// Loads configuration from the default path, creating it if it doesn't exist.
+    ///
+    /// # Errors
+    /// Returns error if config cannot be read or parsed.
+    pub fn load() -> io::Result<Self> {
+        let path = Self::default_config_path();
+        Self::load_from(&path)
+    }
+
+    /// Loads configuration from a specific path.
+    ///
+    /// # Errors
+    /// Returns error if config cannot be read or parsed.
+    pub fn load_from(path: &PathBuf) -> io::Result<Self> {
+        // Create default config if it doesn't exist
+        if !path.exists() {
+            Self::create_default_config(path)?;
+        }
+
+        let content = fs::read_to_string(path)?;
+        let mut config = Self::default();
+        config.config_path = path.clone();
+        config.parse(&content);
+
+        // Re-initialize keybindings based on parsed mode
+        config.keybindings = Keybindings::for_mode(config.mode);
+
+        // Re-parse to apply any custom keybinding overrides
+        config.parse_keybindings(&content);
+
+        Ok(config)
+    }
+
+    /// Parses only keybinding settings from content.
+    fn parse_keybindings(&mut self, content: &str) {
+        for line in content.lines() {
+            let line = line.trim();
+
+            // Skip comments and empty lines
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+
+            // Parse key = value (only keybindings, not mode)
+            if let Some((key, value)) = line.split_once('=') {
+                let key = key.trim();
+                let value = value.trim();
+
+                // Remove inline comments
+                let value = value.split('#').next().unwrap_or(value).trim();
+
+                // Only apply keybinding settings (not mode)
+                if key != "mode" {
+                    if let Some(action) = KeyAction::from_str(key) {
+                        if let Some(binding) = KeyBinding::parse(value) {
+                            self.keybindings.set(action, binding);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Creates the default config file.
+    fn create_default_config(path: &PathBuf) -> io::Result<()> {
+        let mut file = fs::File::create(path)?;
+        file.write_all(DEFAULT_RATRC.as_bytes())?;
+        Ok(())
+    }
+
+    /// Parses the config file content.
+    fn parse(&mut self, content: &str) {
+        for line in content.lines() {
+            let line = line.trim();
+
+            // Skip comments and empty lines
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+
+            // Parse key = value
+            if let Some((key, value)) = line.split_once('=') {
+                let key = key.trim();
+                let value = value.trim();
+
+                // Remove inline comments
+                let value = value.split('#').next().unwrap_or(value).trim();
+
+                self.apply_setting(key, value);
+            }
+        }
+    }
+
+    /// Applies a single setting.
+    fn apply_setting(&mut self, key: &str, value: &str) {
+        match key {
+            "mode" => {
+                self.mode = match value.to_lowercase().as_str() {
+                    "vim" => KeybindingMode::Vim,
+                    "emacs" => KeybindingMode::Emacs,
+                    _ => KeybindingMode::Default,
+                };
+            }
+            _ => {
+                // Try to parse as keybinding
+                if let Some(action) = KeyAction::from_str(key) {
+                    if let Some(binding) = KeyBinding::parse(value) {
+                        self.keybindings.set(action, binding);
+                    }
+                }
+            }
+        }
+    }
+
+    /// Reloads the configuration from disk.
+    ///
+    /// # Errors
+    /// Returns error if config cannot be read.
+    pub fn reload(&mut self) -> io::Result<()> {
+        let path = self.config_path.clone();
+        let new_config = Self::load_from(&path)?;
+        *self = new_config;
+        Ok(())
+    }
+}
