@@ -17,11 +17,13 @@ use crate::editor::Editor;
 use crate::filebrowser::FileBrowser;
 use crate::terminal::{pty::PtyError, TerminalMultiplexer};
 use crate::ui::{
+    editor_tabs::{EditorTabBar, EditorTabInfo},
     editor_widget::EditorWidget,
     file_picker::FilePickerWidget,
     layout::{FocusedPane, SplitLayout},
     popup::{Popup, PopupKind, PopupWidget},
     statusbar::StatusBar,
+    terminal_tabs::TerminalTabBar,
     terminal_widget::TerminalWidget,
 };
 
@@ -92,7 +94,8 @@ impl App {
         // Load configuration
         let config = Config::load().unwrap_or_default();
 
-        let terminals = match TerminalMultiplexer::new(cols / 2, rows - 2) {
+        // Subtract 4 from height: 1 for status bar + 1 for tab bar + 2 for borders
+        let terminals = match TerminalMultiplexer::new(cols / 2, rows.saturating_sub(4)) {
             Ok(t) => Some(t),
             Err(e) => {
                 tracing::warn!("Failed to create terminal: {}", e);
@@ -100,7 +103,7 @@ impl App {
             }
         };
 
-        let editor = Editor::new(cols / 2, rows - 2);
+        let editor = Editor::new(cols / 2, rows.saturating_sub(4));
         let file_browser = FileBrowser::default();
 
         Ok(Self {
@@ -371,6 +374,82 @@ impl App {
         }
     }
 
+    /// Returns information about open file tabs.
+    #[must_use]
+    pub fn editor_tab_info(&self) -> Vec<EditorTabInfo> {
+        self.open_files
+            .iter()
+            .enumerate()
+            .map(|(i, file)| EditorTabInfo {
+                index: i,
+                name: file.name.clone(),
+                is_active: i == self.current_file_idx,
+                is_modified: i == self.current_file_idx && self.editor.is_modified(),
+            })
+            .collect()
+    }
+
+    /// Creates a new untitled editor tab.
+    pub fn new_editor_tab(&mut self) {
+        // Count existing untitled buffers
+        let untitled_count = self
+            .open_files
+            .iter()
+            .filter(|f| f.name.starts_with("Untitled"))
+            .count();
+
+        let name = if untitled_count == 0 {
+            "Untitled".to_string()
+        } else {
+            format!("Untitled-{}", untitled_count + 1)
+        };
+
+        // Create new buffer in editor
+        self.editor.new_buffer();
+
+        // Add to open files
+        self.open_files.push(OpenFile {
+            path: PathBuf::from(&name),
+            name: name.clone(),
+        });
+        self.current_file_idx = self.open_files.len() - 1;
+
+        self.set_status(format!("Created {}", name));
+    }
+
+    /// Closes the current editor tab.
+    pub fn close_editor_tab(&mut self) {
+        if self.open_files.is_empty() {
+            self.set_status("No tabs to close");
+            return;
+        }
+
+        // Check for unsaved changes
+        if self.editor.is_modified() {
+            self.show_popup(PopupKind::ConfirmSaveBeforeExit);
+            return;
+        }
+
+        // Remove current file
+        let closed_name = self.open_files[self.current_file_idx].name.clone();
+        self.open_files.remove(self.current_file_idx);
+
+        // Adjust index
+        if self.current_file_idx >= self.open_files.len() && !self.open_files.is_empty() {
+            self.current_file_idx = self.open_files.len() - 1;
+        }
+
+        // Open the now-current file, or clear editor if no files left
+        if let Some(file) = self.open_files.get(self.current_file_idx) {
+            let _ = self.editor.open(&file.path);
+        } else {
+            self.editor.new_buffer();
+            self.current_file_idx = 0;
+        }
+
+        self.set_status(format!("Closed {}", closed_name));
+    }
+
     /// Handles terminal resize.
     pub fn resize(&mut self, cols: u16, rows: u16) {
         let areas = self
@@ -379,17 +458,19 @@ impl App {
 
         if let Some(ref mut terminals) = self.terminals {
             if areas.has_terminal() {
+                // Subtract 3: 1 for tab bar + 2 for borders
                 let _ = terminals.resize(
                     areas.terminal.width.saturating_sub(2),
-                    areas.terminal.height.saturating_sub(2),
+                    areas.terminal.height.saturating_sub(3),
                 );
             }
         }
 
         if areas.has_editor() {
+            // Subtract 3: 1 for tab bar + 2 for borders
             self.editor.resize(
                 areas.editor.width.saturating_sub(2),
-                areas.editor.height.saturating_sub(2),
+                areas.editor.height.saturating_sub(3),
             );
             self.file_browser
                 .set_visible_height(areas.editor.height.saturating_sub(4) as usize);
@@ -515,16 +596,30 @@ impl App {
         // Render terminal pane (with split support)
         if areas.has_terminal() {
             if let Some(ref terminals) = self.terminals {
-                if let Some(tab) = terminals.active_tab() {
-                    let is_focused = self.layout.focused() == FocusedPane::Terminal;
+                let is_focused = self.layout.focused() == FocusedPane::Terminal;
+                let tab_info = terminals.tab_info();
 
+                // Split area for tab bar + terminal content
+                let terminal_chunks = Layout::default()
+                    .direction(Direction::Vertical)
+                    .constraints([Constraint::Length(1), Constraint::Min(1)])
+                    .split(areas.terminal);
+
+                // Render tab bar
+                let tab_bar = TerminalTabBar::new(&tab_info).focused(is_focused);
+                frame.render_widget(tab_bar, terminal_chunks[0]);
+
+                // Render terminal content in remaining area
+                let terminal_area = terminal_chunks[1];
+
+                if let Some(tab) = terminals.active_tab() {
                     match tab.split {
                         crate::terminal::SplitDirection::None => {
                             // Single terminal
                             let widget = TerminalWidget::new(&tab.terminal)
                                 .focused(is_focused)
                                 .title(tab.terminal.title());
-                            frame.render_widget(widget, areas.terminal);
+                            frame.render_widget(widget, terminal_area);
                         }
                         crate::terminal::SplitDirection::Horizontal => {
                             // Top/bottom split
@@ -534,7 +629,7 @@ impl App {
                                     Constraint::Percentage(50),
                                     Constraint::Percentage(50),
                                 ])
-                                .split(areas.terminal);
+                                .split(terminal_area);
 
                             let first_focused =
                                 is_focused && tab.split_focus == crate::terminal::SplitFocus::First;
@@ -561,7 +656,7 @@ impl App {
                                     Constraint::Percentage(50),
                                     Constraint::Percentage(50),
                                 ])
-                                .split(areas.terminal);
+                                .split(terminal_area);
 
                             let first_focused =
                                 is_focused && tab.split_focus == crate::terminal::SplitFocus::First;
@@ -587,14 +682,26 @@ impl App {
 
         // Render editor or file browser
         if areas.has_editor() {
+            let is_focused = self.layout.focused() == FocusedPane::Editor;
+
             if self.file_browser.is_visible() {
-                let widget = FilePickerWidget::new(&self.file_browser)
-                    .focused(self.layout.focused() == FocusedPane::Editor);
+                let widget = FilePickerWidget::new(&self.file_browser).focused(is_focused);
                 frame.render_widget(widget, areas.editor);
             } else {
-                let widget = EditorWidget::new(&self.editor)
-                    .focused(self.layout.focused() == FocusedPane::Editor);
-                frame.render_widget(widget, areas.editor);
+                // Split area for tab bar + editor content
+                let editor_chunks = Layout::default()
+                    .direction(Direction::Vertical)
+                    .constraints([Constraint::Length(1), Constraint::Min(1)])
+                    .split(areas.editor);
+
+                // Render editor tab bar
+                let editor_tabs = self.editor_tab_info();
+                let tab_bar = EditorTabBar::new(&editor_tabs).focused(is_focused);
+                frame.render_widget(tab_bar, editor_chunks[0]);
+
+                // Render editor content
+                let widget = EditorWidget::new(&self.editor).focused(is_focused);
+                frame.render_widget(widget, editor_chunks[1]);
             }
         }
 

@@ -177,22 +177,35 @@ impl Popup {
         self.input.insert(self.cursor, c);
         self.cursor += 1;
         self.error = None;
+
+        // Clear suggestion when user types a '.' (they're specifying their own extension)
+        if c == '.' && self.suggestion.is_some() {
+            self.suggestion = None;
+        }
     }
 
     /// Deletes character before cursor (backspace).
+    /// If at start of input and there's a suggestion, clears the suggestion.
     pub fn backspace(&mut self) {
         if self.cursor > 0 {
             self.cursor -= 1;
             self.input.remove(self.cursor);
             self.error = None;
+        } else if self.suggestion.is_some() {
+            // Clear suggestion when backspacing at start of empty input
+            self.suggestion = None;
         }
     }
 
     /// Deletes character at cursor (delete).
+    /// If at end of input and there's a suggestion, clears the suggestion.
     pub fn delete(&mut self) {
         if self.cursor < self.input.len() {
             self.input.remove(self.cursor);
             self.error = None;
+        } else if self.suggestion.is_some() {
+            // Clear suggestion when pressing delete at end of input
+            self.suggestion = None;
         }
     }
 
