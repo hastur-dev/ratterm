@@ -69,7 +69,8 @@ Write-Host "  ╩╚═╩ ╩ ╩  ╩ ╚═╝╩╚═╩ ╩"
 Write-Host ""
 
 # Detect if running from remote or local
-$IsRemote = $MyInvocation.MyCommand.Path -eq $null
+$ScriptPath = $MyInvocation.MyCommand.Path
+$IsRemote = $ScriptPath -eq $null
 
 # Determine install location
 if ($User -or -not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
@@ -173,8 +174,8 @@ function Install-Ratterm {
 
     try {
         # Try local file first (for local installs)
-        if (-not $IsRemote) {
-            $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+        if (-not $IsRemote -and $ScriptPath) {
+            $ScriptDir = Split-Path -Parent $ScriptPath
             $LocalExe = Join-Path $ScriptDir "target\release\$BinaryName.exe"
             Write-Debug "Checking for local build: $LocalExe"
             if (Test-Path $LocalExe) {

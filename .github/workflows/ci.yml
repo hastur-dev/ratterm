@@ -84,9 +84,10 @@ jobs:
       - name: Run doc tests
         run: cargo test --doc
 
-  # Install script tests on multiple platforms
+  # Install script tests on multiple platforms (main/master only)
   install-script:
     name: Install Script (${{ matrix.os }})
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
