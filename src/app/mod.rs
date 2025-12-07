@@ -1009,8 +1009,19 @@ impl App {
     /// Renders the application.
     pub fn render(&self, frame: &mut ratatui::Frame) {
         use ratatui::layout::{Constraint, Direction, Layout};
+        use ratatui::style::Style;
+        use ratatui::widgets::{Block, Clear};
 
         let area = frame.area();
+
+        // Clear the entire frame first to prevent rendering artifacts
+        frame.render_widget(Clear, area);
+
+        // Fill with background color from theme
+        let bg_color = self.config.theme_manager.current().editor.background;
+        let bg_block = Block::default().style(Style::default().bg(bg_color));
+        frame.render_widget(bg_block, area);
+
         let areas = self.layout.calculate(area);
 
         // Render terminal pane (with split support)

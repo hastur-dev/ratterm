@@ -8,6 +8,7 @@ use ratatui::{
     style::{Color, Modifier, Style},
     widgets::{Block, Borders, Widget},
 };
+use unicode_width::UnicodeWidthChar;
 
 use crate::editor::{Editor, EditorMode};
 use crate::theme::EditorTheme;
@@ -58,13 +59,29 @@ impl<'a> EditorWidget<'a> {
             .theme
             .map(|t| t.line_numbers_fg)
             .unwrap_or(Color::DarkGray);
+        let gutter_bg = self
+            .theme
+            .map(|t| t.line_numbers_bg)
+            .unwrap_or(Color::Reset);
         let current_line_fg = self
             .theme
             .map(|t| t.cursor)
             .unwrap_or(Color::Yellow);
 
-        let style = Style::default().fg(line_num_fg);
-        let current_line_style = Style::default().fg(current_line_fg);
+        let style = Style::default().fg(line_num_fg).bg(gutter_bg);
+        let current_line_style = Style::default().fg(current_line_fg).bg(gutter_bg);
+
+        // Clear gutter area first to prevent ghost characters
+        for row in 0..area.height {
+            for col in 0..gutter_width as u16 {
+                let x = area.x + col;
+                let y = area.y + row;
+                if let Some(cell) = buf.cell_mut((x, y)) {
+                    cell.set_char(' ');
+                    cell.set_style(style);
+                }
+            }
+        }
 
         let cursor_line = self.editor.cursor_position().line;
 
@@ -119,15 +136,31 @@ impl<'a> EditorWidget<'a> {
             .theme
             .map(|t| t.foreground)
             .unwrap_or(Color::Reset);
+        let text_bg = self
+            .theme
+            .map(|t| t.background)
+            .unwrap_or(Color::Reset);
         let selection_bg = self
             .theme
             .map(|t| t.selection)
             .unwrap_or(Color::Blue);
 
-        let default_style = Style::default().fg(text_fg);
+        let default_style = Style::default().fg(text_fg).bg(text_bg);
         let selection_style = Style::default().bg(selection_bg);
 
         let selection = self.editor.cursor().selection_range();
+
+        // Clear the content area first to prevent ghost characters when scrolling
+        for row in 0..area.height {
+            for col in 0..text_width {
+                let x = text_x + col;
+                let y = area.y + row;
+                if let Some(cell) = buf.cell_mut((x, y)) {
+                    cell.set_char(' ');
+                    cell.set_style(default_style);
+                }
+            }
+        }
 
         for (screen_row, line_idx) in view.visible_lines().enumerate() {
             if screen_row >= area.height as usize {
@@ -143,17 +176,32 @@ impl<'a> EditorWidget<'a> {
 
             let y = area.y + screen_row as u16;
 
+            // Track visual column position (accounts for wide chars and tabs)
+            let mut visual_col: usize = 0;
+            let tab_width: usize = 4;
+
             for (col_idx, c) in line.chars().enumerate() {
-                if col_idx < scroll_left {
+                // Calculate character width
+                let char_width = if c == '\t' {
+                    // Tab expands to next tab stop
+                    tab_width - (visual_col % tab_width)
+                } else if c == '\n' {
+                    0 // Newline has no width
+                } else {
+                    c.width().unwrap_or(1)
+                };
+
+                // Skip characters that are scrolled off the left
+                if visual_col + char_width <= scroll_left {
+                    visual_col += char_width;
                     continue;
                 }
 
-                let screen_col = col_idx - scroll_left;
+                // Calculate screen position
+                let screen_col = visual_col.saturating_sub(scroll_left);
                 if screen_col >= text_width as usize {
                     break;
                 }
-
-                let x = text_x + screen_col as u16;
 
                 // Determine if this position is in selection
                 let in_selection = if let Some((start, end)) = selection {
@@ -169,14 +217,41 @@ impl<'a> EditorWidget<'a> {
                     default_style
                 };
 
-                if let Some(cell) = buf.cell_mut((x, y)) {
-                    if c == '\n' {
-                        cell.set_char(' ');
-                    } else {
-                        cell.set_char(c);
+                // Render the character (or spaces for tabs)
+                if c == '\t' {
+                    // Render tab as spaces
+                    for i in 0..char_width {
+                        let x = text_x + (screen_col + i) as u16;
+                        if x < text_x + text_width {
+                            if let Some(cell) = buf.cell_mut((x, y)) {
+                                cell.set_char(' ');
+                                cell.set_style(style);
+                            }
+                        }
                     }
-                    cell.set_style(style);
+                } else if c != '\n' {
+                    let x = text_x + screen_col as u16;
+                    if x < text_x + text_width {
+                        if let Some(cell) = buf.cell_mut((x, y)) {
+                            cell.set_char(c);
+                            cell.set_style(style);
+                        }
+                    }
+                    // For wide characters, fill the second cell with a space
+                    if char_width > 1 {
+                        for i in 1..char_width {
+                            let x2 = text_x + (screen_col + i) as u16;
+                            if x2 < text_x + text_width {
+                                if let Some(cell) = buf.cell_mut((x2, y)) {
+                                    cell.set_char(' ');
+                                    cell.set_style(style);
+                                }
+                            }
+                        }
+                    }
                 }
+
+                visual_col += char_width;
             }
         }
     }

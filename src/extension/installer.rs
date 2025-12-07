@@ -40,9 +40,10 @@ impl Installer {
         let info = self.registry.get(repo_ref)?;
         let version_to_install = version.unwrap_or_else(|| format!("v{}", info.version));
 
-        // Check if already installed
+        // Ensure extensions directory exists
         let ext_dir = extensions_dir()
             .ok_or_else(|| ExtensionError::Registry("Could not determine extensions directory".to_string()))?;
+        fs::create_dir_all(&ext_dir)?;
 
         let install_dir = ext_dir.join(&info.name);
         if install_dir.exists() {
@@ -75,8 +76,10 @@ impl Installer {
 
         let manifest = load_manifest(&manifest_path)?;
 
+        // Ensure extensions directory exists
         let ext_dir = extensions_dir()
             .ok_or_else(|| ExtensionError::Registry("Could not determine extensions directory".to_string()))?;
+        fs::create_dir_all(&ext_dir)?;
 
         let install_dir = ext_dir.join(&manifest.extension.name);
         if install_dir.exists() {

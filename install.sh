@@ -16,10 +16,11 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-info() { echo -e "${BLUE}[INFO]${NC} $1"; }
-success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
-warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
-error() { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
+# All output functions write to stderr to avoid polluting stdout
+info() { echo -e "${BLUE}[INFO]${NC} $1" >&2; }
+success() { echo -e "${GREEN}[SUCCESS]${NC} $1" >&2; }
+warn() { echo -e "${YELLOW}[WARN]${NC} $1" >&2; }
+error() { echo -e "${RED}[ERROR]${NC} $1" >&2; exit 1; }
 
 # Detect OS and architecture
 detect_platform() {

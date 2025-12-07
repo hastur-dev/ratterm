@@ -158,6 +158,11 @@ impl GitHubRegistry {
 
     /// Downloads a file from a URL.
     pub fn download_file(&self, url: &str, dest: &PathBuf) -> Result<(), ExtensionError> {
+        // Ensure parent directory exists
+        if let Some(parent) = dest.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+
         let response = self
             .client
             .get(url)

@@ -64,6 +64,29 @@ impl<'a> TerminalWidget<'a> {
         let visible_rows = area.height as usize;
         let cols = grid.cols().min(area.width) as usize;
 
+        // Get background color from theme
+        let bg_color = self
+            .theme
+            .map(|t| t.background)
+            .unwrap_or(Color::Reset);
+        let fg_color = self
+            .theme
+            .map(|t| t.foreground)
+            .unwrap_or(Color::Reset);
+        let clear_style = Style::default().fg(fg_color).bg(bg_color);
+
+        // Clear the entire terminal area first to prevent ghost characters when scrolling
+        for row in 0..area.height {
+            for col in 0..area.width {
+                let x = area.x + col;
+                let y = area.y + row;
+                if let Some(cell) = buf.cell_mut((x, y)) {
+                    cell.set_char(' ');
+                    cell.set_style(clear_style);
+                }
+            }
+        }
+
         for screen_row in 0..visible_rows {
             // Calculate which row to render based on scroll offset
             // scroll_offset = 0 means we're at the bottom (current view)
