@@ -10,6 +10,7 @@ use ratatui::{
 };
 
 use crate::editor::{Editor, EditorMode};
+use crate::theme::EditorTheme;
 
 /// Editor widget for rendering.
 pub struct EditorWidget<'a> {
@@ -17,6 +18,8 @@ pub struct EditorWidget<'a> {
     editor: &'a Editor,
     /// Whether the editor is focused.
     focused: bool,
+    /// Theme for rendering colors.
+    theme: Option<&'a EditorTheme>,
 }
 
 impl<'a> EditorWidget<'a> {
@@ -26,6 +29,7 @@ impl<'a> EditorWidget<'a> {
         Self {
             editor,
             focused: false,
+            theme: None,
         }
     }
 
@@ -36,14 +40,31 @@ impl<'a> EditorWidget<'a> {
         self
     }
 
+    /// Sets the theme.
+    #[must_use]
+    pub fn theme(mut self, theme: &'a EditorTheme) -> Self {
+        self.theme = Some(theme);
+        self
+    }
+
     /// Renders the line numbers.
     fn render_line_numbers(&self, area: Rect, buf: &mut RatatuiBuffer) {
         let view = self.editor.view();
         let buffer = self.editor.buffer();
         let gutter_width = view.gutter_width();
 
-        let style = Style::default().fg(Color::DarkGray);
-        let current_line_style = Style::default().fg(Color::Yellow);
+        // Use theme colors if available
+        let line_num_fg = self
+            .theme
+            .map(|t| t.line_numbers_fg)
+            .unwrap_or(Color::DarkGray);
+        let current_line_fg = self
+            .theme
+            .map(|t| t.cursor)
+            .unwrap_or(Color::Yellow);
+
+        let style = Style::default().fg(line_num_fg);
+        let current_line_style = Style::default().fg(current_line_fg);
 
         let cursor_line = self.editor.cursor_position().line;
 
@@ -58,7 +79,7 @@ impl<'a> EditorWidget<'a> {
                 let y = area.y + screen_row as u16;
                 if let Some(cell) = buf.cell_mut((x, y)) {
                     cell.set_char('~');
-                    cell.set_style(Style::default().fg(Color::DarkGray));
+                    cell.set_style(Style::default().fg(line_num_fg));
                 }
             } else {
                 // Render line number
@@ -93,8 +114,18 @@ impl<'a> EditorWidget<'a> {
         let text_x = area.x + gutter_width as u16 + 1;
         let text_width = area.width.saturating_sub(gutter_width as u16 + 1);
 
-        let default_style = Style::default();
-        let selection_style = Style::default().bg(Color::Blue);
+        // Use theme colors if available
+        let text_fg = self
+            .theme
+            .map(|t| t.foreground)
+            .unwrap_or(Color::Reset);
+        let selection_bg = self
+            .theme
+            .map(|t| t.selection)
+            .unwrap_or(Color::Blue);
+
+        let default_style = Style::default().fg(text_fg);
+        let selection_style = Style::default().bg(selection_bg);
 
         let selection = self.editor.cursor().selection_range();
 
@@ -199,11 +230,16 @@ impl<'a> EditorWidget<'a> {
 
 impl<'a> Widget for EditorWidget<'a> {
     fn render(self, area: Rect, buf: &mut RatatuiBuffer) {
-        // Create block with border
+        // Create block with border - use theme if available
+        let (border_focused, border_unfocused) = self
+            .theme
+            .map(|t| (t.border_focused, t.border))
+            .unwrap_or((Color::Green, Color::DarkGray));
+
         let border_style = if self.focused {
-            Style::default().fg(Color::Green)
+            Style::default().fg(border_focused)
         } else {
-            Style::default().fg(Color::DarkGray)
+            Style::default().fg(border_unfocused)
         };
 
         // Build title with file info

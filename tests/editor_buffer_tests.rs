@@ -2,7 +2,7 @@
 //!
 //! Tests cover: text insertion, deletion, cursor movement, undo/redo.
 
-use ratatui_full_ide::editor::buffer::{Buffer, Position};
+use ratterm::editor::buffer::{Buffer, Position};
 
 /// Test buffer creation with empty content.
 #[test]

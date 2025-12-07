@@ -1,5 +1,5 @@
 # Ratterm Installer for Windows
-# Usage: irm https://raw.githubusercontent.com/OWNER/ratterm/main/install.ps1 | iex
+# Usage: irm https://raw.githubusercontent.com/hastur-dev/ratterm/main/install.ps1 | iex
 # Or: .\install.ps1 [-Uninstall] [-User]
 
 param(

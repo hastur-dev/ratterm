@@ -40,6 +40,7 @@ use crossterm::{
 use ratatui::{backend::CrosstermBackend, Terminal};
 
 use ratterm::app::App;
+use ratterm::extension::{ExtensionManager, installer::Installer};
 use ratterm::updater::{self, Updater, UpdateStatus, VERSION};
 
 /// Maximum iterations for main loop (safety bound).
@@ -81,6 +82,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
+    // Handle extension subcommand: rat ext <command>
+    if args.get(1).map(|s| s.as_str()) == Some("ext") {
+        return handle_extension_command(&args[2..]);
+    }
+
     // Check for updates on startup (unless --no-update)
     if !args.iter().any(|a| a == "--no-update")
         && updater::check_for_updates() {
@@ -120,7 +126,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create application
     let mut app = App::new(size.width, size.height)?;
 
-    // Open file if provided
+    // Try to restore previous session (e.g., after an update)
+    match app.restore_session() {
+        Ok(true) => {
+            // Session restored successfully
+        }
+        Ok(false) => {
+            // No session to restore - this is normal
+        }
+        Err(e) => {
+            tracing::warn!("Failed to restore session: {}", e);
+        }
+    }
+
+    // Open file if provided (overrides session restore for this file)
     if let Some(path) = file_path {
         if let Err(e) = app.open_file(&path) {
             app.set_status(format!("Error opening {path}: {e}"));
@@ -159,5 +178,144 @@ fn restore_terminal() -> io::Result<()> {
         LeaveAlternateScreen,
         DisableMouseCapture
     )?;
+    Ok(())
+}
+
+/// Handles extension subcommands: rat ext <command>
+fn handle_extension_command(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    let installer = Installer::new();
+    let mut manager = ExtensionManager::new();
+
+    // Initialize extension directories
+    manager.init()?;
+
+    match args.first().map(|s| s.as_str()) {
+        Some("install") => {
+            let repo = args.get(1).ok_or("Usage: rat ext install <user/repo>")?;
+            println!("Installing extension from {}...", repo);
+
+            match installer.install_from_github(repo) {
+                Ok(manifest) => {
+                    println!(
+                        "Installed {} v{} ({})",
+                        manifest.extension.name,
+                        manifest.extension.version,
+                        manifest.extension.ext_type
+                    );
+                    println!("Restart ratterm to load the extension.");
+                }
+                Err(e) => {
+                    eprintln!("Installation failed: {}", e);
+                    std::process::exit(1);
+                }
+            }
+        }
+        Some("remove") => {
+            let name = args.get(1).ok_or("Usage: rat ext remove <name>")?;
+            println!("Removing extension {}...", name);
+
+            match manager.remove(name) {
+                Ok(()) => {
+                    println!("Removed {}", name);
+                }
+                Err(e) => {
+                    eprintln!("Removal failed: {}", e);
+                    std::process::exit(1);
+                }
+            }
+        }
+        Some("list") => {
+            // Discover installed extensions
+            let _ = manager.discover_extensions();
+
+            let extensions = manager.installed();
+            if extensions.is_empty() {
+                println!("No extensions installed.");
+                println!("\nInstall extensions with: rat ext install <user/repo>");
+            } else {
+                println!("Installed extensions:\n");
+                for ext in extensions.values() {
+                    println!(
+                        "  {} v{} ({})",
+                        ext.name,
+                        ext.version,
+                        ext.ext_type
+                    );
+                    let desc = &ext.manifest.extension.description;
+                    if !desc.is_empty() {
+                        println!("    {}", desc);
+                    }
+                }
+            }
+        }
+        Some("update") => {
+            let name = args.get(1);
+
+            if let Some(name) = name {
+                // Update specific extension
+                println!("Updating {}...", name);
+                match installer.update(name) {
+                    Ok(manifest) => {
+                        println!(
+                            "Updated {} to v{}",
+                            manifest.extension.name,
+                            manifest.extension.version
+                        );
+                    }
+                    Err(e) => {
+                        eprintln!("Update failed: {}", e);
+                        std::process::exit(1);
+                    }
+                }
+            } else {
+                // Update all extensions
+                let _ = manager.discover_extensions();
+                let extensions: Vec<_> = manager.installed().values().map(|e| e.name.clone()).collect();
+
+                if extensions.is_empty() {
+                    println!("No extensions installed.");
+                    return Ok(());
+                }
+
+                println!("Updating {} extensions...", extensions.len());
+                let mut updated = 0;
+                let mut failed = 0;
+
+                for name in &extensions {
+                    print!("  {} ... ", name);
+                    match installer.update(name) {
+                        Ok(manifest) => {
+                            println!("v{}", manifest.extension.version);
+                            updated += 1;
+                        }
+                        Err(e) => {
+                            println!("failed: {}", e);
+                            failed += 1;
+                        }
+                    }
+                }
+
+                println!("\nUpdated: {}, Failed: {}", updated, failed);
+            }
+        }
+        Some("help") | None => {
+            println!("Ratterm Extension Manager\n");
+            println!("Usage: rat ext <command> [args]\n");
+            println!("Commands:");
+            println!("  install <user/repo>   Install extension from GitHub");
+            println!("  install <user/repo>@v1.0.0  Install specific version");
+            println!("  remove <name>         Remove installed extension");
+            println!("  list                  List installed extensions");
+            println!("  update                Update all extensions");
+            println!("  update <name>         Update specific extension");
+            println!("  help                  Show this help message");
+        }
+        Some(cmd) => {
+            eprintln!("Unknown command: {}", cmd);
+            eprintln!("Run 'rat ext help' for usage.");
+            std::process::exit(1);
+        }
+    }
+
     Ok(())
 }

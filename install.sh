@@ -1,6 +1,6 @@
 #!/bin/bash
 # Ratterm Installer
-# Usage: curl -fsSL https://raw.githubusercontent.com/OWNER/ratterm/main/install.sh | bash
+# Usage: curl -fsSL https://raw.githubusercontent.com/hastur-dev/ratterm/main/install.sh | bash
 
 set -e
 

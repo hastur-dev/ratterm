@@ -3,7 +3,7 @@
 //! Note: These tests spawn actual processes and require a shell.
 
 use std::time::Duration;
-use ratatui_full_ide::terminal::pty::{Pty, PtyConfig, PtyEvent};
+use ratterm::terminal::pty::{Pty, PtyConfig, PtyEvent};
 
 /// Test basic PTY creation.
 #[test]

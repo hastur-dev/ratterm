@@ -8,9 +8,11 @@ pub mod grid;
 pub mod multiplexer;
 pub mod parser;
 pub mod pty;
+pub mod selection;
 pub mod style;
 
 pub use multiplexer::{SplitDirection, SplitFocus, TabInfo, TerminalMultiplexer, TerminalTab};
+pub use selection::{Selection, SelectionMode};
 
 use std::path::PathBuf;
 
@@ -453,11 +455,70 @@ impl Terminal {
             }
         }
 
+        // Check for "update" command
+        if trimmed == "update" {
+            return Some("update".to_string());
+        }
+
         None
     }
 
     /// Clears the input buffer (e.g., after Ctrl+C).
     pub fn clear_input_buffer(&mut self) {
         self.input_buffer.clear();
+    }
+
+    // ========== Selection Methods ==========
+
+    /// Starts a new selection at the given grid position.
+    pub fn start_selection(&mut self, col: u16, row: u16) {
+        self.grid.start_selection(col, row);
+    }
+
+    /// Updates the selection end position.
+    pub fn update_selection(&mut self, col: u16, row: u16) {
+        self.grid.update_selection(col, row);
+    }
+
+    /// Finalizes the selection (e.g., mouse released).
+    pub fn finalize_selection(&mut self) {
+        self.grid.finalize_selection();
+    }
+
+    /// Clears the current selection.
+    pub fn clear_selection(&mut self) {
+        self.grid.clear_selection();
+    }
+
+    /// Returns whether there is an active selection.
+    #[must_use]
+    pub fn has_selection(&self) -> bool {
+        self.grid.has_selection()
+    }
+
+    /// Returns the selected text from the terminal.
+    #[must_use]
+    pub fn selected_text(&self) -> Option<String> {
+        self.grid.selected_text()
+    }
+
+    /// Extends selection left by one character (keyboard selection).
+    pub fn select_left(&mut self) {
+        self.grid.extend_selection_left();
+    }
+
+    /// Extends selection right by one character (keyboard selection).
+    pub fn select_right(&mut self) {
+        self.grid.extend_selection_right();
+    }
+
+    /// Extends selection up by one row (keyboard selection).
+    pub fn select_up(&mut self) {
+        self.grid.extend_selection_up();
+    }
+
+    /// Extends selection down by one row (keyboard selection).
+    pub fn select_down(&mut self) {
+        self.grid.extend_selection_down();
     }
 }

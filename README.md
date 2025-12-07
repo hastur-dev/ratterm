@@ -39,6 +39,21 @@ rat --version    # Show version
 rat --update     # Check for updates
 ```
 
+### Extension Management
+
+```bash
+# Install extensions from GitHub
+rat ext install user/repo
+rat ext install user/repo@v1.0.0   # Specific version
+
+# Manage extensions
+rat ext list                       # List installed
+rat ext update                     # Update all
+rat ext update extension-name      # Update specific
+rat ext remove extension-name      # Remove
+rat ext help                       # Show help
+```
+
 ## Features
 
 ### Terminal Emulator
@@ -66,6 +81,13 @@ rat --update     # Check for updates
 - Clipboard support (`Ctrl+Shift+C` to copy, `Ctrl+V` to paste)
 - Save confirmation on exit
 - Auto-updates (checks on startup)
+
+### Extensions
+- **Theme Extensions** - Custom TOML-based color schemes
+- **WASM Plugins** - Sandboxed, portable extensions
+- **Native Plugins** - Full-access compiled plugins (.dll/.so/.dylib)
+- **GitHub Installation** - `rat ext install user/repo`
+- See [docs/extensions.md](docs/extensions.md) for full documentation
 
 ## Keybindings
 

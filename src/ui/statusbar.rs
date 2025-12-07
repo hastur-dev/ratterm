@@ -11,6 +11,7 @@ use ratatui::{
 
 use crate::config::KeybindingMode;
 use crate::editor::{buffer::Position, EditorMode};
+use crate::theme::StatusBarTheme;
 use crate::ui::layout::FocusedPane;
 
 /// Status bar widget.
@@ -29,6 +30,8 @@ pub struct StatusBar<'a> {
     file_path: Option<&'a str>,
     /// Terminal title (if terminal is focused).
     terminal_title: Option<&'a str>,
+    /// Theme for rendering colors.
+    theme: Option<&'a StatusBarTheme>,
 }
 
 impl<'a> StatusBar<'a> {
@@ -43,6 +46,7 @@ impl<'a> StatusBar<'a> {
             cursor_position: None,
             file_path: None,
             terminal_title: None,
+            theme: None,
         }
     }
 
@@ -94,6 +98,13 @@ impl<'a> StatusBar<'a> {
         self.terminal_title = Some(title);
         self
     }
+
+    /// Sets the theme.
+    #[must_use]
+    pub fn theme(mut self, theme: &'a StatusBarTheme) -> Self {
+        self.theme = Some(theme);
+        self
+    }
 }
 
 impl<'a> Default for StatusBar<'a> {
@@ -108,8 +119,16 @@ impl<'a> Widget for StatusBar<'a> {
             return;
         }
 
+        // Use theme colors if available
+        let bg_color = self.theme.map(|t| t.background).unwrap_or(Color::DarkGray);
+        let fg_color = self.theme.map(|t| t.foreground).unwrap_or(Color::White);
+        let mode_normal = self.theme.map(|t| t.mode_normal).unwrap_or(Color::Blue);
+        let mode_insert = self.theme.map(|t| t.mode_insert).unwrap_or(Color::Green);
+        let mode_visual = self.theme.map(|t| t.mode_visual).unwrap_or(Color::Magenta);
+        let mode_command = self.theme.map(|t| t.mode_command).unwrap_or(Color::Yellow);
+
         // Background
-        let bg_style = Style::default().bg(Color::DarkGray).fg(Color::White);
+        let bg_style = Style::default().bg(bg_color).fg(fg_color);
         for x in area.x..area.x + area.width {
             if let Some(cell) = buf.cell_mut((x, area.y)) {
                 cell.set_char(' ');
@@ -151,10 +170,10 @@ impl<'a> Widget for StatusBar<'a> {
 
         // Mode indicator with color
         let mode_style = match self.editor_mode {
-            Some(EditorMode::Insert) => Style::default().bg(Color::Green).fg(Color::Black),
-            Some(EditorMode::Visual) => Style::default().bg(Color::Magenta).fg(Color::White),
-            Some(EditorMode::Command) => Style::default().bg(Color::Yellow).fg(Color::Black),
-            _ => Style::default().bg(Color::Blue).fg(Color::White),
+            Some(EditorMode::Insert) => Style::default().bg(mode_insert).fg(Color::Black),
+            Some(EditorMode::Visual) => Style::default().bg(mode_visual).fg(Color::White),
+            Some(EditorMode::Command) => Style::default().bg(mode_command).fg(Color::Black),
+            _ => Style::default().bg(mode_normal).fg(Color::White),
         };
 
         for (i, c) in left_content.chars().enumerate() {

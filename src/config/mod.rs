@@ -13,6 +13,8 @@ use std::path::PathBuf;
 pub use keybindings::{KeyAction, KeyBinding, KeybindingMode, Keybindings};
 pub use shell::{ShellDetector, ShellInfo, ShellInstallInfo, ShellInstaller, ShellType};
 
+use crate::theme::{ThemeManager, ThemeSettings};
+
 /// Default .ratrc file content with all commands documented.
 const DEFAULT_RATRC: &str = r#"# Ratatui Full IDE Configuration File
 # =====================================
@@ -27,6 +29,10 @@ const DEFAULT_RATRC: &str = r#"# Ratatui Full IDE Configuration File
 # macOS: zsh (default), bash, fish, powershell (requires PowerShell Core)
 # shell = system
 shell = system
+
+# Auto-close tabs when changing shell (true/false)
+# When enabled, all existing terminal tabs are closed when you select a new shell
+# auto_close_tabs_on_shell_change = false
 
 # Keybinding Mode
 # ---------------
@@ -110,6 +116,10 @@ pub struct Config {
     pub keybindings: Keybindings,
     /// Path to config file.
     pub config_path: PathBuf,
+    /// Auto-close existing tabs when changing shell.
+    pub auto_close_tabs_on_shell_change: bool,
+    /// Theme manager for UI customization.
+    pub theme_manager: ThemeManager,
 }
 
 impl Default for Config {
@@ -119,6 +129,8 @@ impl Default for Config {
             shell: ShellType::System,
             keybindings: Keybindings::default(),
             config_path: Self::default_config_path(),
+            auto_close_tabs_on_shell_change: false,
+            theme_manager: ThemeManager::default(),
         }
     }
 }
@@ -161,6 +173,10 @@ impl Config {
 
         // Re-parse to apply any custom keybinding overrides
         config.parse_keybindings(&content);
+
+        // Parse and apply theme settings
+        let theme_settings = ThemeSettings::parse(&content);
+        theme_settings.apply_to_manager(&mut config.theme_manager);
 
         Ok(config)
     }
@@ -246,6 +262,12 @@ impl Config {
                     _ => ShellType::System,
                 };
             }
+            "auto_close_tabs_on_shell_change" => {
+                self.auto_close_tabs_on_shell_change = matches!(
+                    value.to_lowercase().as_str(),
+                    "true" | "yes" | "1" | "on"
+                );
+            }
             _ => {
                 // Try to parse as keybinding
                 if let Some(action) = KeyAction::from_str(key) {
@@ -266,5 +288,44 @@ impl Config {
         let new_config = Self::load_from(&path)?;
         *self = new_config;
         Ok(())
+    }
+
+    /// Saves a single setting to the config file.
+    ///
+    /// # Errors
+    /// Returns error if file cannot be written.
+    pub fn save_setting(&self, key: &str, value: &str) -> io::Result<()> {
+        crate::theme::save_setting(&self.config_path, key, value)
+    }
+
+    /// Saves the current theme preset to the config file.
+    ///
+    /// # Errors
+    /// Returns error if file cannot be written.
+    pub fn save_theme(&self) -> io::Result<()> {
+        if let Some(preset) = self.theme_manager.current_preset() {
+            crate::theme::save_theme_preset(&self.config_path, preset)
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Saves a color setting to the config file.
+    ///
+    /// # Errors
+    /// Returns error if file cannot be written.
+    pub fn save_color(&self, key: &str, color: ratatui::style::Color) -> io::Result<()> {
+        crate::theme::save_color_setting(&self.config_path, key, color)
+    }
+
+    /// Returns a reference to the theme manager.
+    #[must_use]
+    pub fn theme(&self) -> &ThemeManager {
+        &self.theme_manager
+    }
+
+    /// Returns a mutable reference to the theme manager.
+    pub fn theme_mut(&mut self) -> &mut ThemeManager {
+        &mut self.theme_manager
     }
 }
