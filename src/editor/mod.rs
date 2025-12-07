@@ -11,8 +11,8 @@ pub mod view;
 use std::path::PathBuf;
 
 use self::buffer::Buffer;
-use self::edit::Position;
 use self::cursor::Cursor;
+use self::edit::Position;
 use self::view::View;
 
 /// Editor mode.
@@ -197,7 +197,8 @@ impl Editor {
         if c == '\n' {
             self.cursor.set_position(Position::new(pos.line + 1, 0));
         } else {
-            self.cursor.set_position(Position::new(pos.line, pos.col + 1));
+            self.cursor
+                .set_position(Position::new(pos.line, pos.col + 1));
         }
 
         self.view.update_gutter_width(self.buffer.len_lines());
@@ -210,9 +211,9 @@ impl Editor {
         self.buffer.insert_str(pos, s);
 
         // Calculate new cursor position
-        let new_pos = self.buffer.index_to_position(
-            self.buffer.position_to_index(pos) + s.chars().count(),
-        );
+        let new_pos = self
+            .buffer
+            .index_to_position(self.buffer.position_to_index(pos) + s.chars().count());
         self.cursor.set_position(new_pos);
 
         self.view.update_gutter_width(self.buffer.len_lines());
@@ -231,7 +232,8 @@ impl Editor {
             // Join with previous line
             let prev_line_len = self.buffer.line_len_chars(pos.line - 1);
             self.buffer.delete_char_backward(pos);
-            self.cursor.set_position(Position::new(pos.line - 1, prev_line_len));
+            self.cursor
+                .set_position(Position::new(pos.line - 1, prev_line_len));
         }
 
         self.view.update_gutter_width(self.buffer.len_lines());
@@ -583,7 +585,8 @@ impl Editor {
         self.buffer.insert_str(end_pos, &insert_text);
 
         // Move cursor to duplicated line
-        self.cursor.set_position(Position::new(line_idx + 1, self.cursor.position().col));
+        self.cursor
+            .set_position(Position::new(line_idx + 1, self.cursor.position().col));
         self.view.update_gutter_width(self.buffer.len_lines());
         self.ensure_cursor_visible();
     }
@@ -606,8 +609,14 @@ impl Editor {
             // Last line - delete from end of previous line
             let prev_line_len = self.buffer.line_len_chars(line_idx - 1);
             let new_start = Position::new(line_idx - 1, prev_line_len);
-            self.buffer.delete_range(new_start, Position::new(line_idx, self.buffer.line_len_chars(line_idx)));
-            self.cursor.set_position(Position::new(line_idx - 1, prev_line_len.min(self.cursor.position().col)));
+            self.buffer.delete_range(
+                new_start,
+                Position::new(line_idx, self.buffer.line_len_chars(line_idx)),
+            );
+            self.cursor.set_position(Position::new(
+                line_idx - 1,
+                prev_line_len.min(self.cursor.position().col),
+            ));
             self.view.update_gutter_width(self.buffer.len_lines());
             self.ensure_cursor_visible();
             return;
@@ -620,7 +629,11 @@ impl Editor {
 
         // Adjust cursor position
         let new_line = line_idx.min(self.buffer.len_lines().saturating_sub(1));
-        let new_col = self.cursor.position().col.min(self.buffer.line_len_chars(new_line));
+        let new_col = self
+            .cursor
+            .position()
+            .col
+            .min(self.buffer.line_len_chars(new_line));
         self.cursor.set_position(Position::new(new_line, new_col));
 
         self.view.update_gutter_width(self.buffer.len_lines());
@@ -652,12 +665,17 @@ impl Editor {
         let new_content = if line_idx < self.buffer.len_lines() {
             format!("{}{}", current_line.trim_end_matches('\n'), prev_line)
         } else {
-            format!("{}\n{}", current_line.trim_end_matches('\n'), prev_line.trim_end_matches('\n'))
+            format!(
+                "{}\n{}",
+                current_line.trim_end_matches('\n'),
+                prev_line.trim_end_matches('\n')
+            )
         };
         self.buffer.insert_str(start, &new_content);
 
         // Move cursor up
-        self.cursor.set_position(Position::new(line_idx - 1, self.cursor.position().col));
+        self.cursor
+            .set_position(Position::new(line_idx - 1, self.cursor.position().col));
         self.view.update_gutter_width(self.buffer.len_lines());
         self.ensure_cursor_visible();
     }
@@ -689,12 +707,17 @@ impl Editor {
         let new_content = if line_idx + 1 < last_line {
             format!("{}{}", next_line.trim_end_matches('\n'), current_line)
         } else {
-            format!("{}\n{}", next_line.trim_end_matches('\n'), current_line.trim_end_matches('\n'))
+            format!(
+                "{}\n{}",
+                next_line.trim_end_matches('\n'),
+                current_line.trim_end_matches('\n')
+            )
         };
         self.buffer.insert_str(start, &new_content);
 
         // Move cursor down
-        self.cursor.set_position(Position::new(line_idx + 1, self.cursor.position().col));
+        self.cursor
+            .set_position(Position::new(line_idx + 1, self.cursor.position().col));
         self.view.update_gutter_width(self.buffer.len_lines());
         self.ensure_cursor_visible();
     }
@@ -740,7 +763,8 @@ impl Editor {
             // Adjust cursor
             let cursor_col = self.cursor.position().col;
             if cursor_col >= indent {
-                self.cursor.set_position(Position::new(line_idx, cursor_col + comment_text.len()));
+                self.cursor
+                    .set_position(Position::new(line_idx, cursor_col + comment_text.len()));
             }
         }
 

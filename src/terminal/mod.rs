@@ -209,13 +209,11 @@ impl Terminal {
 
         let actions = self.parser.parse(&data);
 
-        let mut iterations = 0;
-        for action in actions {
+        for (iterations, action) in actions.into_iter().enumerate() {
             if iterations >= MAX_PROCESS_ITERATIONS {
                 break;
             }
             self.apply_action(action);
-            iterations += 1;
         }
 
         Ok(())
@@ -247,11 +245,7 @@ impl Terminal {
                     .set_cursor_pos(col.saturating_sub(1), row.saturating_sub(1));
             }
             ParsedAction::SetAttr(attrs) => {
-                let mut style = if attrs.is_empty() {
-                    Style::new()
-                } else {
-                    Style::new()
-                };
+                let mut style = Style::new();
                 for attr in attrs {
                     style = style.add_attr(attr);
                 }
@@ -321,7 +315,7 @@ impl Terminal {
             }
             ParsedAction::SetCursorShape(shape) => {
                 let cursor_shape = match shape {
-                    0 | 1 | 2 => CursorShape::Block,
+                    0..=2 => CursorShape::Block,
                     3 | 4 => CursorShape::Underline,
                     5 | 6 => CursorShape::Bar,
                     _ => CursorShape::Block,

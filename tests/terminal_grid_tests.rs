@@ -2,9 +2,11 @@
 //!
 //! Tests cover: cell operations, cursor movement, scrolling, line wrapping.
 
-use ratterm::terminal::grid::Grid;
+#![allow(clippy::expect_used)]
+
 use ratterm::terminal::CursorShape;
-use ratterm::terminal::style::{Color, Style, Attr};
+use ratterm::terminal::grid::Grid;
+use ratterm::terminal::style::{Attr, Color, Style};
 
 /// Test grid initialization with correct dimensions.
 #[test]
@@ -13,7 +15,11 @@ fn test_grid_new_dimensions() {
 
     assert_eq!(grid.cols(), 80, "Grid columns mismatch");
     assert_eq!(grid.rows(), 24, "Grid rows mismatch");
-    assert_eq!(grid.cursor_pos(), (0, 0), "Initial cursor should be at origin");
+    assert_eq!(
+        grid.cursor_pos(),
+        (0, 0),
+        "Initial cursor should be at origin"
+    );
 }
 
 /// Test grid initialization creates empty cells.
@@ -40,7 +46,11 @@ fn test_grid_write_char() {
 
     let cell = grid.cell(0, 0).expect("cell exists");
     assert_eq!(cell.character(), 'A', "Written character mismatch");
-    assert_eq!(grid.cursor_pos(), (1, 0), "Cursor should advance after write");
+    assert_eq!(
+        grid.cursor_pos(),
+        (1, 0),
+        "Cursor should advance after write"
+    );
 }
 
 /// Test cursor movement commands.
@@ -170,7 +180,11 @@ fn test_backspace() {
     grid.write_char('B');
     grid.backspace();
 
-    assert_eq!(grid.cursor_pos(), (1, 0), "Backspace should move cursor back");
+    assert_eq!(
+        grid.cursor_pos(),
+        (1, 0),
+        "Backspace should move cursor back"
+    );
 }
 
 /// Test scroll up operation.
@@ -190,15 +204,27 @@ fn test_scroll_up() {
 
     // Row 0 should now have 'B' (was row 1)
     let cell_0 = grid.cell(0, 0).expect("cell exists");
-    assert_eq!(cell_0.character(), 'B', "After scroll up, row 0 should have B");
+    assert_eq!(
+        cell_0.character(),
+        'B',
+        "After scroll up, row 0 should have B"
+    );
 
     // Row 1 should now have 'C' (was row 2)
     let cell_1 = grid.cell(0, 1).expect("cell exists");
-    assert_eq!(cell_1.character(), 'C', "After scroll up, row 1 should have C");
+    assert_eq!(
+        cell_1.character(),
+        'C',
+        "After scroll up, row 1 should have C"
+    );
 
     // Row 2 should be empty (new row)
     let cell_2 = grid.cell(0, 2).expect("cell exists");
-    assert_eq!(cell_2.character(), ' ', "After scroll up, row 2 should be empty");
+    assert_eq!(
+        cell_2.character(),
+        ' ',
+        "After scroll up, row 2 should be empty"
+    );
 }
 
 /// Test scroll down operation.
@@ -217,15 +243,27 @@ fn test_scroll_down() {
 
     // Row 0 should be empty (new row)
     let cell_0 = grid.cell(0, 0).expect("cell exists");
-    assert_eq!(cell_0.character(), ' ', "After scroll down, row 0 should be empty");
+    assert_eq!(
+        cell_0.character(),
+        ' ',
+        "After scroll down, row 0 should be empty"
+    );
 
     // Row 1 should have 'A' (was row 0)
     let cell_1 = grid.cell(0, 1).expect("cell exists");
-    assert_eq!(cell_1.character(), 'A', "After scroll down, row 1 should have A");
+    assert_eq!(
+        cell_1.character(),
+        'A',
+        "After scroll down, row 1 should have A"
+    );
 
     // Row 2 should have 'B' (was row 1)
     let cell_2 = grid.cell(0, 2).expect("cell exists");
-    assert_eq!(cell_2.character(), 'B', "After scroll down, row 2 should have B");
+    assert_eq!(
+        cell_2.character(),
+        'B',
+        "After scroll down, row 2 should have B"
+    );
 }
 
 /// Test clear screen operation.
@@ -249,7 +287,11 @@ fn test_clear_screen() {
     }
 
     // Cursor should be at origin
-    assert_eq!(grid.cursor_pos(), (0, 0), "Cursor should be at origin after clear");
+    assert_eq!(
+        grid.cursor_pos(),
+        (0, 0),
+        "Cursor should be at origin after clear"
+    );
 }
 
 /// Test clear to end of line.
@@ -285,8 +327,16 @@ fn test_cell_styling() {
     grid.write_char('X');
 
     let cell = grid.cell(0, 0).expect("cell exists");
-    assert_eq!(cell.style().fg_color(), Some(Color::Red), "Foreground color mismatch");
-    assert_eq!(cell.style().bg_color(), Some(Color::Blue), "Background color mismatch");
+    assert_eq!(
+        cell.style().fg_color(),
+        Some(Color::Red),
+        "Foreground color mismatch"
+    );
+    assert_eq!(
+        cell.style().bg_color(),
+        Some(Color::Blue),
+        "Background color mismatch"
+    );
     assert!(cell.style().has_attr(Attr::Bold), "Bold attribute missing");
 }
 
@@ -349,13 +399,25 @@ fn test_cursor_visibility() {
 fn test_cursor_shape() {
     let mut grid = Grid::new(80, 24);
 
-    assert_eq!(grid.cursor_shape(), CursorShape::Block, "Default cursor is block");
+    assert_eq!(
+        grid.cursor_shape(),
+        CursorShape::Block,
+        "Default cursor is block"
+    );
 
     grid.set_cursor_shape(CursorShape::Underline);
-    assert_eq!(grid.cursor_shape(), CursorShape::Underline, "Cursor shape change");
+    assert_eq!(
+        grid.cursor_shape(),
+        CursorShape::Underline,
+        "Cursor shape change"
+    );
 
     grid.set_cursor_shape(CursorShape::Bar);
-    assert_eq!(grid.cursor_shape(), CursorShape::Bar, "Cursor shape change to bar");
+    assert_eq!(
+        grid.cursor_shape(),
+        CursorShape::Bar,
+        "Cursor shape change to bar"
+    );
 }
 
 /// Test alternate screen buffer.
@@ -416,7 +478,11 @@ fn test_wide_characters() {
     // '中' is a wide character (2 cells)
     grid.write_char('中');
 
-    assert_eq!(grid.cursor_pos(), (2, 0), "Wide char should advance cursor by 2");
+    assert_eq!(
+        grid.cursor_pos(),
+        (2, 0),
+        "Wide char should advance cursor by 2"
+    );
 
     let cell = grid.cell(0, 0).expect("cell exists");
     assert_eq!(cell.character(), '中', "Wide character stored");
@@ -424,5 +490,8 @@ fn test_wide_characters() {
 
     // Second cell should be a placeholder
     let placeholder = grid.cell(1, 0).expect("cell exists");
-    assert!(placeholder.is_wide_continuation(), "Second cell is continuation");
+    assert!(
+        placeholder.is_wide_continuation(),
+        "Second cell is continuation"
+    );
 }

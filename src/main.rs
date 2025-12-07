@@ -19,7 +19,7 @@
 //! A split-terminal TUI application with PTY terminal emulator and
 //! code editor.
 //!
-//! Usage: rat [OPTIONS] [FILE]
+//! Usage: rat \[OPTIONS\] \[FILE\]
 //!
 //! Options:
 //!   --version, -v    Show version
@@ -35,13 +35,13 @@ use std::panic;
 use crossterm::{
     event::{DisableMouseCapture, EnableMouseCapture},
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-use ratatui::{backend::CrosstermBackend, Terminal};
+use ratatui::{Terminal, backend::CrosstermBackend};
 
 use ratterm::app::App;
 use ratterm::extension::{ExtensionManager, installer::Installer};
-use ratterm::updater::{self, Updater, UpdateStatus, VERSION};
+use ratterm::updater::{self, UpdateStatus, Updater, VERSION};
 
 /// Maximum iterations for main loop (safety bound).
 const MAX_MAIN_ITERATIONS: usize = 10_000_000;
@@ -88,17 +88,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Check for updates on startup (unless --no-update)
-    if !args.iter().any(|a| a == "--no-update")
-        && updater::check_for_updates() {
-            // User updated, exit so they can restart
-            return Ok(());
-        }
+    if !args.iter().any(|a| a == "--no-update") && updater::check_for_updates() {
+        // User updated, exit so they can restart
+        return Ok(());
+    }
 
     // Get file path (skip flags)
-    let file_path = args.iter()
-        .skip(1)
-        .find(|a| !a.starts_with('-'))
-        .cloned();
+    let file_path = args.iter().skip(1).find(|a| !a.starts_with('-')).cloned();
 
     // Set up panic hook to restore terminal on panic
     let original_hook = panic::take_hook();
@@ -173,15 +169,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// Restores the terminal to its original state.
 fn restore_terminal() -> io::Result<()> {
     disable_raw_mode()?;
-    execute!(
-        io::stdout(),
-        LeaveAlternateScreen,
-        DisableMouseCapture
-    )?;
+    execute!(io::stdout(), LeaveAlternateScreen, DisableMouseCapture)?;
     Ok(())
 }
 
-/// Handles extension subcommands: rat ext <command>
+/// Handles extension subcommands: `rat ext <command>`
 fn handle_extension_command(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let installer = Installer::new();
     let mut manager = ExtensionManager::new();
@@ -235,12 +227,7 @@ fn handle_extension_command(args: &[String]) -> Result<(), Box<dyn std::error::E
             } else {
                 println!("Installed extensions:\n");
                 for ext in extensions.values() {
-                    println!(
-                        "  {} v{} ({})",
-                        ext.name,
-                        ext.version,
-                        ext.ext_type
-                    );
+                    println!("  {} v{} ({})", ext.name, ext.version, ext.ext_type);
                     let desc = &ext.manifest.extension.description;
                     if !desc.is_empty() {
                         println!("    {}", desc);
@@ -258,8 +245,7 @@ fn handle_extension_command(args: &[String]) -> Result<(), Box<dyn std::error::E
                     Ok(manifest) => {
                         println!(
                             "Updated {} to v{}",
-                            manifest.extension.name,
-                            manifest.extension.version
+                            manifest.extension.name, manifest.extension.version
                         );
                     }
                     Err(e) => {
@@ -270,7 +256,11 @@ fn handle_extension_command(args: &[String]) -> Result<(), Box<dyn std::error::E
             } else {
                 // Update all extensions
                 let _ = manager.discover_extensions();
-                let extensions: Vec<_> = manager.installed().values().map(|e| e.name.clone()).collect();
+                let extensions: Vec<_> = manager
+                    .installed()
+                    .values()
+                    .map(|e| e.name.clone())
+                    .collect();
 
                 if extensions.is_empty() {
                     println!("No extensions installed.");

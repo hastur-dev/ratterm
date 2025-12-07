@@ -2,9 +2,9 @@
 //!
 //! Tests cover: cursor movement, colors, text attributes, screen operations.
 
-use ratterm::terminal::parser::AnsiParser;
 use ratterm::terminal::ParsedAction;
-use ratterm::terminal::style::{Color, Attr};
+use ratterm::terminal::parser::AnsiParser;
+use ratterm::terminal::style::{Attr, Color};
 
 /// Test parsing plain text (no escape sequences).
 #[test]
@@ -71,10 +71,16 @@ fn test_cursor_movement_sequences() {
 
     // Cursor Forward: ESC[C or ESC[nC
     let actions = parser.parse(b"\x1b[C");
-    assert!(matches!(actions.as_slice(), [ParsedAction::CursorForward(1)]));
+    assert!(matches!(
+        actions.as_slice(),
+        [ParsedAction::CursorForward(1)]
+    ));
 
     let actions = parser.parse(b"\x1b[10C");
-    assert!(matches!(actions.as_slice(), [ParsedAction::CursorForward(10)]));
+    assert!(matches!(
+        actions.as_slice(),
+        [ParsedAction::CursorForward(10)]
+    ));
 
     // Cursor Back: ESC[D or ESC[nD
     let actions = parser.parse(b"\x1b[D");
@@ -91,19 +97,31 @@ fn test_cursor_position() {
 
     // ESC[H - home position (1,1)
     let actions = parser.parse(b"\x1b[H");
-    assert!(matches!(actions.as_slice(), [ParsedAction::CursorPosition(1, 1)]));
+    assert!(matches!(
+        actions.as_slice(),
+        [ParsedAction::CursorPosition(1, 1)]
+    ));
 
     // ESC[;H - also home
     let actions = parser.parse(b"\x1b[;H");
-    assert!(matches!(actions.as_slice(), [ParsedAction::CursorPosition(1, 1)]));
+    assert!(matches!(
+        actions.as_slice(),
+        [ParsedAction::CursorPosition(1, 1)]
+    ));
 
     // ESC[5;10H - row 5, column 10
     let actions = parser.parse(b"\x1b[5;10H");
-    assert!(matches!(actions.as_slice(), [ParsedAction::CursorPosition(5, 10)]));
+    assert!(matches!(
+        actions.as_slice(),
+        [ParsedAction::CursorPosition(5, 10)]
+    ));
 
     // ESC[12;1H - row 12, column 1
     let actions = parser.parse(b"\x1b[12;1H");
-    assert!(matches!(actions.as_slice(), [ParsedAction::CursorPosition(12, 1)]));
+    assert!(matches!(
+        actions.as_slice(),
+        [ParsedAction::CursorPosition(12, 1)]
+    ));
 }
 
 /// Test SGR (Select Graphic Rendition) - text attributes.
@@ -324,22 +342,37 @@ fn test_erase_display() {
 
     // ESC[J or ESC[0J - clear from cursor to end of screen
     let actions = parser.parse(b"\x1b[J");
-    assert!(matches!(actions.as_slice(), [ParsedAction::EraseDisplay(0)]));
+    assert!(matches!(
+        actions.as_slice(),
+        [ParsedAction::EraseDisplay(0)]
+    ));
 
     let actions = parser.parse(b"\x1b[0J");
-    assert!(matches!(actions.as_slice(), [ParsedAction::EraseDisplay(0)]));
+    assert!(matches!(
+        actions.as_slice(),
+        [ParsedAction::EraseDisplay(0)]
+    ));
 
     // ESC[1J - clear from cursor to beginning of screen
     let actions = parser.parse(b"\x1b[1J");
-    assert!(matches!(actions.as_slice(), [ParsedAction::EraseDisplay(1)]));
+    assert!(matches!(
+        actions.as_slice(),
+        [ParsedAction::EraseDisplay(1)]
+    ));
 
     // ESC[2J - clear entire screen
     let actions = parser.parse(b"\x1b[2J");
-    assert!(matches!(actions.as_slice(), [ParsedAction::EraseDisplay(2)]));
+    assert!(matches!(
+        actions.as_slice(),
+        [ParsedAction::EraseDisplay(2)]
+    ));
 
     // ESC[3J - clear entire screen + scrollback
     let actions = parser.parse(b"\x1b[3J");
-    assert!(matches!(actions.as_slice(), [ParsedAction::EraseDisplay(3)]));
+    assert!(matches!(
+        actions.as_slice(),
+        [ParsedAction::EraseDisplay(3)]
+    ));
 }
 
 /// Test erase line sequences.
@@ -421,11 +454,17 @@ fn test_alternate_screen() {
 
     // Enter alternate screen: ESC[?1049h
     let actions = parser.parse(b"\x1b[?1049h");
-    assert!(matches!(actions.as_slice(), [ParsedAction::EnterAlternateScreen]));
+    assert!(matches!(
+        actions.as_slice(),
+        [ParsedAction::EnterAlternateScreen]
+    ));
 
     // Exit alternate screen: ESC[?1049l
     let actions = parser.parse(b"\x1b[?1049l");
-    assert!(matches!(actions.as_slice(), [ParsedAction::ExitAlternateScreen]));
+    assert!(matches!(
+        actions.as_slice(),
+        [ParsedAction::ExitAlternateScreen]
+    ));
 }
 
 /// Test control characters (C0).
@@ -485,15 +524,24 @@ fn test_cursor_shape() {
 
     // Block cursor: ESC[0 q or ESC[2 q
     let actions = parser.parse(b"\x1b[2 q");
-    assert!(matches!(actions.as_slice(), [ParsedAction::SetCursorShape(0 | 2)]));
+    assert!(matches!(
+        actions.as_slice(),
+        [ParsedAction::SetCursorShape(0 | 2)]
+    ));
 
     // Underline cursor: ESC[4 q
     let actions = parser.parse(b"\x1b[4 q");
-    assert!(matches!(actions.as_slice(), [ParsedAction::SetCursorShape(4)]));
+    assert!(matches!(
+        actions.as_slice(),
+        [ParsedAction::SetCursorShape(4)]
+    ));
 
     // Bar cursor: ESC[6 q
     let actions = parser.parse(b"\x1b[6 q");
-    assert!(matches!(actions.as_slice(), [ParsedAction::SetCursorShape(6)]));
+    assert!(matches!(
+        actions.as_slice(),
+        [ParsedAction::SetCursorShape(6)]
+    ));
 }
 
 /// Test insert/delete line sequences.
@@ -530,7 +578,10 @@ fn test_insert_delete_chars() {
     assert!(matches!(actions.as_slice(), [ParsedAction::DeleteChars(1)]));
 
     let actions = parser.parse(b"\x1b[10P");
-    assert!(matches!(actions.as_slice(), [ParsedAction::DeleteChars(10)]));
+    assert!(matches!(
+        actions.as_slice(),
+        [ParsedAction::DeleteChars(10)]
+    ));
 }
 
 /// Test reporting sequences.
@@ -540,7 +591,10 @@ fn test_device_status_report() {
 
     // Device status report: ESC[6n (request cursor position)
     let actions = parser.parse(b"\x1b[6n");
-    assert!(matches!(actions.as_slice(), [ParsedAction::DeviceStatusReport]));
+    assert!(matches!(
+        actions.as_slice(),
+        [ParsedAction::DeviceStatusReport]
+    ));
 }
 
 /// Test partial sequence handling (incomplete escape sequence).
@@ -550,7 +604,10 @@ fn test_partial_sequence() {
 
     // Send incomplete sequence
     let actions1 = parser.parse(b"\x1b[");
-    assert!(actions1.is_empty(), "Incomplete sequence should not produce actions");
+    assert!(
+        actions1.is_empty(),
+        "Incomplete sequence should not produce actions"
+    );
 
     // Complete the sequence
     let actions2 = parser.parse(b"5A");
@@ -567,10 +624,8 @@ fn test_invalid_sequences() {
 
     // Should not panic, may produce Unknown or be ignored
     for action in &actions {
-        match action {
-            ParsedAction::Unknown(_) => {} // OK
-            _ => {}                         // Also OK if ignored
-        }
+        // Unknown sequences are acceptable, other actions are also OK if ignored
+        let _ = matches!(action, ParsedAction::Unknown(_));
     }
 }
 

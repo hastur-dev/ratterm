@@ -6,9 +6,9 @@ use std::fs::{self, File};
 use std::io;
 use std::path::{Path, PathBuf};
 
-use super::manifest::{load_manifest, ExtensionManifest};
+use super::manifest::{ExtensionManifest, load_manifest};
 use super::registry::{GitHubRegistry, RegistryProvider};
-use super::{extensions_dir, ExtensionError};
+use super::{ExtensionError, extensions_dir};
 
 /// Extension installer.
 pub struct Installer {
@@ -40,9 +40,11 @@ impl Installer {
         let info = self.registry.get(repo_ref)?;
         let version_to_install = version.unwrap_or_else(|| format!("v{}", info.version));
 
-        // Check if already installed
-        let ext_dir = extensions_dir()
-            .ok_or_else(|| ExtensionError::Registry("Could not determine extensions directory".to_string()))?;
+        // Ensure extensions directory exists
+        let ext_dir = extensions_dir().ok_or_else(|| {
+            ExtensionError::Registry("Could not determine extensions directory".to_string())
+        })?;
+        fs::create_dir_all(&ext_dir)?;
 
         let install_dir = ext_dir.join(&info.name);
         if install_dir.exists() {
@@ -50,7 +52,9 @@ impl Installer {
         }
 
         // Download the archive
-        let archive_path = self.registry.download_release_archive(&owner, &repo, &version_to_install)?;
+        let archive_path =
+            self.registry
+                .download_release_archive(&owner, &repo, &version_to_install)?;
 
         // Extract and install
         self.extract_and_install(&archive_path, &install_dir)?;
@@ -75,8 +79,11 @@ impl Installer {
 
         let manifest = load_manifest(&manifest_path)?;
 
-        let ext_dir = extensions_dir()
-            .ok_or_else(|| ExtensionError::Registry("Could not determine extensions directory".to_string()))?;
+        // Ensure extensions directory exists
+        let ext_dir = extensions_dir().ok_or_else(|| {
+            ExtensionError::Registry("Could not determine extensions directory".to_string())
+        })?;
+        fs::create_dir_all(&ext_dir)?;
 
         let install_dir = ext_dir.join(&manifest.extension.name);
         if install_dir.exists() {
@@ -101,7 +108,7 @@ impl Installer {
         fs::create_dir_all(dest)?;
 
         // Find the root directory in the archive (GitHub zips have a top-level folder)
-        let root_prefix = if archive.len() > 0 {
+        let root_prefix = if !archive.is_empty() {
             let first = archive.by_index(0).map_err(|e| {
                 ExtensionError::Registry(format!("Failed to read archive entry: {}", e))
             })?;
@@ -167,8 +174,9 @@ impl Installer {
 
     /// Updates an installed extension.
     pub fn update(&self, name: &str) -> Result<ExtensionManifest, ExtensionError> {
-        let ext_dir = extensions_dir()
-            .ok_or_else(|| ExtensionError::Registry("Could not determine extensions directory".to_string()))?;
+        let ext_dir = extensions_dir().ok_or_else(|| {
+            ExtensionError::Registry("Could not determine extensions directory".to_string())
+        })?;
 
         let install_dir = ext_dir.join(name);
         if !install_dir.exists() {

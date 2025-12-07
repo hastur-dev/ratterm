@@ -462,6 +462,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::expect_used)]
     fn test_parse_settings() {
         let json = r#"{
             "editor.tabSize": 4,

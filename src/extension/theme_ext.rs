@@ -4,10 +4,10 @@
 
 use std::path::Path;
 
-use crate::theme::{load_custom_theme, CustomThemeError, Theme};
+use crate::theme::{CustomThemeError, Theme, load_custom_theme};
 
-use super::manifest::ExtensionManifest;
 use super::ExtensionError;
+use super::manifest::ExtensionManifest;
 
 /// Loads a theme from a theme extension.
 pub fn load_theme_extension(
@@ -55,6 +55,7 @@ pub struct ThemeExtensionInfo {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used)]
 mod tests {
     use super::*;
     use std::fs;

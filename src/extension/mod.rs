@@ -110,6 +110,8 @@ pub struct ExtensionManager {
     /// Installed extensions by name.
     installed: HashMap<String, InstalledExtension>,
     /// Loaded plugins (native and WASM).
+    /// Currently unused but reserved for future plugin lifecycle management.
+    #[allow(dead_code)]
     plugins: Vec<Box<dyn RattermPlugin>>,
 }
 

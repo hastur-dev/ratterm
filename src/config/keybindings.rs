@@ -79,7 +79,7 @@ pub enum KeyAction {
 impl KeyAction {
     /// Parses an action from a string key name.
     #[must_use]
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse_action(s: &str) -> Option<Self> {
         match s {
             "quit" => Some(Self::Quit),
             "focus_terminal" => Some(Self::FocusTerminal),
@@ -395,7 +395,10 @@ impl Keybindings {
         );
 
         // Always have Ctrl+S for save
-        self.set(EditorSave, KeyBinding::new(KeyModifiers::CONTROL, Char('s')));
+        self.set(
+            EditorSave,
+            KeyBinding::new(KeyModifiers::CONTROL, Char('s')),
+        );
     }
 
     /// Sets vim-style editor keybindings.
@@ -447,7 +450,10 @@ impl Keybindings {
         // Vim editing
         self.set(EditorDelete, KeyBinding::new(KeyModifiers::NONE, Char('x')));
         self.set(EditorUndo, KeyBinding::new(KeyModifiers::NONE, Char('u')));
-        self.set(EditorRedo, KeyBinding::new(KeyModifiers::CONTROL, Char('r')));
+        self.set(
+            EditorRedo,
+            KeyBinding::new(KeyModifiers::CONTROL, Char('r')),
+        );
     }
 
     /// Sets emacs-style editor keybindings.
@@ -456,13 +462,19 @@ impl Keybindings {
         use KeyCode::*;
 
         // Emacs navigation
-        self.set(EditorLeft, KeyBinding::new(KeyModifiers::CONTROL, Char('b')));
+        self.set(
+            EditorLeft,
+            KeyBinding::new(KeyModifiers::CONTROL, Char('b')),
+        );
         self.set(
             EditorRight,
             KeyBinding::new(KeyModifiers::CONTROL, Char('f')),
         );
         self.set(EditorUp, KeyBinding::new(KeyModifiers::CONTROL, Char('p')));
-        self.set(EditorDown, KeyBinding::new(KeyModifiers::CONTROL, Char('n')));
+        self.set(
+            EditorDown,
+            KeyBinding::new(KeyModifiers::CONTROL, Char('n')),
+        );
 
         // Emacs line navigation
         self.set(
@@ -475,8 +487,14 @@ impl Keybindings {
         );
 
         // Emacs word navigation
-        self.set(EditorWordRight, KeyBinding::new(KeyModifiers::ALT, Char('f')));
-        self.set(EditorWordLeft, KeyBinding::new(KeyModifiers::ALT, Char('b')));
+        self.set(
+            EditorWordRight,
+            KeyBinding::new(KeyModifiers::ALT, Char('f')),
+        );
+        self.set(
+            EditorWordLeft,
+            KeyBinding::new(KeyModifiers::ALT, Char('b')),
+        );
 
         // Emacs buffer navigation
         self.set(
@@ -528,25 +546,25 @@ impl Keybindings {
             EditorWordRight,
             KeyBinding::new(KeyModifiers::CONTROL, Right),
         );
-        self.set(
-            EditorWordLeft,
-            KeyBinding::new(KeyModifiers::CONTROL, Left),
-        );
+        self.set(EditorWordLeft, KeyBinding::new(KeyModifiers::CONTROL, Left));
 
         // Ctrl+Home/End for buffer
         self.set(
             EditorBufferStart,
             KeyBinding::new(KeyModifiers::CONTROL, Home),
         );
-        self.set(
-            EditorBufferEnd,
-            KeyBinding::new(KeyModifiers::CONTROL, End),
-        );
+        self.set(EditorBufferEnd, KeyBinding::new(KeyModifiers::CONTROL, End));
 
         // Standard shortcuts
         self.set(EditorDelete, KeyBinding::new(KeyModifiers::NONE, Delete));
-        self.set(EditorUndo, KeyBinding::new(KeyModifiers::CONTROL, Char('z')));
-        self.set(EditorRedo, KeyBinding::new(KeyModifiers::CONTROL, Char('y')));
+        self.set(
+            EditorUndo,
+            KeyBinding::new(KeyModifiers::CONTROL, Char('z')),
+        );
+        self.set(
+            EditorRedo,
+            KeyBinding::new(KeyModifiers::CONTROL, Char('y')),
+        );
 
         // Default mode doesn't have insert/visual modes
         self.set(EditorInsert, KeyBinding::new(KeyModifiers::NONE, Enter));
@@ -573,25 +591,25 @@ impl Keybindings {
             EditorWordRight,
             KeyBinding::new(KeyModifiers::CONTROL, Right),
         );
-        self.set(
-            EditorWordLeft,
-            KeyBinding::new(KeyModifiers::CONTROL, Left),
-        );
+        self.set(EditorWordLeft, KeyBinding::new(KeyModifiers::CONTROL, Left));
 
         // Ctrl+Home/End for buffer navigation
         self.set(
             EditorBufferStart,
             KeyBinding::new(KeyModifiers::CONTROL, Home),
         );
-        self.set(
-            EditorBufferEnd,
-            KeyBinding::new(KeyModifiers::CONTROL, End),
-        );
+        self.set(EditorBufferEnd, KeyBinding::new(KeyModifiers::CONTROL, End));
 
         // VSCode standard shortcuts
         self.set(EditorDelete, KeyBinding::new(KeyModifiers::NONE, Delete));
-        self.set(EditorUndo, KeyBinding::new(KeyModifiers::CONTROL, Char('z')));
-        self.set(EditorRedo, KeyBinding::new(KeyModifiers::CONTROL, Char('y')));
+        self.set(
+            EditorUndo,
+            KeyBinding::new(KeyModifiers::CONTROL, Char('z')),
+        );
+        self.set(
+            EditorRedo,
+            KeyBinding::new(KeyModifiers::CONTROL, Char('y')),
+        );
 
         // VSCode mode doesn't have insert/visual modes - always in insert
         self.set(EditorInsert, KeyBinding::new(KeyModifiers::NONE, Enter));
@@ -647,6 +665,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[allow(clippy::unwrap_used)]
     fn test_parse_keybinding() {
         let binding = KeyBinding::parse("ctrl+c").unwrap();
         assert_eq!(binding.modifiers, KeyModifiers::CONTROL);
@@ -654,6 +673,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::unwrap_used)]
     fn test_parse_keybinding_multi_modifier() {
         let binding = KeyBinding::parse("ctrl+shift+c").unwrap();
         assert_eq!(
@@ -664,6 +684,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::unwrap_used)]
     fn test_parse_keybinding_special_key() {
         let binding = KeyBinding::parse("shift+pageup").unwrap();
         assert_eq!(binding.modifiers, KeyModifiers::SHIFT);

@@ -20,7 +20,11 @@ fn test_buffer_from_string() {
     let buffer = Buffer::from_str("Hello\nWorld");
 
     assert_eq!(buffer.len_lines(), 2, "Should have two lines");
-    assert_eq!(buffer.line(0), Some("Hello\n".into()), "First line mismatch");
+    assert_eq!(
+        buffer.line(0),
+        Some("Hello\n".into()),
+        "First line mismatch"
+    );
     assert_eq!(buffer.line(1), Some("World".into()), "Second line mismatch");
 }
 
@@ -380,7 +384,11 @@ fn test_buffer_utf8() {
     let mut buffer = Buffer::from_str("Hello 世界");
 
     // "Hello " = 6 chars + "世界" = 2 chars = 8 total
-    assert_eq!(buffer.len_chars(), 8, "8 characters including space and CJK");
+    assert_eq!(
+        buffer.len_chars(),
+        8,
+        "8 characters including space and CJK"
+    );
 
     buffer.insert_char(Position::new(0, 8), '!');
     assert_eq!(buffer.text(), "Hello 世界!", "UTF-8 preserved");

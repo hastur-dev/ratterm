@@ -2,7 +2,9 @@
 //!
 //! Handles key events for different application modes.
 
-use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+use crossterm::event::{
+    KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
+};
 
 use crate::config::KeybindingMode;
 use crate::editor::EditorMode;
@@ -1309,7 +1311,8 @@ impl App {
                 // Check if click is in terminal area
                 if self.is_point_in_area(event.column, event.row, terminal_area) {
                     // Convert to terminal-local coordinates
-                    let (local_col, local_row) = self.to_terminal_coords(event.column, event.row, terminal_area);
+                    let (local_col, local_row) =
+                        self.to_terminal_coords(event.column, event.row, terminal_area);
                     self.start_terminal_selection(local_col, local_row);
                     // Focus terminal pane on click
                     self.layout.set_focused(FocusedPane::Terminal);
@@ -1318,7 +1321,8 @@ impl App {
             MouseEventKind::Drag(MouseButton::Left) => {
                 // Extend selection during drag
                 if self.is_point_in_area(event.column, event.row, terminal_area) {
-                    let (local_col, local_row) = self.to_terminal_coords(event.column, event.row, terminal_area);
+                    let (local_col, local_row) =
+                        self.to_terminal_coords(event.column, event.row, terminal_area);
                     self.update_terminal_selection(local_col, local_row);
                 }
             }

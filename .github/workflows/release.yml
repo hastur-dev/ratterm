@@ -17,16 +17,16 @@ permissions:
 jobs:
   build:
     strategy:
+      fail-fast: false  # Continue other builds if one fails
       matrix:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             artifact_name: rat
             asset_name: rat-linux-x86_64
-          - os: ubuntu-latest
-            target: aarch64-unknown-linux-gnu
-            artifact_name: rat
-            asset_name: rat-linux-aarch64
+          # Note: aarch64-unknown-linux-gnu removed due to cross-compilation
+          # issues with wasmtime and tree-sitter. Consider adding when GitHub
+          # provides native ARM Linux runners.
           - os: macos-latest
             target: x86_64-apple-darwin
             artifact_name: rat
@@ -49,16 +49,8 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      - name: Install cross-compilation tools
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu
-
       - name: Build
         run: cargo build --release --target ${{ matrix.target }}
-        env:
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
 
       - name: Rename binary
         shell: bash
@@ -105,13 +97,139 @@ jobs:
             ### Manual Download
             Download the appropriate binary for your platform below.
 
-  update-install-scripts:
+  # Test install scripts after release is published
+  test-install-linux:
     needs: release
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Test install script (verbose)
+        run: |
+          echo "=== Testing install.sh on Linux ==="
+          chmod +x install.sh
+          ./install.sh --verbose
+
+      - name: Verify installation
+        run: |
+          echo "=== Verifying installation ==="
+          export PATH="$PATH:$HOME/.local/bin"
+          which rat || echo "rat not found in PATH"
+          rat --version || echo "rat --version failed"
+
+      - name: Test uninstall
+        run: |
+          echo "=== Testing uninstall ==="
+          ./install.sh --uninstall --verbose
+
+      - name: Verify uninstall
+        run: |
+          if [ -f "$HOME/.local/bin/rat" ]; then
+            echo "ERROR: rat binary still exists after uninstall"
+            exit 1
+          fi
+          echo "Uninstall verified successfully"
+
+  test-install-macos-x86:
+    needs: release
+    runs-on: macos-13  # Intel Mac
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Test install script (verbose)
+        run: |
+          echo "=== Testing install.sh on macOS (x86_64) ==="
+          chmod +x install.sh
+          ./install.sh --verbose
+
+      - name: Verify installation
+        run: |
+          echo "=== Verifying installation ==="
+          export PATH="$PATH:$HOME/.local/bin"
+          which rat || echo "rat not found in PATH"
+          rat --version || echo "rat --version failed"
+
+      - name: Test uninstall
+        run: |
+          echo "=== Testing uninstall ==="
+          ./install.sh --uninstall --verbose
+
+  test-install-macos-arm:
+    needs: release
+    runs-on: macos-latest  # ARM Mac (M1/M2)
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Test install script (verbose)
+        run: |
+          echo "=== Testing install.sh on macOS (aarch64) ==="
+          chmod +x install.sh
+          ./install.sh --verbose
+
+      - name: Verify installation
+        run: |
+          echo "=== Verifying installation ==="
+          export PATH="$PATH:$HOME/.local/bin"
+          which rat || echo "rat not found in PATH"
+          rat --version || echo "rat --version failed"
+
+      - name: Test uninstall
+        run: |
+          echo "=== Testing uninstall ==="
+          ./install.sh --uninstall --verbose
+
+  test-install-windows:
+    needs: release
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Test install script (verbose)
+        shell: pwsh
+        run: |
+          Write-Host "=== Testing install.ps1 on Windows ==="
+          $env:VERBOSE = "true"
+          .\install.ps1 -User -VerboseOutput
+
+      - name: Verify installation
+        shell: pwsh
+        run: |
+          Write-Host "=== Verifying installation ==="
+          $installDir = Join-Path $env:LOCALAPPDATA "ratterm"
+          $ratExe = Join-Path $installDir "rat.exe"
+
+          if (Test-Path $ratExe) {
+            Write-Host "Found rat.exe at $ratExe"
+            & $ratExe --version
+          } else {
+            Write-Host "ERROR: rat.exe not found at $ratExe"
+            exit 1
+          }
+
+      - name: Test uninstall
+        shell: pwsh
+        run: |
+          Write-Host "=== Testing uninstall ==="
+          $env:VERBOSE = "true"
+          .\install.ps1 -Uninstall -User -VerboseOutput
+
+      - name: Verify uninstall
+        shell: pwsh
+        run: |
+          $installDir = Join-Path $env:LOCALAPPDATA "ratterm"
+          if (Test-Path $installDir) {
+            Write-Host "ERROR: Install directory still exists after uninstall"
+            exit 1
+          }
+          Write-Host "Uninstall verified successfully"
+
+  update-install-scripts:
+    needs: [test-install-linux, test-install-macos-x86, test-install-macos-arm, test-install-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
         with:
-          ref: master
+          ref: ${{ github.event.repository.default_branch }}
 
       - name: Update version in install scripts
         run: |
@@ -124,5 +242,5 @@ jobs:
           git config user.name github-actions
           git config user.email github-actions@github.com
           git add install.sh install.ps1
-          git diff --staged --quiet || git commit -m "Update install scripts to v${{ github.event.inputs.version }}"
+          git diff --staged --quiet || git commit -m "chore: update install scripts to v${{ github.event.inputs.version }}"
           git push

@@ -85,10 +85,12 @@ pub fn themes_dir() -> Option<PathBuf> {
 
 /// Ensures the themes directory exists.
 pub fn ensure_themes_dir() -> io::Result<PathBuf> {
-    let dir = themes_dir().ok_or_else(|| io::Error::new(
-        io::ErrorKind::NotFound,
-        "Could not determine home directory",
-    ))?;
+    let dir = themes_dir().ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::NotFound,
+            "Could not determine home directory",
+        )
+    })?;
 
     if !dir.exists() {
         fs::create_dir_all(&dir)?;
@@ -141,7 +143,13 @@ pub fn load_custom_theme(path: &Path) -> Result<Theme, CustomThemeError> {
 
     // Apply color overrides
     for (key, value) in &custom.colors {
-        let color_str = palette.get(value).unwrap_or(value);
+        // If value starts with $, look up in palette without the $ prefix
+        let color_str = if value.starts_with('$') {
+            let palette_key = value.trim_start_matches('$');
+            palette.get(palette_key).unwrap_or(value)
+        } else {
+            palette.get(value).unwrap_or(value)
+        };
         let Some(color) = parse_color(color_str) else {
             return Err(CustomThemeError::InvalidColor(value.clone()));
         };
@@ -262,6 +270,7 @@ pub fn list_custom_theme_info() -> Vec<CustomThemeInfo> {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used)]
 mod tests {
     use super::*;
     use std::io::Write;
@@ -292,8 +301,14 @@ description = "A test theme"
         let theme = load_custom_theme(&path).expect("load theme");
 
         assert_eq!(theme.name(), "My Custom Theme");
-        assert_eq!(theme.terminal.background, ratatui::style::Color::Rgb(26, 26, 46));
-        assert_eq!(theme.editor.background, ratatui::style::Color::Rgb(22, 33, 62));
+        assert_eq!(
+            theme.terminal.background,
+            ratatui::style::Color::Rgb(26, 26, 46)
+        );
+        assert_eq!(
+            theme.editor.background,
+            ratatui::style::Color::Rgb(22, 33, 62)
+        );
     }
 
     #[test]
@@ -313,7 +328,10 @@ base = "dracula"
 
         assert_eq!(theme.name(), "Dracula Modified");
         // Background should be overridden
-        assert_eq!(theme.terminal.background, ratatui::style::Color::Rgb(30, 30, 46));
+        assert_eq!(
+            theme.terminal.background,
+            ratatui::style::Color::Rgb(30, 30, 46)
+        );
         // Other colors should come from dracula base
     }
 
@@ -336,7 +354,13 @@ fg = "#f8f8f2"
         let path = create_test_theme(dir.path(), "palette", content);
         let theme = load_custom_theme(&path).expect("load theme");
 
-        assert_eq!(theme.terminal.background, ratatui::style::Color::Rgb(40, 42, 54));
-        assert_eq!(theme.terminal.foreground, ratatui::style::Color::Rgb(248, 248, 242));
+        assert_eq!(
+            theme.terminal.background,
+            ratatui::style::Color::Rgb(40, 42, 54)
+        );
+        assert_eq!(
+            theme.terminal.foreground,
+            ratatui::style::Color::Rgb(248, 248, 242)
+        );
     }
 }

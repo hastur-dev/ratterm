@@ -9,17 +9,17 @@ pub mod custom;
 pub mod persistence;
 pub mod preset;
 
-pub use colors::{parse_color, color_to_hex, AnsiPalette};
+pub use colors::{AnsiPalette, color_to_hex, parse_color};
 pub use component::{
     EditorTheme, FileBrowserTheme, PopupTheme, StatusBarTheme, TabTheme, TerminalTheme, Theme,
 };
 pub use custom::{
-    ensure_themes_dir, list_custom_theme_info, list_custom_themes, load_custom_theme,
-    themes_dir, CustomThemeError, CustomThemeInfo,
+    CustomThemeError, CustomThemeInfo, ensure_themes_dir, list_custom_theme_info,
+    list_custom_themes, load_custom_theme, themes_dir,
 };
 pub use persistence::{
-    save_color_setting, save_setting, save_tab_pattern, save_tab_themes, save_theme_preset,
-    ThemeSettings,
+    ThemeSettings, save_color_setting, save_setting, save_tab_pattern, save_tab_themes,
+    save_theme_preset,
 };
 pub use preset::ThemePreset;
 
@@ -150,7 +150,10 @@ impl ThemeManager {
     /// Gets the next theme for a new tab based on the pattern.
     #[must_use]
     pub fn next_tab_theme(&mut self) -> Theme {
-        assert!(!self.tab_themes.is_empty(), "Tab themes list cannot be empty");
+        assert!(
+            !self.tab_themes.is_empty(),
+            "Tab themes list cannot be empty"
+        );
 
         match self.tab_pattern {
             TabThemePattern::Same => self.current.clone(),
@@ -292,10 +295,22 @@ mod tests {
 
     #[test]
     fn test_tab_pattern_from_name() {
-        assert_eq!(TabThemePattern::from_name("same"), Some(TabThemePattern::Same));
-        assert_eq!(TabThemePattern::from_name("sequential"), Some(TabThemePattern::Sequential));
-        assert_eq!(TabThemePattern::from_name("cycle"), Some(TabThemePattern::Sequential));
-        assert_eq!(TabThemePattern::from_name("random"), Some(TabThemePattern::Random));
+        assert_eq!(
+            TabThemePattern::from_name("same"),
+            Some(TabThemePattern::Same)
+        );
+        assert_eq!(
+            TabThemePattern::from_name("sequential"),
+            Some(TabThemePattern::Sequential)
+        );
+        assert_eq!(
+            TabThemePattern::from_name("cycle"),
+            Some(TabThemePattern::Sequential)
+        );
+        assert_eq!(
+            TabThemePattern::from_name("random"),
+            Some(TabThemePattern::Random)
+        );
         assert_eq!(TabThemePattern::from_name("invalid"), None);
     }
 }

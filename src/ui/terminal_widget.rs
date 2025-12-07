@@ -9,7 +9,7 @@ use ratatui::{
     widgets::{Block, Borders, Widget},
 };
 
-use crate::terminal::{grid::Grid, Terminal};
+use crate::terminal::{Terminal, grid::Grid};
 use crate::theme::TerminalTheme;
 
 /// Terminal widget for rendering.
@@ -64,6 +64,23 @@ impl<'a> TerminalWidget<'a> {
         let visible_rows = area.height as usize;
         let cols = grid.cols().min(area.width) as usize;
 
+        // Get background color from theme
+        let bg_color = self.theme.map(|t| t.background).unwrap_or(Color::Reset);
+        let fg_color = self.theme.map(|t| t.foreground).unwrap_or(Color::Reset);
+        let clear_style = Style::default().fg(fg_color).bg(bg_color);
+
+        // Clear the entire terminal area first to prevent ghost characters when scrolling
+        for row in 0..area.height {
+            for col in 0..area.width {
+                let x = area.x + col;
+                let y = area.y + row;
+                if let Some(cell) = buf.cell_mut((x, y)) {
+                    cell.set_char(' ');
+                    cell.set_style(clear_style);
+                }
+            }
+        }
+
         for screen_row in 0..visible_rows {
             // Calculate which row to render based on scroll offset
             // scroll_offset = 0 means we're at the bottom (current view)
@@ -77,10 +94,9 @@ impl<'a> TerminalWidget<'a> {
                 continue;
             } else {
                 // This row is in visible grid
-                let grid_row = (grid.rows() as usize)
+                (grid.rows() as usize)
                     .saturating_sub(scroll_offset)
-                    .saturating_sub(visible_rows - screen_row);
-                grid_row
+                    .saturating_sub(visible_rows - screen_row)
             };
 
             // Render row from visible grid
@@ -142,6 +158,7 @@ impl<'a> TerminalWidget<'a> {
     }
 
     /// Renders cells from a row.
+    #[allow(clippy::too_many_arguments)]
     fn render_row_cells(
         &self,
         row: &crate::terminal::cell::Row,
@@ -162,9 +179,7 @@ impl<'a> TerminalWidget<'a> {
             .theme
             .map(|t| t.selection)
             .unwrap_or(Color::Rgb(38, 79, 120));
-        let selection_style = Style::default()
-            .bg(selection_color)
-            .fg(Color::White);
+        let selection_style = Style::default().bg(selection_color).fg(Color::White);
 
         for col in 0..cols {
             if let Some(cell) = row.cell(col as u16) {

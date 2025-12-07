@@ -53,10 +53,11 @@ pub struct ExtensionMetadata {
 }
 
 /// Extension type.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ExtensionType {
     /// Theme extension (colors only).
+    #[default]
     Theme,
     /// Widget extension (WASM or native).
     Widget,
@@ -64,12 +65,6 @@ pub enum ExtensionType {
     Command,
     /// Native plugin (full access).
     Native,
-}
-
-impl Default for ExtensionType {
-    fn default() -> Self {
-        ExtensionType::Theme
-    }
 }
 
 impl std::fmt::Display for ExtensionType {
@@ -150,13 +145,11 @@ impl NativeConfig {
 
 /// Loads an extension manifest from a file.
 pub fn load_manifest(path: &Path) -> Result<ExtensionManifest, ExtensionError> {
-    let content = fs::read_to_string(path).map_err(|e| {
-        ExtensionError::Manifest(format!("Failed to read manifest: {}", e))
-    })?;
+    let content = fs::read_to_string(path)
+        .map_err(|e| ExtensionError::Manifest(format!("Failed to read manifest: {}", e)))?;
 
-    let manifest: ExtensionManifest = toml::from_str(&content).map_err(|e| {
-        ExtensionError::Manifest(format!("Failed to parse manifest: {}", e))
-    })?;
+    let manifest: ExtensionManifest = toml::from_str(&content)
+        .map_err(|e| ExtensionError::Manifest(format!("Failed to parse manifest: {}", e)))?;
 
     validate_manifest(&manifest)?;
 
@@ -208,6 +201,7 @@ fn validate_manifest(manifest: &ExtensionManifest) -> Result<(), ExtensionError>
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used)]
 mod tests {
     use super::*;
     use std::io::Write;

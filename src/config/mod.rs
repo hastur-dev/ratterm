@@ -164,8 +164,10 @@ impl Config {
         }
 
         let content = fs::read_to_string(path)?;
-        let mut config = Self::default();
-        config.config_path = path.clone();
+        let mut config = Self {
+            config_path: path.clone(),
+            ..Self::default()
+        };
         config.parse(&content);
 
         // Re-initialize keybindings based on parsed mode
@@ -201,7 +203,7 @@ impl Config {
 
                 // Only apply keybinding settings (not mode)
                 if key != "mode" {
-                    if let Some(action) = KeyAction::from_str(key) {
+                    if let Some(action) = KeyAction::parse_action(key) {
                         if let Some(binding) = KeyBinding::parse(value) {
                             self.keybindings.set(action, binding);
                         }
@@ -263,14 +265,12 @@ impl Config {
                 };
             }
             "auto_close_tabs_on_shell_change" => {
-                self.auto_close_tabs_on_shell_change = matches!(
-                    value.to_lowercase().as_str(),
-                    "true" | "yes" | "1" | "on"
-                );
+                self.auto_close_tabs_on_shell_change =
+                    matches!(value.to_lowercase().as_str(), "true" | "yes" | "1" | "on");
             }
             _ => {
                 // Try to parse as keybinding
-                if let Some(action) = KeyAction::from_str(key) {
+                if let Some(action) = KeyAction::parse_action(key) {
                     if let Some(binding) = KeyBinding::parse(value) {
                         self.keybindings.set(action, binding);
                     }

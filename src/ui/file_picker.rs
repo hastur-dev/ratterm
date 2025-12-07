@@ -74,10 +74,7 @@ impl<'a> Widget for FilePickerWidget<'a> {
                 Span::styled(filter, Style::default().fg(Color::White)),
             ]);
             let filter_para = Paragraph::new(filter_line);
-            filter_para.render(
-                Rect::new(inner.x, inner.y, inner.width, 1),
-                buf,
-            );
+            filter_para.render(Rect::new(inner.x, inner.y, inner.width, 1), buf);
         }
 
         // Calculate visible area for entries
@@ -161,7 +158,8 @@ impl<'a> Widget for FilePickerWidget<'a> {
         // Draw scrollbar if needed
         if entries.len() > visible_count {
             let scrollbar_height = entries_area.height.max(1);
-            let scroll_ratio = scroll_offset as f32 / entries.len().saturating_sub(visible_count).max(1) as f32;
+            let scroll_ratio =
+                scroll_offset as f32 / entries.len().saturating_sub(visible_count).max(1) as f32;
             let thumb_pos = (scroll_ratio * (scrollbar_height - 1) as f32) as u16;
 
             let scrollbar_x = entries_area.right().saturating_sub(1);
@@ -201,10 +199,7 @@ impl<'a> Widget for FileInfoBar<'a> {
         let files = entries.iter().filter(|e| e.is_file()).count();
         let dirs = entries.iter().filter(|e| e.is_directory()).count();
 
-        let info = format!(
-            "{} items ({} files, {} dirs)",
-            total, files, dirs
-        );
+        let info = format!("{} items ({} files, {} dirs)", total, files, dirs);
 
         let style = Style::default().fg(Color::DarkGray);
         let para = Paragraph::new(info).style(style);

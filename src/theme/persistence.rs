@@ -9,10 +9,10 @@ use std::path::Path;
 use ratatui::style::Color;
 
 use super::{
+    TabThemePattern, ThemeManager,
     colors::{color_to_hex, parse_color},
     component::Theme,
     preset::ThemePreset,
-    TabThemePattern, ThemeManager,
 };
 
 /// Theme settings that can be persisted to .ratrc.
@@ -84,7 +84,19 @@ impl ThemeSettings {
             // Parse key = value
             if let Some((key, value)) = line.split_once('=') {
                 let key = key.trim();
-                let value = value.split('#').next().unwrap_or(value).trim();
+                // Strip inline comments, but preserve hex colors that start with #
+                let value = value.trim();
+                let value = if value.starts_with('#') {
+                    // This is likely a hex color, look for a space before any comment
+                    if let Some(space_idx) = value.find(" #") {
+                        value[..space_idx].trim()
+                    } else {
+                        value
+                    }
+                } else {
+                    // Not a hex color, split on # for inline comments
+                    value.split('#').next().unwrap_or(value).trim()
+                };
 
                 // Apply setting based on current section
                 if current_section.is_none() {
@@ -306,10 +318,10 @@ fn find_insert_position(lines: &[String], section: Option<&str>) -> usize {
         for (i, line) in lines.iter().enumerate() {
             if line.contains(section_header) {
                 // Find end of section (next section or end of file)
-                for j in (i + 1)..lines.len() {
-                    let trimmed = lines[j].trim();
+                for (offset, subsequent_line) in lines.iter().skip(i + 1).enumerate() {
+                    let trimmed = subsequent_line.trim();
                     if trimmed.starts_with("# ") && trimmed.len() > 2 {
-                        return j;
+                        return i + 1 + offset;
                     }
                 }
                 return lines.len();
@@ -377,9 +389,15 @@ tab_themes = dark, dracula, nord
 
         let settings = ThemeSettings::parse(content);
         assert_eq!(settings.theme, Some("dracula".to_string()));
-        assert_eq!(settings.terminal_foreground, Some(Color::Rgb(248, 248, 242)));
+        assert_eq!(
+            settings.terminal_foreground,
+            Some(Color::Rgb(248, 248, 242))
+        );
         assert_eq!(settings.terminal_background, Some(Color::Rgb(40, 42, 54)));
-        assert_eq!(settings.tab_theme_pattern, Some(TabThemePattern::Sequential));
+        assert_eq!(
+            settings.tab_theme_pattern,
+            Some(TabThemePattern::Sequential)
+        );
         assert_eq!(settings.tab_themes, vec!["dark", "dracula", "nord"]);
     }
 
@@ -416,7 +434,10 @@ tab_themes = dark, dracula, nord
 
     #[test]
     fn test_find_section_for_key() {
-        assert_eq!(find_section_for_key("terminal.background"), Some("# Terminal"));
+        assert_eq!(
+            find_section_for_key("terminal.background"),
+            Some("# Terminal")
+        );
         assert_eq!(find_section_for_key("editor.foreground"), Some("# Editor"));
         assert_eq!(find_section_for_key("theme"), Some("# Theme"));
         assert_eq!(find_section_for_key("unknown"), None);

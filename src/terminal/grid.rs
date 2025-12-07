@@ -99,7 +99,9 @@ impl Grid {
 
     /// Returns a mutable cell at the given position.
     fn cell_mut(&mut self, col: u16, row: u16) -> Option<&mut Cell> {
-        self.rows.get_mut(row as usize).and_then(|r| r.cell_mut(col))
+        self.rows
+            .get_mut(row as usize)
+            .and_then(|r| r.cell_mut(col))
     }
 
     /// Sets the cursor position.
@@ -348,7 +350,9 @@ impl Grid {
         if self.alternate_screen.is_none() {
             let main_screen = std::mem::replace(
                 &mut self.rows,
-                (0..self.visible_rows).map(|_| Row::new(self.cols)).collect(),
+                (0..self.visible_rows)
+                    .map(|_| Row::new(self.cols))
+                    .collect(),
             );
             self.alternate_screen = Some(main_screen);
             self.alternate_cursor = Some((self.cursor_col, self.cursor_row));
@@ -455,8 +459,8 @@ impl Grid {
                 }
             }
 
-            for i in cursor..(cursor + n as usize).min(width) {
-                cells[i] = Cell::default();
+            for cell in cells.iter_mut().skip(cursor).take(n as usize) {
+                *cell = Cell::default();
             }
         }
     }
@@ -525,7 +529,7 @@ impl Grid {
     /// Returns whether there is an active selection.
     #[must_use]
     pub fn has_selection(&self) -> bool {
-        self.selection.as_ref().map_or(false, |s| !s.is_empty())
+        self.selection.as_ref().is_some_and(|s| !s.is_empty())
     }
 
     /// Checks if a cell is within the current selection.
@@ -533,7 +537,7 @@ impl Grid {
     pub fn is_cell_selected(&self, col: u16, row: u16) -> bool {
         self.selection
             .as_ref()
-            .map_or(false, |sel| sel.contains(col, row))
+            .is_some_and(|sel| sel.contains(col, row))
     }
 
     /// Returns the selected text from the grid.
