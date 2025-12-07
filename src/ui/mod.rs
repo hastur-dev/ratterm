@@ -12,4 +12,7 @@ pub mod terminal_tabs;
 pub mod terminal_widget;
 
 pub use layout::{FocusedPane, LayoutAreas, SplitLayout};
-pub use popup::{Popup, PopupKind, PopupWidget};
+pub use popup::{
+    Command, CommandPalette, ModeSwitcher, ModeSwitcherWidget, Popup, PopupKind, PopupWidget,
+    ShellInstallPrompt, ShellInstallPromptWidget, ShellSelector, ShellSelectorWidget,
+};

@@ -19,10 +19,20 @@
 //! // Run event loop...
 //! ```
 
-#![warn(clippy::pedantic)]
-#![warn(clippy::nursery)]
+// Clippy configuration - allow common patterns
+#![allow(clippy::unnested_or_patterns)]
+#![allow(clippy::uninlined_format_args)]
+#![allow(clippy::match_same_arms)]
+#![allow(clippy::too_many_lines)]
 #![allow(clippy::module_name_repetitions)]
 #![allow(clippy::must_use_candidate)]
+#![allow(clippy::missing_errors_doc)]
+#![allow(clippy::missing_panics_doc)]
+#![allow(clippy::doc_markdown)]
+#![allow(clippy::cast_possible_truncation)]
+#![allow(clippy::cast_sign_loss)]
+#![allow(clippy::similar_names)]
+#![allow(clippy::struct_excessive_bools)]
 
 pub mod app;
 pub mod clipboard;

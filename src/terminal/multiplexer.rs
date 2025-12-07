@@ -120,7 +120,24 @@ impl TerminalMultiplexer {
     /// # Errors
     /// Returns error if terminal creation fails.
     pub fn new(cols: u16, rows: u16) -> Result<Self, PtyError> {
-        let terminal = Terminal::new(cols, rows)?;
+        Self::with_shell(cols, rows, None)
+    }
+
+    /// Creates a new terminal multiplexer with a specific shell.
+    ///
+    /// # Arguments
+    /// * `cols` - Number of columns
+    /// * `rows` - Number of rows
+    /// * `shell_path` - Path to the shell executable, or None for system default
+    ///
+    /// # Errors
+    /// Returns error if terminal creation fails.
+    pub fn with_shell(
+        cols: u16,
+        rows: u16,
+        shell_path: Option<std::path::PathBuf>,
+    ) -> Result<Self, PtyError> {
+        let terminal = Terminal::with_shell(cols, rows, shell_path)?;
         let tab = TerminalTab {
             terminal,
             split_terminal: None,
@@ -193,11 +210,22 @@ impl TerminalMultiplexer {
     /// # Errors
     /// Returns error if max tabs reached or terminal creation fails.
     pub fn add_tab(&mut self) -> Result<usize, PtyError> {
+        self.add_tab_with_shell(None)
+    }
+
+    /// Adds a new terminal tab with a specific shell.
+    ///
+    /// # Errors
+    /// Returns error if maximum tabs reached or terminal creation fails.
+    pub fn add_tab_with_shell(
+        &mut self,
+        shell_path: Option<std::path::PathBuf>,
+    ) -> Result<usize, PtyError> {
         if self.tabs.len() >= MAX_TABS {
             return Err(PtyError::MaxTabsReached);
         }
 
-        let terminal = Terminal::new(self.cols, self.rows)?;
+        let terminal = Terminal::with_shell(self.cols, self.rows, shell_path)?;
         let index = self.tabs.len();
         let tab = TerminalTab {
             terminal,
@@ -277,6 +305,17 @@ impl TerminalMultiplexer {
     /// # Errors
     /// Returns error if terminal creation fails.
     pub fn split_horizontal(&mut self) -> Result<(), PtyError> {
+        self.split_horizontal_with_shell(None)
+    }
+
+    /// Creates a horizontal split in the current tab with a specific shell.
+    ///
+    /// # Errors
+    /// Returns error if terminal creation fails.
+    pub fn split_horizontal_with_shell(
+        &mut self,
+        shell_path: Option<std::path::PathBuf>,
+    ) -> Result<(), PtyError> {
         if let Some(tab) = self.tabs.get_mut(self.active_tab) {
             if tab.split_terminal.is_some() {
                 // Already split - just change direction
@@ -286,7 +325,7 @@ impl TerminalMultiplexer {
 
             // Calculate split dimensions
             let split_rows = self.rows / 2;
-            let terminal = Terminal::new(self.cols, split_rows)?;
+            let terminal = Terminal::with_shell(self.cols, split_rows, shell_path)?;
 
             // Resize existing terminal
             let _ = tab.terminal.resize(self.cols, split_rows);
@@ -303,6 +342,17 @@ impl TerminalMultiplexer {
     /// # Errors
     /// Returns error if terminal creation fails.
     pub fn split_vertical(&mut self) -> Result<(), PtyError> {
+        self.split_vertical_with_shell(None)
+    }
+
+    /// Creates a vertical split in the current tab with a specific shell.
+    ///
+    /// # Errors
+    /// Returns error if terminal creation fails.
+    pub fn split_vertical_with_shell(
+        &mut self,
+        shell_path: Option<std::path::PathBuf>,
+    ) -> Result<(), PtyError> {
         if let Some(tab) = self.tabs.get_mut(self.active_tab) {
             if tab.split_terminal.is_some() {
                 // Already split - just change direction
@@ -312,7 +362,7 @@ impl TerminalMultiplexer {
 
             // Calculate split dimensions
             let split_cols = self.cols / 2;
-            let terminal = Terminal::new(split_cols, self.rows)?;
+            let terminal = Terminal::with_shell(split_cols, self.rows, shell_path)?;
 
             // Resize existing terminal
             let _ = tab.terminal.resize(split_cols, self.rows);

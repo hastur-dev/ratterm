@@ -12,6 +12,8 @@ pub mod style;
 
 pub use multiplexer::{SplitDirection, SplitFocus, TabInfo, TerminalMultiplexer, TerminalTab};
 
+use std::path::PathBuf;
+
 use self::grid::Grid;
 use self::parser::AnsiParser;
 use self::pty::{Pty, PtyConfig, PtyError};
@@ -40,6 +42,10 @@ pub struct Terminal {
     scroll_offset: usize,
     /// Current input line buffer for command interception.
     input_buffer: String,
+    /// Current working directory (tracked via OSC 7 or process).
+    cwd: Option<PathBuf>,
+    /// Initial working directory (set at creation).
+    initial_cwd: PathBuf,
 }
 
 impl Terminal {
@@ -52,6 +58,37 @@ impl Terminal {
         Self::with_config(config)
     }
 
+    /// Creates a new terminal with a specific shell.
+    ///
+    /// # Arguments
+    /// * `cols` - Number of columns
+    /// * `rows` - Number of rows
+    /// * `shell_path` - Path to the shell executable, or None for system default
+    ///
+    /// # Errors
+    /// Returns error if PTY creation fails.
+    pub fn with_shell(cols: u16, rows: u16, shell_path: Option<PathBuf>) -> Result<Self, PtyError> {
+        let mut config = PtyConfig::default().size(cols, rows);
+        if let Some(ref path) = shell_path {
+            let path_str = path.to_string_lossy().to_string();
+            config.shell = Some(path_str.clone());
+
+            // Add appropriate arguments for different shells on Windows
+            #[cfg(windows)]
+            {
+                let path_lower = path_str.to_lowercase();
+                if path_lower.contains("bash") {
+                    // Git Bash/MSYS2 bash needs --login to initialize properly
+                    config.args = vec!["--login".to_string(), "-i".to_string()];
+                } else if path_lower.contains("powershell") || path_lower.contains("pwsh") {
+                    // PowerShell can use -NoLogo for cleaner startup
+                    config.args = vec!["-NoLogo".to_string()];
+                }
+            }
+        }
+        Self::with_config(config)
+    }
+
     /// Creates a new terminal with custom configuration.
     ///
     /// # Errors
@@ -59,6 +96,13 @@ impl Terminal {
     pub fn with_config(config: PtyConfig) -> Result<Self, PtyError> {
         assert!(config.cols > 0, "Columns must be positive");
         assert!(config.rows > 0, "Rows must be positive");
+
+        // Get initial CWD - either from config or current directory
+        let initial_cwd = config
+            .working_dir
+            .clone()
+            .or_else(|| std::env::current_dir().ok())
+            .unwrap_or_else(|| PathBuf::from("."));
 
         let pty = Pty::new(config.clone())?;
         let grid = Grid::new(config.cols, config.rows);
@@ -72,6 +116,8 @@ impl Terminal {
             bell: false,
             scroll_offset: 0,
             input_buffer: String::new(),
+            cwd: None,
+            initial_cwd,
         })
     }
 
@@ -96,6 +142,28 @@ impl Terminal {
     #[must_use]
     pub fn is_running(&self) -> bool {
         self.pty.is_running()
+    }
+
+    /// Returns the current working directory of the terminal.
+    ///
+    /// This returns the CWD in the following priority:
+    /// 1. CWD tracked via OSC 7 escape sequences
+    /// 2. CWD read from the PTY process (on supported platforms)
+    /// 3. The initial working directory
+    #[must_use]
+    pub fn current_working_dir(&self) -> PathBuf {
+        // First, check if we have a CWD from OSC 7
+        if let Some(ref cwd) = self.cwd {
+            return cwd.clone();
+        }
+
+        // Try to get CWD from the PTY process
+        if let Some(cwd) = self.pty.current_working_dir() {
+            return cwd;
+        }
+
+        // Fall back to initial CWD
+        self.initial_cwd.clone()
     }
 
     /// Writes input to the terminal.
@@ -278,6 +346,10 @@ impl Terminal {
             }
             ParsedAction::Hyperlink { .. } => {
                 // Hyperlinks not yet supported in rendering
+            }
+            ParsedAction::SetCwd(path) => {
+                // Update the tracked current working directory
+                self.cwd = Some(PathBuf::from(path));
             }
             ParsedAction::Unknown(_) => {
                 // Ignore unknown sequences

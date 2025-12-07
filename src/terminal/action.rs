@@ -71,6 +71,8 @@ pub enum ParsedAction {
     DeviceStatusReport,
     /// Hyperlink.
     Hyperlink { url: String, id: Option<String> },
+    /// Set current working directory (OSC 7).
+    SetCwd(String),
     /// Unknown sequence.
     Unknown(String),
 }
