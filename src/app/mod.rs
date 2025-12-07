@@ -94,7 +94,8 @@ impl App {
         // Load configuration
         let config = Config::load().unwrap_or_default();
 
-        let terminals = match TerminalMultiplexer::new(cols / 2, rows - 2) {
+        // Subtract 3 from height: 1 for tab bar + 2 for borders
+        let terminals = match TerminalMultiplexer::new(cols / 2, rows.saturating_sub(3)) {
             Ok(t) => Some(t),
             Err(e) => {
                 tracing::warn!("Failed to create terminal: {}", e);
@@ -102,7 +103,7 @@ impl App {
             }
         };
 
-        let editor = Editor::new(cols / 2, rows - 2);
+        let editor = Editor::new(cols / 2, rows.saturating_sub(3));
         let file_browser = FileBrowser::default();
 
         Ok(Self {
@@ -457,17 +458,19 @@ impl App {
 
         if let Some(ref mut terminals) = self.terminals {
             if areas.has_terminal() {
+                // Subtract 3: 1 for tab bar + 2 for borders
                 let _ = terminals.resize(
                     areas.terminal.width.saturating_sub(2),
-                    areas.terminal.height.saturating_sub(2),
+                    areas.terminal.height.saturating_sub(3),
                 );
             }
         }
 
         if areas.has_editor() {
+            // Subtract 3: 1 for tab bar + 2 for borders
             self.editor.resize(
                 areas.editor.width.saturating_sub(2),
-                areas.editor.height.saturating_sub(2),
+                areas.editor.height.saturating_sub(3),
             );
             self.file_browser
                 .set_visible_height(areas.editor.height.saturating_sub(4) as usize);
