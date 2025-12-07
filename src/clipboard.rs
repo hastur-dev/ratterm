@@ -31,23 +31,23 @@ impl Clipboard {
     /// # Errors
     /// Returns error if clipboard access fails.
     pub fn copy(&self, text: &str) -> Result<(), ClipboardError> {
-        // Try system clipboard first
+        // Always update internal clipboard first (used as cache and for has_content check)
+        if let Ok(mut internal) = self.internal.lock() {
+            *internal = text.to_string();
+        } else {
+            return Err(ClipboardError::LockFailed);
+        }
+
+        // Also try system clipboard if available
         #[cfg(feature = "system-clipboard")]
         {
             if let Ok(mut clipboard) = arboard::Clipboard::new() {
-                if clipboard.set_text(text).is_ok() {
-                    return Ok(());
-                }
+                // Ignore system clipboard errors - we still have internal copy
+                let _ = clipboard.set_text(text);
             }
         }
 
-        // Fall back to internal clipboard
-        if let Ok(mut internal) = self.internal.lock() {
-            *internal = text.to_string();
-            Ok(())
-        } else {
-            Err(ClipboardError::LockFailed)
-        }
+        Ok(())
     }
 
     /// Pastes text from the clipboard.
