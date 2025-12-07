@@ -306,10 +306,10 @@ fn find_insert_position(lines: &[String], section: Option<&str>) -> usize {
         for (i, line) in lines.iter().enumerate() {
             if line.contains(section_header) {
                 // Find end of section (next section or end of file)
-                for j in (i + 1)..lines.len() {
-                    let trimmed = lines[j].trim();
+                for (offset, subsequent_line) in lines.iter().skip(i + 1).enumerate() {
+                    let trimmed = subsequent_line.trim();
                     if trimmed.starts_with("# ") && trimmed.len() > 2 {
-                        return j;
+                        return i + 1 + offset;
                     }
                 }
                 return lines.len();

@@ -60,6 +60,7 @@ impl Buffer {
 
     /// Creates a buffer from a string.
     #[must_use]
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(text: &str) -> Self {
         Self {
             rope: Rope::from_str(text),

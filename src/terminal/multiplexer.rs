@@ -84,11 +84,7 @@ impl TerminalTab {
             (SplitDirection::None, _) => &mut self.terminal,
             (_, SplitFocus::First) => &mut self.terminal,
             (_, SplitFocus::Second) => {
-                if self.split_terminal.is_some() {
-                    self.split_terminal.as_mut().expect("split terminal exists")
-                } else {
-                    &mut self.terminal
-                }
+                self.split_terminal.as_mut().unwrap_or(&mut self.terminal)
             }
         }
     }

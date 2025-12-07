@@ -53,10 +53,11 @@ pub struct ExtensionMetadata {
 }
 
 /// Extension type.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ExtensionType {
     /// Theme extension (colors only).
+    #[default]
     Theme,
     /// Widget extension (WASM or native).
     Widget,
@@ -64,12 +65,6 @@ pub enum ExtensionType {
     Command,
     /// Native plugin (full access).
     Native,
-}
-
-impl Default for ExtensionType {
-    fn default() -> Self {
-        ExtensionType::Theme
-    }
 }
 
 impl std::fmt::Display for ExtensionType {
@@ -206,6 +201,7 @@ fn validate_manifest(manifest: &ExtensionManifest) -> Result<(), ExtensionError>
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used)]
 mod tests {
     use super::*;
     use std::io::Write;

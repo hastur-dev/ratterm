@@ -94,10 +94,9 @@ impl<'a> TerminalWidget<'a> {
                 continue;
             } else {
                 // This row is in visible grid
-                let grid_row = (grid.rows() as usize)
+                (grid.rows() as usize)
                     .saturating_sub(scroll_offset)
-                    .saturating_sub(visible_rows - screen_row);
-                grid_row
+                    .saturating_sub(visible_rows - screen_row)
             };
 
             // Render row from visible grid
@@ -159,6 +158,7 @@ impl<'a> TerminalWidget<'a> {
     }
 
     /// Renders cells from a row.
+    #[allow(clippy::too_many_arguments)]
     fn render_row_cells(
         &self,
         row: &crate::terminal::cell::Row,

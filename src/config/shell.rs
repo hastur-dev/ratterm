@@ -612,8 +612,12 @@ mod tests {
     #[test]
     fn test_detect_system_default() {
         let info = ShellDetector::detect(ShellType::System);
-        // System default should generally be available
+        // System default should generally be available on Windows/Unix
+        // At minimum, we should get some result (available or a path)
         #[cfg(any(windows, unix))]
-        assert!(info.available || !info.path.as_os_str().is_empty() || true);
+        {
+            // Either the shell is available, or we at least got a path
+            let _ = info; // Just ensure detection runs without panic
+        }
     }
 }

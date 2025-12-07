@@ -79,7 +79,7 @@ pub enum KeyAction {
 impl KeyAction {
     /// Parses an action from a string key name.
     #[must_use]
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse_action(s: &str) -> Option<Self> {
         match s {
             "quit" => Some(Self::Quit),
             "focus_terminal" => Some(Self::FocusTerminal),
@@ -665,6 +665,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[allow(clippy::unwrap_used)]
     fn test_parse_keybinding() {
         let binding = KeyBinding::parse("ctrl+c").unwrap();
         assert_eq!(binding.modifiers, KeyModifiers::CONTROL);
@@ -672,6 +673,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::unwrap_used)]
     fn test_parse_keybinding_multi_modifier() {
         let binding = KeyBinding::parse("ctrl+shift+c").unwrap();
         assert_eq!(
@@ -682,6 +684,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::unwrap_used)]
     fn test_parse_keybinding_special_key() {
         let binding = KeyBinding::parse("shift+pageup").unwrap();
         assert_eq!(binding.modifiers, KeyModifiers::SHIFT);

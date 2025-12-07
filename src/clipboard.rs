@@ -109,6 +109,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[allow(clippy::unwrap_used)]
     fn test_clipboard_internal() {
         let clipboard = Clipboard::new();
         assert!(!clipboard.has_content());

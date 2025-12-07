@@ -184,7 +184,7 @@ impl Pty {
         let writer = pair
             .master
             .take_writer()
-            .map_err(|e| PtyError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+            .map_err(|e| PtyError::Io(std::io::Error::other(e)))?;
 
         // Create channel for events
         let (event_tx, event_rx) = mpsc::channel();
@@ -193,7 +193,7 @@ impl Pty {
         let mut reader = pair
             .master
             .try_clone_reader()
-            .map_err(|e| PtyError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+            .map_err(|e| PtyError::Io(std::io::Error::other(e)))?;
 
         let reader_thread = thread::spawn(move || {
             let mut buffer = vec![0u8; READ_BUFFER_SIZE];
@@ -263,7 +263,7 @@ impl Pty {
     /// uses the process handle, on Unix it reads from /proc.
     #[must_use]
     pub fn current_working_dir(&self) -> Option<PathBuf> {
-        self.pid.and_then(|pid| get_process_cwd(pid))
+        self.pid.and_then(get_process_cwd)
     }
 
     /// Resizes the PTY.
@@ -281,7 +281,7 @@ impl Pty {
                 pixel_width: 0,
                 pixel_height: 0,
             })
-            .map_err(|e| PtyError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+            .map_err(|e| PtyError::Io(std::io::Error::other(e)))?;
 
         self.cols = cols;
         self.rows = rows;

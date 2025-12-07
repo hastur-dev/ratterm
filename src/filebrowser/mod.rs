@@ -248,8 +248,8 @@ impl FileBrowser {
     /// # Errors
     /// Returns error if parent directory cannot be accessed.
     pub fn go_up(&mut self) -> io::Result<()> {
-        if let Some(parent) = self.current_dir.parent() {
-            self.change_dir(parent.to_path_buf())
+        if let Some(parent) = self.current_dir.parent().map(Path::to_path_buf) {
+            self.change_dir(parent)
         } else {
             Ok(())
         }

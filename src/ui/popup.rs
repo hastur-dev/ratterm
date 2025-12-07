@@ -342,7 +342,7 @@ impl<'a> PopupWidget<'a> {
 
     /// Calculates the popup area.
     fn popup_area(&self, area: Rect) -> Rect {
-        let width = (area.width * 60 / 100).min(60).max(30);
+        let width = (area.width * 60 / 100).clamp(30, 60);
         let height = if self.popup.results.is_empty() { 5 } else { 12 };
 
         let x = (area.width.saturating_sub(width)) / 2;

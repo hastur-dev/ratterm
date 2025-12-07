@@ -108,7 +108,7 @@ impl Installer {
         fs::create_dir_all(dest)?;
 
         // Find the root directory in the archive (GitHub zips have a top-level folder)
-        let root_prefix = if archive.len() > 0 {
+        let root_prefix = if !archive.is_empty() {
             let first = archive.by_index(0).map_err(|e| {
                 ExtensionError::Registry(format!("Failed to read archive entry: {}", e))
             })?;

@@ -459,8 +459,8 @@ impl Grid {
                 }
             }
 
-            for i in cursor..(cursor + n as usize).min(width) {
-                cells[i] = Cell::default();
+            for cell in cells.iter_mut().skip(cursor).take(n as usize) {
+                *cell = Cell::default();
             }
         }
     }
@@ -529,7 +529,7 @@ impl Grid {
     /// Returns whether there is an active selection.
     #[must_use]
     pub fn has_selection(&self) -> bool {
-        self.selection.as_ref().map_or(false, |s| !s.is_empty())
+        self.selection.as_ref().is_some_and(|s| !s.is_empty())
     }
 
     /// Checks if a cell is within the current selection.
@@ -537,7 +537,7 @@ impl Grid {
     pub fn is_cell_selected(&self, col: u16, row: u16) -> bool {
         self.selection
             .as_ref()
-            .map_or(false, |sel| sel.contains(col, row))
+            .is_some_and(|sel| sel.contains(col, row))
     }
 
     /// Returns the selected text from the grid.

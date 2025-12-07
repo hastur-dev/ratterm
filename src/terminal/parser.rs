@@ -404,7 +404,7 @@ impl<'a> vte::Perform for ParserPerformer<'a> {
             0x07 => self.actions.push(ParsedAction::Bell),
             0x08 => self.actions.push(ParsedAction::Backspace),
             0x09 => self.actions.push(ParsedAction::Tab),
-            0x0A | 0x0B | 0x0C => self.actions.push(ParsedAction::LineFeed),
+            0x0A..=0x0C => self.actions.push(ParsedAction::LineFeed),
             0x0D => self.actions.push(ParsedAction::CarriageReturn),
             _ => {}
         }

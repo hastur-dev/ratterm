@@ -391,6 +391,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::expect_used)]
     fn test_cursor_selection() {
         let _buffer = Buffer::from_str("Hello World");
         let mut cursor = Cursor::new();

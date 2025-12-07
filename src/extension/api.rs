@@ -25,6 +25,7 @@ pub enum PluginCapability {
 impl PluginCapability {
     /// Parse capability from string.
     #[must_use]
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Option<PluginCapability> {
         match s.to_lowercase().as_str() {
             "status_widget" | "statuswidget" => Some(PluginCapability::StatusWidget),
