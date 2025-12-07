@@ -2,9 +2,9 @@
 //!
 //! Tests cover: cell operations, cursor movement, scrolling, line wrapping.
 
-use ratatui_full_ide::terminal::grid::Grid;
-use ratatui_full_ide::terminal::CursorShape;
-use ratatui_full_ide::terminal::style::{Color, Style, Attr};
+use ratterm::terminal::grid::Grid;
+use ratterm::terminal::CursorShape;
+use ratterm::terminal::style::{Color, Style, Attr};
 
 /// Test grid initialization with correct dimensions.
 #[test]

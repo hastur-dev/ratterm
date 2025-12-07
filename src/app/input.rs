@@ -2,7 +2,7 @@
 //!
 //! Handles key events for different application modes.
 
-use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 
 use crate::config::KeybindingMode;
 use crate::editor::EditorMode;
@@ -310,6 +310,12 @@ impl App {
             return;
         }
 
+        // Handle theme selector specially
+        if self.popup.kind().is_theme_selector() {
+            self.handle_theme_selector_key(key);
+            return;
+        }
+
         match (key.modifiers, key.code) {
             (KeyModifiers::NONE, KeyCode::Esc) => {
                 self.hide_popup();
@@ -427,6 +433,43 @@ impl App {
         }
     }
 
+    /// Handles keys for the theme selector popup.
+    fn handle_theme_selector_key(&mut self, key: KeyEvent) {
+        match (key.modifiers, key.code) {
+            // Escape - Cancel
+            (KeyModifiers::NONE, KeyCode::Esc) => {
+                self.cancel_theme_selection();
+            }
+            // Enter - Apply selected theme
+            (KeyModifiers::NONE, KeyCode::Enter) => {
+                self.apply_theme_selection();
+            }
+            // Down or j - Next theme
+            (KeyModifiers::NONE, KeyCode::Down) | (KeyModifiers::NONE, KeyCode::Char('j')) => {
+                self.cycle_theme_next();
+            }
+            // Up or k - Previous theme
+            (KeyModifiers::NONE, KeyCode::Up) | (KeyModifiers::NONE, KeyCode::Char('k')) => {
+                self.cycle_theme_prev();
+            }
+            _ => {}
+        }
+    }
+
+    /// Cycles to the next theme in the selector.
+    fn cycle_theme_next(&mut self) {
+        if let Some(ref mut selector) = self.theme_selector {
+            selector.next();
+        }
+    }
+
+    /// Cycles to the previous theme in the selector.
+    fn cycle_theme_prev(&mut self) {
+        if let Some(ref mut selector) = self.theme_selector {
+            selector.prev();
+        }
+    }
+
     /// Handles keys for confirmation dialogs.
     fn handle_confirmation_key(&mut self, key: KeyEvent) {
         match (key.modifiers, key.code) {
@@ -512,6 +555,39 @@ impl App {
                 self.paste_to_terminal();
                 return;
             }
+            // Shift+Arrow keys for selection
+            (KeyModifiers::SHIFT, KeyCode::Left) => {
+                if let Some(ref mut terminals) = self.terminals {
+                    if let Some(terminal) = terminals.active_terminal_mut() {
+                        terminal.select_left();
+                    }
+                }
+                return;
+            }
+            (KeyModifiers::SHIFT, KeyCode::Right) => {
+                if let Some(ref mut terminals) = self.terminals {
+                    if let Some(terminal) = terminals.active_terminal_mut() {
+                        terminal.select_right();
+                    }
+                }
+                return;
+            }
+            (KeyModifiers::SHIFT, KeyCode::Up) => {
+                if let Some(ref mut terminals) = self.terminals {
+                    if let Some(terminal) = terminals.active_terminal_mut() {
+                        terminal.select_up();
+                    }
+                }
+                return;
+            }
+            (KeyModifiers::SHIFT, KeyCode::Down) => {
+                if let Some(ref mut terminals) = self.terminals {
+                    if let Some(terminal) = terminals.active_terminal_mut() {
+                        terminal.select_down();
+                    }
+                }
+                return;
+            }
             _ => {}
         }
 
@@ -585,19 +661,54 @@ impl App {
 
     /// Copies terminal selection to clipboard (or current line if no selection).
     fn copy_terminal_selection(&mut self) {
-        // For now, copy the current visible line at cursor
-        // TODO: Implement actual selection in terminal
-        if let Some(ref terminals) = self.terminals {
-            if let Some(terminal) = terminals.active_terminal() {
-                let grid = terminal.grid();
-                let (_, row) = grid.cursor_pos();
-                if let Some(line) = grid.row(row as usize) {
-                    let text: String = line.cells().iter().map(|c| c.character()).collect();
-                    let text = text.trim_end();
-                    if !text.is_empty() {
-                        self.copy_to_clipboard(text);
+        // Extract text first to avoid borrow issues
+        let text_to_copy: Option<(String, bool)> = {
+            if let Some(ref terminals) = self.terminals {
+                if let Some(terminal) = terminals.active_terminal() {
+                    // Try to get selected text first
+                    if let Some(text) = terminal.selected_text() {
+                        if !text.is_empty() {
+                            Some((text, true)) // true = from selection
+                        } else {
+                            None
+                        }
+                    } else {
+                        // Fallback: copy current line at cursor
+                        let grid = terminal.grid();
+                        let (_, row) = grid.cursor_pos();
+                        if let Some(line) = grid.row(row as usize) {
+                            let text: String = line.cells().iter().map(|c| c.character()).collect();
+                            let text = text.trim_end().to_string();
+                            if !text.is_empty() {
+                                Some((text, false)) // false = from line
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        }
+                    }
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        };
+
+        // Now copy and update status
+        if let Some((text, from_selection)) = text_to_copy {
+            self.copy_to_clipboard(&text);
+            if from_selection {
+                self.set_status("Copied selection");
+                // Clear selection after copy
+                if let Some(ref mut terminals) = self.terminals {
+                    if let Some(terminal) = terminals.active_terminal_mut() {
+                        terminal.clear_selection();
                     }
                 }
+            } else {
+                self.set_status("Copied line");
             }
         }
     }
@@ -631,6 +742,54 @@ impl App {
                 }
             } else {
                 self.set_status(format!("File not found: {}", filename));
+            }
+        } else if cmd == "update" {
+            // Check for updates and auto-update
+            self.handle_update_command();
+        }
+    }
+
+    /// Handles the update command - checks for updates and applies them.
+    fn handle_update_command(&mut self) {
+        use crate::updater::{UpdateStatus, Updater, VERSION};
+
+        self.set_status("Checking for updates...".to_string());
+
+        let updater = Updater::new();
+        match updater.check() {
+            UpdateStatus::Available(version) => {
+                self.set_status(format!(
+                    "Update available: v{} -> v{}. Downloading...",
+                    VERSION, version
+                ));
+
+                // Save session before updating
+                if let Err(e) = self.save_session() {
+                    self.set_status(format!("Failed to save session: {}", e));
+                    return;
+                }
+
+                // Perform update
+                match updater.update(&version) {
+                    Ok(()) => {
+                        self.set_status(format!(
+                            "Updated to v{}! Restart ratterm to use new version.",
+                            version
+                        ));
+                    }
+                    Err(e) => {
+                        self.set_status(format!("Update failed: {}", e));
+                    }
+                }
+            }
+            UpdateStatus::UpToDate => {
+                self.set_status(format!("Already up to date (v{})", VERSION));
+            }
+            UpdateStatus::Failed(e) => {
+                self.set_status(format!("Update check failed: {}", e));
+            }
+            UpdateStatus::Disabled => {
+                self.set_status("Updates disabled via RATTERM_NO_UPDATE".to_string());
             }
         }
     }
@@ -1132,6 +1291,108 @@ impl App {
                 self.editor.set_mode(EditorMode::Normal);
             }
             _ => {}
+        }
+    }
+
+    /// Handles mouse events.
+    pub(super) fn handle_mouse(&mut self, event: MouseEvent) {
+        // Only handle mouse events in normal mode
+        if self.mode != AppMode::Normal {
+            return;
+        }
+
+        // Get terminal area from cached layout
+        let terminal_area = self.cached_terminal_area();
+
+        match event.kind {
+            MouseEventKind::Down(MouseButton::Left) => {
+                // Check if click is in terminal area
+                if self.is_point_in_area(event.column, event.row, terminal_area) {
+                    // Convert to terminal-local coordinates
+                    let (local_col, local_row) = self.to_terminal_coords(event.column, event.row, terminal_area);
+                    self.start_terminal_selection(local_col, local_row);
+                    // Focus terminal pane on click
+                    self.layout.set_focused(FocusedPane::Terminal);
+                }
+            }
+            MouseEventKind::Drag(MouseButton::Left) => {
+                // Extend selection during drag
+                if self.is_point_in_area(event.column, event.row, terminal_area) {
+                    let (local_col, local_row) = self.to_terminal_coords(event.column, event.row, terminal_area);
+                    self.update_terminal_selection(local_col, local_row);
+                }
+            }
+            MouseEventKind::Up(MouseButton::Left) => {
+                // Finalize selection on mouse release
+                self.finalize_terminal_selection();
+            }
+            MouseEventKind::ScrollUp => {
+                // Scroll terminal up (into scrollback)
+                if self.is_point_in_area(event.column, event.row, terminal_area) {
+                    if let Some(ref mut terminals) = self.terminals {
+                        if let Some(terminal) = terminals.active_terminal_mut() {
+                            terminal.scroll_view_up(3);
+                        }
+                    }
+                }
+            }
+            MouseEventKind::ScrollDown => {
+                // Scroll terminal down (toward cursor)
+                if self.is_point_in_area(event.column, event.row, terminal_area) {
+                    if let Some(ref mut terminals) = self.terminals {
+                        if let Some(terminal) = terminals.active_terminal_mut() {
+                            terminal.scroll_view_down(3);
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Returns the cached terminal area for mouse coordinate conversion.
+    fn cached_terminal_area(&self) -> ratatui::layout::Rect {
+        // Returns the area cached during render
+        self.last_terminal_area.get()
+    }
+
+    /// Checks if a point is within an area.
+    fn is_point_in_area(&self, x: u16, y: u16, area: ratatui::layout::Rect) -> bool {
+        x >= area.x && x < area.x + area.width && y >= area.y && y < area.y + area.height
+    }
+
+    /// Converts screen coordinates to terminal-local coordinates.
+    fn to_terminal_coords(&self, x: u16, y: u16, area: ratatui::layout::Rect) -> (u16, u16) {
+        // Subtract area position and account for borders/padding (1 cell each side)
+        let local_x = x.saturating_sub(area.x + 1);
+        let local_y = y.saturating_sub(area.y + 2); // +2 for border and tab bar
+        (local_x, local_y)
+    }
+
+    /// Starts a terminal selection at the given local coordinates.
+    fn start_terminal_selection(&mut self, col: u16, row: u16) {
+        if let Some(ref mut terminals) = self.terminals {
+            if let Some(terminal) = terminals.active_terminal_mut() {
+                terminal.start_selection(col, row);
+            }
+        }
+    }
+
+    /// Updates the terminal selection end position.
+    fn update_terminal_selection(&mut self, col: u16, row: u16) {
+        if let Some(ref mut terminals) = self.terminals {
+            if let Some(terminal) = terminals.active_terminal_mut() {
+                terminal.update_selection(col, row);
+            }
+        }
+    }
+
+    /// Finalizes the terminal selection.
+    fn finalize_terminal_selection(&mut self) {
+        if let Some(ref mut terminals) = self.terminals {
+            if let Some(terminal) = terminals.active_terminal_mut() {
+                terminal.finalize_selection();
+            }
         }
     }
 }

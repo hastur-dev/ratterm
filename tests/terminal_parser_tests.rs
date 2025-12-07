@@ -2,9 +2,9 @@
 //!
 //! Tests cover: cursor movement, colors, text attributes, screen operations.
 
-use ratatui_full_ide::terminal::parser::AnsiParser;
-use ratatui_full_ide::terminal::ParsedAction;
-use ratatui_full_ide::terminal::style::{Color, Attr};
+use ratterm::terminal::parser::AnsiParser;
+use ratterm::terminal::ParsedAction;
+use ratterm::terminal::style::{Color, Attr};
 
 /// Test parsing plain text (no escape sequences).
 #[test]

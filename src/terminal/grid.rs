@@ -5,6 +5,7 @@
 use unicode_width::UnicodeWidthChar;
 
 use super::cell::{Cell, CursorShape, Row};
+use super::selection::{Selection, SelectionMode};
 use super::style::Style;
 
 /// Default tab stop width.
@@ -38,6 +39,8 @@ pub struct Grid {
     scrollback: Vec<Row>,
     /// Maximum scrollback lines.
     scrollback_limit: usize,
+    /// Current text selection.
+    selection: Option<Selection>,
 }
 
 impl Grid {
@@ -66,6 +69,7 @@ impl Grid {
             alternate_cursor: None,
             scrollback: Vec::new(),
             scrollback_limit: 10_000,
+            selection: None,
         }
     }
 
@@ -472,6 +476,159 @@ impl Grid {
                     cells[i] = Cell::default();
                 }
             }
+        }
+    }
+
+    // ========== Selection Methods ==========
+
+    /// Starts a new selection at the given position.
+    pub fn start_selection(&mut self, col: u16, row: u16) {
+        let col = col.min(self.cols.saturating_sub(1));
+        let row = row.min(self.visible_rows.saturating_sub(1));
+        self.selection = Some(Selection::new(col, row));
+    }
+
+    /// Starts a new selection with a specific mode.
+    pub fn start_selection_with_mode(&mut self, col: u16, row: u16, mode: SelectionMode) {
+        let col = col.min(self.cols.saturating_sub(1));
+        let row = row.min(self.visible_rows.saturating_sub(1));
+        self.selection = Some(Selection::with_mode(col, row, mode));
+    }
+
+    /// Updates the selection end position.
+    pub fn update_selection(&mut self, col: u16, row: u16) {
+        let col = col.min(self.cols.saturating_sub(1));
+        let row = row.min(self.visible_rows.saturating_sub(1));
+        if let Some(ref mut sel) = self.selection {
+            sel.update(col, row);
+        }
+    }
+
+    /// Finalizes the selection (e.g., mouse released).
+    pub fn finalize_selection(&mut self) {
+        if let Some(ref mut sel) = self.selection {
+            sel.finalize();
+        }
+    }
+
+    /// Clears the current selection.
+    pub fn clear_selection(&mut self) {
+        self.selection = None;
+    }
+
+    /// Returns a reference to the current selection.
+    #[must_use]
+    pub fn selection(&self) -> Option<&Selection> {
+        self.selection.as_ref()
+    }
+
+    /// Returns whether there is an active selection.
+    #[must_use]
+    pub fn has_selection(&self) -> bool {
+        self.selection.as_ref().map_or(false, |s| !s.is_empty())
+    }
+
+    /// Checks if a cell is within the current selection.
+    #[must_use]
+    pub fn is_cell_selected(&self, col: u16, row: u16) -> bool {
+        self.selection
+            .as_ref()
+            .map_or(false, |sel| sel.contains(col, row))
+    }
+
+    /// Returns the selected text from the grid.
+    #[must_use]
+    pub fn selected_text(&self) -> Option<String> {
+        let selection = self.selection.as_ref()?;
+        if selection.is_empty() {
+            return None;
+        }
+
+        let ((start_col, start_row), (end_col, end_row)) = selection.normalized();
+        let mut result = String::new();
+
+        for row_idx in start_row..=end_row {
+            let row = self.rows.get(row_idx as usize)?;
+
+            let col_start = if row_idx == start_row { start_col } else { 0 };
+            let col_end = if row_idx == end_row {
+                end_col
+            } else {
+                self.cols.saturating_sub(1)
+            };
+
+            for col in col_start..=col_end {
+                if let Some(cell) = row.cell(col) {
+                    let ch = cell.character();
+                    // Skip wide character continuations
+                    if !cell.is_wide_continuation() {
+                        result.push(ch);
+                    }
+                }
+            }
+
+            // Add newline between lines (not after last line)
+            if row_idx < end_row {
+                result.push('\n');
+            }
+        }
+
+        // Trim trailing whitespace from each line
+        let trimmed: String = result
+            .lines()
+            .map(|l| l.trim_end())
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed)
+        }
+    }
+
+    /// Starts selection from cursor position (for keyboard selection).
+    pub fn start_selection_at_cursor(&mut self) {
+        self.start_selection(self.cursor_col, self.cursor_row);
+    }
+
+    /// Extends selection left by one character.
+    pub fn extend_selection_left(&mut self) {
+        if self.selection.is_none() {
+            self.start_selection_at_cursor();
+        }
+        if let Some(ref mut sel) = self.selection {
+            sel.extend_left();
+        }
+    }
+
+    /// Extends selection right by one character.
+    pub fn extend_selection_right(&mut self) {
+        if self.selection.is_none() {
+            self.start_selection_at_cursor();
+        }
+        if let Some(ref mut sel) = self.selection {
+            sel.extend_right(self.cols);
+        }
+    }
+
+    /// Extends selection up by one row.
+    pub fn extend_selection_up(&mut self) {
+        if self.selection.is_none() {
+            self.start_selection_at_cursor();
+        }
+        if let Some(ref mut sel) = self.selection {
+            sel.extend_up();
+        }
+    }
+
+    /// Extends selection down by one row.
+    pub fn extend_selection_down(&mut self) {
+        if self.selection.is_none() {
+            self.start_selection_at_cursor();
+        }
+        if let Some(ref mut sel) = self.selection {
+            sel.extend_down(self.visible_rows);
         }
     }
 }

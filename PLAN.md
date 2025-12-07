@@ -1,408 +1,597 @@
-# Ratatui Full IDE - Architecture Plan
+# Implementation Plan: Theming System & Terminal Selection
 
 ## Overview
 
-A split-terminal TUI application:
-- **Left Pane**: Full PTY terminal emulator (bash/zsh/vim compatible)
-- **Right Pane**: VSCode-like editor using Language Server Protocol (LSP)
+Two major features to implement:
+1. **Theming/Customization System** - Full color, font, and layout customization via `.ratrc` and command palette
+2. **Terminal Selection** - Mouse click+drag and Shift+Arrow keyboard selection in terminal
 
 ---
 
-## Architecture
+## Feature 1: Theming/Customization System
+
+### Architecture
+
+Create a new `src/theme/` module with the following structure:
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                            ratatui-full-ide                             │
-├─────────────────────────────────────────────────────────────────────────┤
-│  src/                                                                   │
-│  ├── main.rs                 # Entry point, event loop                 │
-│  ├── app.rs                  # Application state & orchestration       │
-│  ├── config.rs               # Configuration loading (config.yaml)     │
-│  │                                                                      │
-│  ├── terminal/               # Left pane - PTY terminal                │
-│  │   ├── mod.rs                                                        │
-│  │   ├── pty.rs              # PTY spawning via portable-pty           │
-│  │   ├── parser.rs           # ANSI/VTE escape sequence parsing        │
-│  │   ├── grid.rs             # Terminal grid/cell buffer               │
-│  │   └── input.rs            # Keyboard input handling for PTY         │
-│  │                                                                      │
-│  ├── editor/                 # Right pane - Code editor                │
-│  │   ├── mod.rs                                                        │
-│  │   ├── buffer.rs           # Text buffer (using ropey)               │
-│  │   ├── cursor.rs           # Cursor position & movement              │
-│  │   ├── view.rs             # Viewport/scroll management              │
-│  │   ├── highlight.rs        # Tree-sitter syntax highlighting         │
-│  │   ├── input.rs            # Editor keybindings                      │
-│  │   └── file_picker.rs      # File search/picker UI                   │
-│  │                                                                      │
-│  ├── lsp/                    # Language Server Protocol client         │
-│  │   ├── mod.rs                                                        │
-│  │   ├── client.rs           # LSP client implementation               │
-│  │   ├── transport.rs        # JSON-RPC stdio transport                │
-│  │   ├── capabilities.rs     # Server capability negotiation           │
-│  │   ├── completion.rs       # Autocomplete handling                   │
-│  │   ├── diagnostics.rs      # Error/warning display                   │
-│  │   ├── hover.rs            # Hover information                       │
-│  │   ├── goto.rs             # Go-to-definition/references             │
-│  │   └── registry.rs         # Language server discovery/config        │
-│  │                                                                      │
-│  ├── ui/                     # UI rendering                            │
-│  │   ├── mod.rs                                                        │
-│  │   ├── layout.rs           # Split pane layout management            │
-│  │   ├── terminal_widget.rs  # Render PTY terminal                     │
-│  │   ├── editor_widget.rs    # Render code editor                      │
-│  │   ├── completion_menu.rs  # Autocomplete dropdown                   │
-│  │   ├── diagnostics_panel.rs # Error/warning list                     │
-│  │   ├── file_picker_widget.rs # File search UI                        │
-│  │   ├── statusbar.rs        # Status bar                              │
-│  │   └── theme.rs            # Color themes                            │
-│  │                                                                      │
-│  └── utils/                  # Shared utilities                        │
-│      ├── mod.rs                                                        │
-│      ├── event.rs            # Event types & channels                  │
-│      └── keybindings.rs      # Keybinding configuration                │
-│                                                                         │
-│  tests/                      # Integration tests                       │
-│  examples/                   # Usage examples                          │
-└─────────────────────────────────────────────────────────────────────────┘
+src/theme/
+├── mod.rs           # Theme system core, theme manager
+├── colors.rs        # Color definitions, parsing, RGB/named colors
+├── component.rs     # Per-component theme settings (terminal, editor, statusbar, etc.)
+├── preset.rs        # Built-in theme presets (dark, light, dracula, etc.)
+└── persistence.rs   # Save/load themes to .ratrc
 ```
 
----
+### Core Types
 
-## Core Dependencies
-
-| Crate | Purpose | Version |
-|-------|---------|---------|
-| `ratatui` | TUI framework | 0.29 |
-| `crossterm` | Terminal backend | 0.28 |
-| `portable-pty` | Cross-platform PTY | 0.8 |
-| `vte` | ANSI escape sequence parsing | 0.13 |
-| `ropey` | Efficient text buffer (rope data structure) | 1.6 |
-| `tree-sitter` | Syntax highlighting | 0.24 |
-| `tree-sitter-*` | Language grammars | various |
-| `lsp-types` | LSP protocol types | 0.97 |
-| `tokio` | Async runtime | 1.41 |
-| `serde` | Serialization | 1.0 |
-| `serde_json` | JSON for LSP | 1.0 |
-| `serde_yaml` | Config parsing | 0.9 |
-| `dirs` | Platform directories | 5.0 |
-| `fuzzy-matcher` | File picker fuzzy search | 0.3 |
-| `thiserror` | Error handling | 2.0 |
-| `tracing` | Logging/observability | 0.1 |
-
----
-
-## Component Details
-
-### 1. Terminal Emulator (Left Pane)
-
-**PTY Management (`terminal/pty.rs`)**
-- Spawn shell process via `portable-pty`
-- Read/write to PTY master fd
-- Handle window resize (SIGWINCH equivalent)
-
-**ANSI Parser (`terminal/parser.rs`)**
-- Use `vte` crate for parsing escape sequences
-- Support SGR (colors/styles), cursor movement, scrolling
-- Handle alternate screen buffer (for vim/less)
-
-**Terminal Grid (`terminal/grid.rs`)**
-- 2D grid of cells with character + style
-- Scrollback buffer (configurable size)
-- Damage tracking for efficient redraws
-
-**Key Features:**
-- Full ANSI/VT100/VT220 compatibility
-- 256-color and true color support
-- Mouse event passthrough
-- Scrollback history
-- Copy/paste support
-
-### 2. Code Editor (Right Pane)
-
-**Text Buffer (`editor/buffer.rs`)**
-- Use `ropey` rope data structure
-- O(log n) insertions/deletions
-- Line-based access for rendering
-- Undo/redo history
-
-**Syntax Highlighting (`editor/highlight.rs`)**
-- Tree-sitter for parsing
-- Incremental re-parsing on edits
-- Language grammar loading
-- Highlight queries for theming
-
-**Viewport (`editor/view.rs`)**
-- Scroll position management
-- Line wrapping (optional)
-- Line numbers
-- Git gutter (future)
-
-**File Picker (`editor/file_picker.rs`)**
-- Fuzzy file search
-- Recent files list
-- Directory browsing
-- Integration with left terminal for file ops
-
-### 3. LSP Client
-
-**Transport (`lsp/transport.rs`)**
-- JSON-RPC over stdio
-- Message framing (Content-Length headers)
-- Request/response correlation
-- Async message handling
-
-**Client (`lsp/client.rs`)**
-- Initialize/shutdown lifecycle
-- Capability negotiation
-- Document synchronization
-- Request multiplexing
-
-**Features Supported:**
-| Feature | LSP Method |
-|---------|------------|
-| Autocomplete | `textDocument/completion` |
-| Diagnostics | `textDocument/publishDiagnostics` |
-| Hover | `textDocument/hover` |
-| Go to Definition | `textDocument/definition` |
-| Find References | `textDocument/references` |
-| Signature Help | `textDocument/signatureHelp` |
-| Code Actions | `textDocument/codeAction` |
-| Formatting | `textDocument/formatting` |
-
-**Language Server Registry (`lsp/registry.rs`)**
-```yaml
-# config.yaml example
-language_servers:
-  rust:
-    command: rust-analyzer
-    args: []
-    root_patterns: ["Cargo.toml"]
-  python:
-    command: pyright-langserver
-    args: ["--stdio"]
-    root_patterns: ["pyproject.toml", "setup.py"]
-  typescript:
-    command: typescript-language-server
-    args: ["--stdio"]
-    root_patterns: ["package.json", "tsconfig.json"]
-```
-
-### 4. UI/Layout
-
-**Split Layout (`ui/layout.rs`)**
-- Horizontal split (terminal | editor)
-- Resizable split position
-- Focus management (Alt+Left/Right)
-- Fullscreen toggle for either pane
-
-**Keybindings:**
-| Key | Action |
-|-----|--------|
-| `Alt+Left/Right` | Switch focus between panes |
-| `Alt+[/]` | Resize pane split |
-| `Ctrl+P` | Open file picker (editor) |
-| `Ctrl+Space` | Trigger autocomplete (editor) |
-| `F2` | Go to definition |
-| `Shift+F2` | Find references |
-| `Ctrl+.` | Code actions |
-| `Ctrl+S` | Save file |
-| `Escape` | Close popups/menus |
-
----
-
-## Event Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        Main Event Loop                         │
-├─────────────────────────────────────────────────────────────────┤
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
-│  │   Terminal   │  │    Editor    │  │     LSP      │          │
-│  │   Events     │  │    Events    │  │   Events     │          │
-│  │   (PTY)      │  │  (keyboard)  │  │  (async)     │          │
-│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘          │
-│         │                 │                 │                   │
-│         └────────────────┴─────────────────┘                   │
-│                          │                                      │
-│                    ┌─────▼─────┐                                │
-│                    │  App::    │                                │
-│                    │  update() │                                │
-│                    └─────┬─────┘                                │
-│                          │                                      │
-│                    ┌─────▼─────┐                                │
-│                    │  render() │                                │
-│                    └───────────┘                                │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-**Event Types:**
+#### `src/theme/colors.rs`
 ```rust
-enum AppEvent {
-    // Input events
-    Key(KeyEvent),
-    Mouse(MouseEvent),
-    Resize(u16, u16),
-
-    // PTY events
-    PtyOutput(Vec<u8>),
-    PtyExit(i32),
-
-    // LSP events
-    LspResponse { id: i64, result: Value },
-    LspNotification { method: String, params: Value },
-    LspDiagnostics { uri: Url, diagnostics: Vec<Diagnostic> },
-
-    // Editor events
-    FileOpened { path: PathBuf },
-    FileSaved { path: PathBuf },
-
-    // System
-    Tick,
-    Quit,
+pub struct ThemeColor {
+    pub foreground: Color,
+    pub background: Color,
+    pub cursor: Color,
+    pub selection: Color,
+    // ANSI 16 colors (customizable)
+    pub black: Color,
+    pub red: Color,
+    pub green: Color,
+    pub yellow: Color,
+    pub blue: Color,
+    pub magenta: Color,
+    pub cyan: Color,
+    pub white: Color,
+    pub bright_black: Color,
+    pub bright_red: Color,
+    // ... etc
 }
 ```
 
----
+#### `src/theme/component.rs`
+```rust
+pub struct TerminalTheme {
+    pub colors: ThemeColor,
+    pub border_color: Color,
+    pub border_color_focused: Color,
+    pub tab_active_bg: Color,
+    pub tab_inactive_bg: Color,
+}
 
-## Configuration (config.yaml)
+pub struct EditorTheme {
+    pub colors: ThemeColor,
+    pub line_numbers_fg: Color,
+    pub line_numbers_bg: Color,
+    pub current_line_bg: Color,
+    pub border_color: Color,
+    pub border_color_focused: Color,
+}
 
-```yaml
-# Theme
-theme: "vscode-dark"
+pub struct StatusBarTheme {
+    pub background: Color,
+    pub foreground: Color,
+    pub mode_normal_bg: Color,
+    pub mode_insert_bg: Color,
+    pub mode_visual_bg: Color,
+    pub mode_command_bg: Color,
+}
 
-# Terminal settings
-terminal:
-  shell: null  # null = use $SHELL or default
-  scrollback: 10000
-  font_size: 14
-
-# Editor settings
-editor:
-  tab_size: 4
-  insert_spaces: true
-  word_wrap: false
-  line_numbers: true
-
-# LSP settings
-lsp:
-  auto_start: true
-  format_on_save: true
-
-# Language servers
-language_servers:
-  rust:
-    command: "rust-analyzer"
-  python:
-    command: "pyright-langserver"
-    args: ["--stdio"]
-  javascript:
-    command: "typescript-language-server"
-    args: ["--stdio"]
-  go:
-    command: "gopls"
-
-# Keybindings (override defaults)
-keybindings:
-  switch_pane: "Alt+Tab"
-  file_picker: "Ctrl+P"
+pub struct Theme {
+    pub name: String,
+    pub terminal: TerminalTheme,
+    pub editor: EditorTheme,
+    pub statusbar: StatusBarTheme,
+    pub file_browser: FileBrowserTheme,
+    pub popup: PopupTheme,
+}
 ```
 
+#### Per-Shell Themes
+```rust
+pub struct ShellThemeOverride {
+    pub shell_type: ShellType,
+    pub theme: Option<String>,  // Theme name or custom colors
+    pub colors: Option<ThemeColor>,  // Inline color overrides
+}
+```
+
+#### Per-Tab Themes
+```rust
+pub struct TabThemeConfig {
+    pub pattern: TabPattern,  // Sequential, ByShell, Custom
+    pub themes: Vec<String>,  // Theme names to cycle through
+}
+
+pub enum TabPattern {
+    Sequential,     // Each new tab gets next theme in list
+    ByShell,        // Theme based on shell type
+    Random,         // Random from list
+    Custom(String), // User-defined logic name
+}
+```
+
+### .ratrc Configuration Format
+
+```ini
+# Theme Configuration
+# -------------------
+
+# Global theme (built-in: dark, light, dracula, gruvbox, nord)
+theme = dark
+
+# Terminal colors
+terminal.foreground = #ffffff
+terminal.background = #1e1e1e
+terminal.cursor = #f0f0f0
+terminal.selection = #264f78
+terminal.border = #444444
+terminal.border_focused = #00ff00
+
+# Editor colors
+editor.foreground = #d4d4d4
+editor.background = #1e1e1e
+editor.line_numbers = #858585
+editor.current_line = #2a2a2a
+editor.border = #444444
+editor.border_focused = #569cd6
+
+# Status bar colors
+statusbar.background = #007acc
+statusbar.foreground = #ffffff
+statusbar.mode_normal = #007acc
+statusbar.mode_insert = #4ec9b0
+statusbar.mode_visual = #c586c0
+statusbar.mode_command = #ce9178
+
+# Tab colors
+tabs.active_bg = #1e1e1e
+tabs.inactive_bg = #2d2d2d
+tabs.active_fg = #ffffff
+tabs.inactive_fg = #808080
+
+# Per-shell themes
+[shell.powershell]
+terminal.background = #012456
+terminal.foreground = #eeedf0
+
+[shell.bash]
+terminal.background = #300a24
+terminal.foreground = #ffffff
+
+# Per-tab cycling
+tab_theme_pattern = sequential
+tab_themes = dark, dracula, nord
+
+# Popup/dialog colors
+popup.background = #252526
+popup.border = #3c3c3c
+popup.selected = #094771
+```
+
+### Command Palette Integration
+
+Add new commands to `CommandPalette`:
+
+```rust
+// Theme commands
+Command::new("theme.select", "Select Theme", "Appearance", None),
+Command::new("theme.customize", "Customize Colors", "Appearance", None),
+Command::new("theme.terminal.background", "Set Terminal Background", "Appearance", None),
+Command::new("theme.terminal.foreground", "Set Terminal Foreground", "Appearance", None),
+Command::new("theme.editor.background", "Set Editor Background", "Appearance", None),
+Command::new("theme.editor.foreground", "Set Editor Foreground", "Appearance", None),
+Command::new("theme.reset", "Reset to Default Theme", "Appearance", None),
+Command::new("theme.export", "Export Current Theme", "Appearance", None),
+```
+
+### New Popup Types
+
+```rust
+pub enum PopupKind {
+    // ... existing
+    ThemeSelector,       // Select from preset themes
+    ColorPicker,         // Pick a color (hex input, named colors)
+    ComponentCustomizer, // Customize specific component
+}
+```
+
+### Config Module Updates
+
+Extend `src/config/mod.rs`:
+- Add `theme: Theme` field to `Config`
+- Add parsing for theme-related settings in `.ratrc`
+- Add `save_setting()` method to write individual settings back to `.ratrc`
+- Preserve comments and formatting when modifying `.ratrc`
+
+### Files to Modify
+
+| File | Changes |
+|------|---------|
+| `src/config/mod.rs` | Add theme config parsing, add `save_setting()` method |
+| `src/app/mod.rs` | Add `theme` field, pass theme to widgets |
+| `src/ui/terminal_widget.rs` | Accept theme, apply colors |
+| `src/ui/editor_widget.rs` | Accept theme, apply colors |
+| `src/ui/statusbar.rs` | Accept theme, apply colors |
+| `src/ui/popup.rs` | Add ThemeSelector, ColorPicker popups, accept theme |
+| `src/ui/terminal_tabs.rs` | Accept theme, apply colors |
+| `src/ui/editor_tabs.rs` | Accept theme, apply colors |
+| `src/ui/file_picker.rs` | Accept theme, apply colors |
+| `src/terminal/multiplexer.rs` | Support per-tab theme assignment |
+
+### New Files
+
+| File | Purpose |
+|------|---------|
+| `src/theme/mod.rs` | Theme module, ThemeManager |
+| `src/theme/colors.rs` | Color types, parsing hex/named |
+| `src/theme/component.rs` | Component-specific themes |
+| `src/theme/preset.rs` | Built-in presets |
+| `src/theme/persistence.rs` | Save theme changes to .ratrc |
+
 ---
 
-## Implementation Phases
+## Feature 2: Terminal Selection
 
-### Phase 1: Foundation
-1. Project scaffold with Cargo workspace
-2. Basic ratatui app with split layout
-3. Event loop architecture
-4. Configuration loading
+### Architecture
 
-### Phase 2: Terminal Emulator
-1. PTY spawning with portable-pty
-2. VTE parser integration
-3. Terminal grid and rendering
-4. Input handling and passthrough
+Add selection state to the terminal grid and handle mouse/keyboard events.
 
-### Phase 3: Basic Editor
-1. Text buffer with ropey
-2. Cursor movement and editing
-3. File loading/saving
-4. Basic viewport scrolling
+### Selection State
 
-### Phase 4: Syntax Highlighting
-1. Tree-sitter integration
-2. Language grammar loading
-3. Highlight query application
-4. Theme system
+Add to `src/terminal/grid.rs`:
 
-### Phase 5: LSP Integration
-1. JSON-RPC transport
-2. LSP client lifecycle
-3. Document synchronization
-4. Autocomplete
+```rust
+pub struct Selection {
+    /// Start position (col, row) in grid coordinates
+    pub start: (u16, u16),
+    /// End position (col, row) in grid coordinates
+    pub end: (u16, u16),
+    /// Whether selection is active (mouse button held)
+    pub active: bool,
+    /// Selection mode
+    pub mode: SelectionMode,
+}
 
-### Phase 6: Advanced LSP Features
-1. Diagnostics display
-2. Hover information
-3. Go-to-definition
-4. Code actions
+pub enum SelectionMode {
+    /// Character-by-character selection
+    Normal,
+    /// Select entire lines
+    Line,
+    /// Select rectangular block
+    Block,
+}
+```
 
-### Phase 7: Polish
-1. File picker with fuzzy search
-2. Status bar
-3. Error handling improvements
-4. Performance optimization
+### Grid Updates
+
+Add to `Grid`:
+```rust
+impl Grid {
+    pub fn start_selection(&mut self, col: u16, row: u16);
+    pub fn update_selection(&mut self, col: u16, row: u16);
+    pub fn clear_selection(&mut self);
+    pub fn get_selection(&self) -> Option<&Selection>;
+    pub fn selected_text(&self) -> Option<String>;
+    pub fn is_cell_selected(&self, col: u16, row: u16) -> bool;
+}
+```
+
+### Terminal Module Updates
+
+Add to `src/terminal/mod.rs`:
+```rust
+impl Terminal {
+    /// Start selection at grid position
+    pub fn start_selection(&mut self, col: u16, row: u16);
+
+    /// Update selection end position
+    pub fn update_selection(&mut self, col: u16, row: u16);
+
+    /// Clear current selection
+    pub fn clear_selection(&mut self);
+
+    /// Get selected text
+    pub fn selected_text(&self) -> Option<String>;
+
+    /// Check if selection exists
+    pub fn has_selection(&self) -> bool;
+
+    /// Handle shift+arrow selection from cursor
+    pub fn select_left(&mut self);
+    pub fn select_right(&mut self);
+    pub fn select_up(&mut self);
+    pub fn select_down(&mut self);
+}
+```
+
+### Mouse Event Handling
+
+Update `src/app/mod.rs` to handle mouse events:
+
+```rust
+pub fn update(&mut self) -> io::Result<()> {
+    // ... existing code ...
+
+    if event::poll(Duration::from_millis(POLL_TIMEOUT_MS))? {
+        match event::read()? {
+            Event::Key(key) => self.handle_key(key),
+            Event::Mouse(mouse) => self.handle_mouse(mouse),
+            Event::Resize(w, h) => self.resize(w, h),
+            _ => {}
+        }
+    }
+
+    Ok(())
+}
+```
+
+Add mouse handler in `src/app/input.rs`:
+
+```rust
+use crossterm::event::{MouseEvent, MouseEventKind, MouseButton};
+
+impl App {
+    pub fn handle_mouse(&mut self, event: MouseEvent) {
+        // Check if click is within terminal area
+        let areas = self.layout.calculate(/* frame size */);
+
+        match event.kind {
+            MouseEventKind::Down(MouseButton::Left) => {
+                if self.is_in_terminal_area(event.column, event.row, &areas) {
+                    // Convert to terminal-local coordinates
+                    let (local_col, local_row) = self.to_terminal_coords(event.column, event.row, &areas);
+                    self.start_terminal_selection(local_col, local_row);
+                }
+            }
+            MouseEventKind::Drag(MouseButton::Left) => {
+                if self.is_in_terminal_area(event.column, event.row, &areas) {
+                    let (local_col, local_row) = self.to_terminal_coords(event.column, event.row, &areas);
+                    self.update_terminal_selection(local_col, local_row);
+                }
+            }
+            MouseEventKind::Up(MouseButton::Left) => {
+                self.finalize_terminal_selection();
+            }
+            MouseEventKind::ScrollUp => {
+                self.handle_scroll_up();
+            }
+            MouseEventKind::ScrollDown => {
+                self.handle_scroll_down();
+            }
+            _ => {}
+        }
+    }
+}
+```
+
+### Keyboard Selection (Shift+Arrow)
+
+Update `src/app/input.rs` - add to `handle_terminal_key`:
+
+```rust
+// Shift+Arrow for selection (starts from cursor position)
+(KeyModifiers::SHIFT, KeyCode::Left) => {
+    if let Some(ref mut terminals) = self.terminals {
+        if let Some(terminal) = terminals.active_terminal_mut() {
+            terminal.select_left();
+        }
+    }
+    return;
+}
+(KeyModifiers::SHIFT, KeyCode::Right) => {
+    if let Some(ref mut terminals) = self.terminals {
+        if let Some(terminal) = terminals.active_terminal_mut() {
+            terminal.select_right();
+        }
+    }
+    return;
+}
+(KeyModifiers::SHIFT, KeyCode::Up) => {
+    // Selects from current position to same column on line above
+    // OR extends selection upward, selecting everything between
+    if let Some(ref mut terminals) = self.terminals {
+        if let Some(terminal) = terminals.active_terminal_mut() {
+            terminal.select_up();
+        }
+    }
+    return;
+}
+(KeyModifiers::SHIFT, KeyCode::Down) => {
+    if let Some(ref mut terminals) = self.terminals {
+        if let Some(terminal) = terminals.active_terminal_mut() {
+            terminal.select_down();
+        }
+    }
+    return;
+}
+```
+
+### Selection Text Extraction Logic
+
+When selection spans multiple lines:
+```rust
+fn selected_text(&self) -> Option<String> {
+    let selection = self.selection.as_ref()?;
+
+    // Normalize: ensure start is before end
+    let (start, end) = if selection.start.1 < selection.end.1
+        || (selection.start.1 == selection.end.1 && selection.start.0 <= selection.end.0) {
+        (selection.start, selection.end)
+    } else {
+        (selection.end, selection.start)
+    };
+
+    let mut result = String::new();
+
+    for row in start.1..=end.1 {
+        let row_data = self.row(row as usize)?;
+
+        let col_start = if row == start.1 { start.0 } else { 0 };
+        let col_end = if row == end.1 { end.0 } else { self.cols - 1 };
+
+        for col in col_start..=col_end {
+            if let Some(cell) = row_data.cell(col) {
+                result.push(cell.character());
+            }
+        }
+
+        // Add newline between lines (not after last line)
+        if row < end.1 {
+            result.push('\n');
+        }
+    }
+
+    // Trim trailing whitespace from each line
+    Some(result.lines()
+        .map(|l| l.trim_end())
+        .collect::<Vec<_>>()
+        .join("\n"))
+}
+```
+
+### Terminal Widget Rendering
+
+Update `src/ui/terminal_widget.rs` to render selection:
+
+```rust
+fn render_row_cells(&self, ...) {
+    let selection = self.terminal.grid().get_selection();
+
+    for col in 0..cols {
+        let cell = row.cell(col as u16)?;
+        let x = area.x + col as u16;
+
+        if let Some(ratatui_cell) = buf.cell_mut((x, y)) {
+            ratatui_cell.set_char(cell.character());
+
+            // Check if this cell is selected
+            let is_selected = selection
+                .map(|s| self.is_cell_in_selection(col as u16, screen_row as u16, s))
+                .unwrap_or(false);
+
+            if is_selected {
+                // Apply selection highlight (inverted or custom color)
+                let selection_style = Style::default()
+                    .bg(Color::Rgb(38, 79, 120))  // Selection blue
+                    .fg(Color::White);
+                ratatui_cell.set_style(selection_style);
+            } else {
+                ratatui_cell.set_style(cell.style().to_ratatui());
+            }
+        }
+    }
+}
+```
+
+### Copy Selection Update
+
+Update existing `copy_terminal_selection()` in `src/app/input.rs`:
+
+```rust
+fn copy_terminal_selection(&mut self) {
+    if let Some(ref mut terminals) = self.terminals {
+        if let Some(terminal) = terminals.active_terminal_mut() {
+            if let Some(text) = terminal.selected_text() {
+                if !text.is_empty() {
+                    self.copy_to_clipboard(&text);
+                    self.set_status("Copied selection");
+                    // Optionally clear selection after copy
+                    terminal.clear_selection();
+                }
+            } else {
+                // Fallback: copy current line at cursor (existing behavior)
+                let grid = terminal.grid();
+                let (_, row) = grid.cursor_pos();
+                if let Some(line) = grid.row(row as usize) {
+                    let text: String = line.cells().iter().map(|c| c.character()).collect();
+                    let text = text.trim_end();
+                    if !text.is_empty() {
+                        self.copy_to_clipboard(text);
+                    }
+                }
+            }
+        }
+    }
+}
+```
+
+### Files to Modify
+
+| File | Changes |
+|------|---------|
+| `src/terminal/grid.rs` | Add Selection struct, selection methods, `is_cell_selected()` |
+| `src/terminal/mod.rs` | Add selection delegation methods, Shift+Arrow handlers |
+| `src/app/mod.rs` | Add mouse event handling in `update()`, store layout areas |
+| `src/app/input.rs` | Add `handle_mouse()`, Shift+Arrow handling, update copy |
+| `src/ui/terminal_widget.rs` | Render selection highlight, accept selection state |
 
 ---
 
-## Safety Rules Compliance
+## Implementation Order
 
-| Rule | Implementation |
-|------|----------------|
-| Simple Control Flow | No recursion; iterative algorithms with explicit stacks |
-| Bounded Loops | All loops have MAX_ITERATIONS constants |
-| No Runtime Allocation | Pre-allocated buffers for terminal grid, text chunks |
-| Function Length ≤60 lines | Enforced via clippy lint |
-| Assertion Density ≥2/fn | Debug assertions for invariants |
-| Minimal Scope | Variables declared at point of use |
-| Checked Returns | All Results propagated with `?` or explicit handling |
-| Limited Macros | Only derive macros and logging |
-| Single Dereference | References only, no raw pointers |
-| Zero Warnings | `RUSTFLAGS="-D warnings"` in CI |
+### Phase 1: Terminal Selection (Simpler, foundational) - ~300 lines new code
+1. Add `Selection` struct to `src/terminal/grid.rs` (~50 lines)
+2. Implement selection methods in `Grid` (~80 lines)
+3. Add delegation methods in `Terminal` (~40 lines)
+4. Add `handle_mouse()` to `src/app/input.rs` (~60 lines)
+5. Add Shift+Arrow handling in `handle_terminal_key()` (~30 lines)
+6. Update `TerminalWidget` to render selection (~40 lines)
+7. Update `copy_terminal_selection()` (~20 lines)
+8. Write tests for selection logic
+9. Update documentation (`docs/hotkeys.md`)
 
----
-
-## Test Strategy
-
-| Component | Test Type | Coverage Target |
-|-----------|-----------|-----------------|
-| terminal/parser | Unit (property-based) | ANSI sequence parsing |
-| terminal/grid | Unit | Cell operations, scrolling |
-| editor/buffer | Unit (property-based) | Rope operations |
-| editor/cursor | Unit | Movement, bounds |
-| lsp/transport | Unit | Message framing |
-| lsp/client | Integration | Request/response flow |
-| ui/* | Snapshot | Render output |
-| Full app | Integration | User workflows |
-
----
-
-## File Line Counts (Target)
-
-Each file should stay under 500 lines per the /enforce-5-steps rule. Complex components are split:
-
-- `lsp/client.rs` → `client.rs` + `capabilities.rs` + `sync.rs`
-- `terminal/parser.rs` → Uses `vte` crate, thin wrapper
-- `editor/buffer.rs` → `buffer.rs` + `history.rs` (undo/redo)
+### Phase 2: Theming System (Larger scope) - ~800-1000 lines new code
+1. Create `src/theme/colors.rs` (~150 lines)
+2. Create `src/theme/component.rs` (~200 lines)
+3. Create `src/theme/preset.rs` (~150 lines)
+4. Create `src/theme/persistence.rs` (~100 lines)
+5. Create `src/theme/mod.rs` (~100 lines)
+6. Extend `src/config/mod.rs` for theme parsing (~100 lines)
+7. Update all UI widgets to accept theme (~150 lines across files)
+8. Add command palette commands (~50 lines)
+9. Implement ThemeSelector popup (~80 lines)
+10. Implement ColorPicker popup (~100 lines)
+11. Add per-shell theme support (~50 lines)
+12. Add per-tab theme cycling (~50 lines)
+13. Write tests
+14. Update documentation (`docs/ratrc_docs.md`, `docs/hotkeys.md`)
 
 ---
 
-## Next Steps
+## Documentation Updates
 
-Upon approval of this plan:
-1. Write comprehensive test files (Step 1)
-2. Implement and verify (Step 2)
-3. Generate README.md (Step 3)
-4. Generate DEPENDENCIES.md (Step 4)
-5. Verify all files ≤500 lines (Step 5)
+### `docs/ratrc_docs.md` - Add sections:
+- Theme Configuration (global theme selection)
+- Terminal Color Settings
+- Editor Color Settings
+- Status Bar Color Settings
+- Tab Color Settings
+- Per-Shell Theme Overrides
+- Per-Tab Theme Patterns
+- Color Format (hex, named colors)
+- Examples for common customizations
+
+### `docs/hotkeys.md` - Add sections:
+- Terminal Selection
+  - `Click+Drag` - Select text with mouse
+  - `Shift+Left/Right` - Extend selection character by character
+  - `Shift+Up/Down` - Extend selection by line
+  - `Ctrl+Shift+C` - Copy selection
+- Theme Commands (Command Palette)
+  - Select Theme
+  - Customize Colors
+  - Reset Theme
+
+---
+
+## Line Count Compliance
+
+Each new file will be kept under 500 lines:
+- `src/theme/colors.rs` - ~150 lines
+- `src/theme/component.rs` - ~200 lines
+- `src/theme/preset.rs` - ~150 lines
+- `src/theme/persistence.rs` - ~100 lines
+- `src/theme/mod.rs` - ~100 lines
+
+Modifications to existing files stay within limits by:
+- Selection logic in grid.rs adds ~130 lines (grid.rs currently ~478 lines → ~480 after split)
+- If grid.rs exceeds 500, split selection into `src/terminal/selection.rs`

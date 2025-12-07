@@ -10,6 +10,7 @@ use ratatui::{
 };
 
 use crate::terminal::{grid::Grid, Terminal};
+use crate::theme::TerminalTheme;
 
 /// Terminal widget for rendering.
 pub struct TerminalWidget<'a> {
@@ -19,6 +20,8 @@ pub struct TerminalWidget<'a> {
     focused: bool,
     /// Title for the terminal pane.
     title: Option<&'a str>,
+    /// Theme for rendering colors.
+    theme: Option<&'a TerminalTheme>,
 }
 
 impl<'a> TerminalWidget<'a> {
@@ -29,6 +32,7 @@ impl<'a> TerminalWidget<'a> {
             terminal,
             focused: false,
             title: None,
+            theme: None,
         }
     }
 
@@ -46,6 +50,13 @@ impl<'a> TerminalWidget<'a> {
         self
     }
 
+    /// Sets the theme.
+    #[must_use]
+    pub fn theme(mut self, theme: &'a TerminalTheme) -> Self {
+        self.theme = Some(theme);
+        self
+    }
+
     /// Renders the terminal grid with scroll offset support.
     fn render_grid(&self, area: Rect, buf: &mut RatatuiBuffer) {
         let grid = self.terminal.grid();
@@ -60,7 +71,7 @@ impl<'a> TerminalWidget<'a> {
 
             let row_from_bottom = visible_rows - 1 - screen_row;
             let row_to_render = if row_from_bottom < scroll_offset {
-                // This row is in scrollback
+                // This row is in scrollback (selection not supported in scrollback for now)
                 let scrollback_idx = scroll_offset - 1 - row_from_bottom;
                 self.render_scrollback_row(grid, scrollback_idx, screen_row, cols, area, buf);
                 continue;
@@ -74,7 +85,7 @@ impl<'a> TerminalWidget<'a> {
 
             // Render row from visible grid
             if let Some(row) = grid.row(row_to_render) {
-                self.render_row_cells(row, screen_row, cols, area, buf);
+                self.render_row_cells(row, row_to_render, screen_row, cols, area, buf, grid);
             }
         }
 
@@ -100,7 +111,7 @@ impl<'a> TerminalWidget<'a> {
         }
     }
 
-    /// Renders a row from the scrollback buffer.
+    /// Renders a row from the scrollback buffer (no selection support in scrollback).
     fn render_scrollback_row(
         &self,
         grid: &Grid,
@@ -111,7 +122,22 @@ impl<'a> TerminalWidget<'a> {
         buf: &mut RatatuiBuffer,
     ) {
         if let Some(row) = grid.scrollback_row(scrollback_idx) {
-            self.render_row_cells(row, screen_row, cols, area, buf);
+            // Scrollback rows don't support selection, render without grid reference
+            let y = area.y + screen_row as u16;
+            if y >= area.y + area.height {
+                return;
+            }
+            for col in 0..cols {
+                if let Some(cell) = row.cell(col as u16) {
+                    let x = area.x + col as u16;
+                    if x < area.x + area.width {
+                        if let Some(ratatui_cell) = buf.cell_mut((x, y)) {
+                            ratatui_cell.set_char(cell.character());
+                            ratatui_cell.set_style(cell.style().to_ratatui());
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -119,15 +145,26 @@ impl<'a> TerminalWidget<'a> {
     fn render_row_cells(
         &self,
         row: &crate::terminal::cell::Row,
+        grid_row: usize,
         screen_row: usize,
         cols: usize,
         area: Rect,
         buf: &mut RatatuiBuffer,
+        grid: &Grid,
     ) {
         let y = area.y + screen_row as u16;
         if y >= area.y + area.height {
             return;
         }
+
+        // Selection highlight style - use theme if available
+        let selection_color = self
+            .theme
+            .map(|t| t.selection)
+            .unwrap_or(Color::Rgb(38, 79, 120));
+        let selection_style = Style::default()
+            .bg(selection_color)
+            .fg(Color::White);
 
         for col in 0..cols {
             if let Some(cell) = row.cell(col as u16) {
@@ -135,7 +172,13 @@ impl<'a> TerminalWidget<'a> {
                 if x < area.x + area.width {
                     if let Some(ratatui_cell) = buf.cell_mut((x, y)) {
                         ratatui_cell.set_char(cell.character());
-                        ratatui_cell.set_style(cell.style().to_ratatui());
+
+                        // Check if this cell is selected
+                        if grid.is_cell_selected(col as u16, grid_row as u16) {
+                            ratatui_cell.set_style(selection_style);
+                        } else {
+                            ratatui_cell.set_style(cell.style().to_ratatui());
+                        }
                     }
                 }
             }
@@ -145,11 +188,16 @@ impl<'a> TerminalWidget<'a> {
 
 impl<'a> Widget for TerminalWidget<'a> {
     fn render(self, area: Rect, buf: &mut RatatuiBuffer) {
-        // Create block with border
+        // Create block with border - use theme if available
+        let (border_focused, border_unfocused) = self
+            .theme
+            .map(|t| (t.border_focused, t.border))
+            .unwrap_or((Color::Green, Color::DarkGray));
+
         let border_style = if self.focused {
-            Style::default().fg(Color::Green)
+            Style::default().fg(border_focused)
         } else {
-            Style::default().fg(Color::DarkGray)
+            Style::default().fg(border_unfocused)
         };
 
         let title = self.title.unwrap_or("Terminal");

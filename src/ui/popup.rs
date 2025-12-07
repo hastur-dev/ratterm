@@ -14,6 +14,7 @@ use fuzzy_matcher::skim::SkimMatcherV2;
 use fuzzy_matcher::FuzzyMatcher;
 
 use crate::config::{KeybindingMode, ShellDetector, ShellInstaller, ShellType};
+use crate::theme::ThemePreset;
 
 /// Type of popup dialog.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -40,6 +41,8 @@ pub enum PopupKind {
     ShellSelector,
     /// Shell install prompt when selected shell is not available.
     ShellInstallPrompt,
+    /// Theme selector for choosing color theme.
+    ThemeSelector,
 }
 
 impl PopupKind {
@@ -58,6 +61,7 @@ impl PopupKind {
             Self::ModeSwitcher => "Switch Editor Mode",
             Self::ShellSelector => "Select Shell",
             Self::ShellInstallPrompt => "Shell Not Available",
+            Self::ThemeSelector => "Select Theme",
         }
     }
 
@@ -76,6 +80,7 @@ impl PopupKind {
             Self::ModeSwitcher => "",
             Self::ShellSelector => "",
             Self::ShellInstallPrompt => "",
+            Self::ThemeSelector => "",
         }
     }
 
@@ -107,6 +112,12 @@ impl PopupKind {
     #[must_use]
     pub fn is_shell_install_prompt(&self) -> bool {
         matches!(self, Self::ShellInstallPrompt)
+    }
+
+    /// Returns true if this popup is a theme selector.
+    #[must_use]
+    pub fn is_theme_selector(&self) -> bool {
+        matches!(self, Self::ThemeSelector)
     }
 }
 
@@ -544,6 +555,18 @@ impl CommandPalette {
             Command::new("terminal.nextTab", "Next Terminal Tab", "Terminal", Some("Ctrl+Right")),
             Command::new("terminal.prevTab", "Previous Terminal Tab", "Terminal", Some("Ctrl+Left")),
             Command::new("terminal.selectShell", "Select Shell", "Terminal", None),
+            // Theme commands
+            Command::new("theme.select", "Select Theme", "Theme", None),
+            Command::new("theme.dark", "Dark Theme", "Theme", None),
+            Command::new("theme.light", "Light Theme", "Theme", None),
+            Command::new("theme.dracula", "Dracula Theme", "Theme", None),
+            Command::new("theme.gruvbox", "Gruvbox Theme", "Theme", None),
+            Command::new("theme.nord", "Nord Theme", "Theme", None),
+            // Extension commands
+            Command::new("extension.list", "List Installed", "Extension", None),
+            Command::new("extension.install", "Install from GitHub", "Extension", None),
+            Command::new("extension.update", "Update All", "Extension", None),
+            Command::new("extension.remove", "Remove Extension", "Extension", None),
             // Application commands
             Command::new("app.quit", "Quit", "Application", Some("Ctrl+Q")),
             Command::new("app.commandPalette", "Command Palette", "Application", Some("Ctrl+Shift+P")),
@@ -1149,6 +1172,179 @@ impl Widget for ShellInstallPromptWidget<'_> {
             Paragraph::new(footer)
                 .alignment(Alignment::Center)
                 .render(chunks[footer_idx], buf);
+        }
+    }
+}
+
+/// Theme selector state for choosing color theme.
+pub struct ThemeSelector {
+    /// All available themes.
+    themes: Vec<ThemePreset>,
+    /// Currently selected theme index.
+    selected_index: usize,
+    /// Original theme when selector was opened (for cancel).
+    original_theme: ThemePreset,
+}
+
+impl ThemeSelector {
+    /// Creates a new theme selector starting at the given theme.
+    #[must_use]
+    pub fn new(current_theme: Option<ThemePreset>) -> Self {
+        let themes: Vec<ThemePreset> = ThemePreset::all().to_vec();
+        let current = current_theme.unwrap_or(ThemePreset::Dark);
+
+        let selected_index = themes
+            .iter()
+            .position(|t| *t == current)
+            .unwrap_or(0);
+
+        Self {
+            themes,
+            selected_index,
+            original_theme: current,
+        }
+    }
+
+    /// Cycles to the next theme.
+    pub fn next(&mut self) {
+        self.selected_index = (self.selected_index + 1) % self.themes.len();
+    }
+
+    /// Cycles to the previous theme.
+    pub fn prev(&mut self) {
+        if self.selected_index == 0 {
+            self.selected_index = self.themes.len() - 1;
+        } else {
+            self.selected_index -= 1;
+        }
+    }
+
+    /// Returns the currently selected theme.
+    #[must_use]
+    pub fn selected_theme(&self) -> ThemePreset {
+        self.themes[self.selected_index]
+    }
+
+    /// Returns the original theme (for cancellation).
+    #[must_use]
+    pub fn original_theme(&self) -> ThemePreset {
+        self.original_theme
+    }
+
+    /// Returns all themes with their selection state.
+    #[must_use]
+    pub fn themes_with_selection(&self) -> Vec<(ThemePreset, bool)> {
+        self.themes
+            .iter()
+            .enumerate()
+            .map(|(i, theme)| (*theme, i == self.selected_index))
+            .collect()
+    }
+}
+
+/// Widget for rendering the theme selector popup.
+pub struct ThemeSelectorWidget<'a> {
+    selector: &'a ThemeSelector,
+}
+
+impl<'a> ThemeSelectorWidget<'a> {
+    /// Creates a new theme selector widget.
+    #[must_use]
+    pub fn new(selector: &'a ThemeSelector) -> Self {
+        Self { selector }
+    }
+
+    /// Calculates the popup area (centered).
+    fn popup_area(&self, area: Rect) -> Rect {
+        let width = 40_u16.min(area.width.saturating_sub(4));
+        let height = 9_u16.min(area.height.saturating_sub(4)); // Title + 5 themes + padding
+
+        let x = (area.width.saturating_sub(width)) / 2;
+        let y = (area.height.saturating_sub(height)) / 2;
+
+        Rect::new(x, y, width, height)
+    }
+}
+
+impl Widget for ThemeSelectorWidget<'_> {
+    fn render(self, area: Rect, buf: &mut Buffer) {
+        let popup_area = self.popup_area(area);
+
+        // Clear background
+        Clear.render(popup_area, buf);
+
+        // Draw border
+        let block = Block::default()
+            .title(" Select Theme ")
+            .title_alignment(Alignment::Center)
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Cyan));
+
+        let inner = block.inner(popup_area);
+        block.render(popup_area, buf);
+
+        // Layout for themes
+        let theme_count = self.selector.themes.len();
+        let mut constraints: Vec<Constraint> = Vec::with_capacity(theme_count + 1);
+        for _ in 0..theme_count {
+            constraints.push(Constraint::Length(1));
+        }
+        constraints.push(Constraint::Length(1)); // Instructions
+
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .margin(0)
+            .constraints(constraints)
+            .split(inner);
+
+        // Render each theme
+        for (i, (theme, is_selected)) in self.selector.themes_with_selection().iter().enumerate() {
+            if i >= chunks.len() {
+                break;
+            }
+
+            let name = theme.name();
+            let display_name = match name {
+                "dark" => "Dark",
+                "light" => "Light",
+                "dracula" => "Dracula",
+                "gruvbox" => "Gruvbox",
+                "nord" => "Nord",
+                _ => name,
+            };
+
+            let (style, prefix) = if *is_selected {
+                (
+                    Style::default()
+                        .fg(Color::Black)
+                        .bg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                    "► ",
+                )
+            } else {
+                (Style::default().fg(Color::White), "  ")
+            };
+
+            let text = format!("{}{}", prefix, display_name);
+            let para = Paragraph::new(text)
+                .style(style)
+                .alignment(Alignment::Center);
+            para.render(chunks[i], buf);
+        }
+
+        // Render instructions at the bottom
+        if chunks.len() > theme_count {
+            let instructions = Line::from(vec![
+                Span::styled("↑↓", Style::default().fg(Color::Cyan)),
+                Span::raw(" Select  "),
+                Span::styled("Enter", Style::default().fg(Color::Cyan)),
+                Span::raw(" Apply  "),
+                Span::styled("Esc", Style::default().fg(Color::Cyan)),
+                Span::raw(" Cancel"),
+            ]);
+            Paragraph::new(instructions)
+                .alignment(Alignment::Center)
+                .render(chunks[theme_count], buf);
         }
     }
 }

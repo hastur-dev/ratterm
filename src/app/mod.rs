@@ -5,17 +5,21 @@
 mod input;
 mod keymap;
 
+use std::cell::Cell;
 use std::io;
 use std::path::PathBuf;
 use std::time::Duration;
 
 use crossterm::event::{self, Event};
+use ratatui::layout::Rect;
 
 use crate::clipboard::Clipboard;
 use crate::config::{Config, KeybindingMode, ShellType};
 use crate::editor::Editor;
+use crate::extension::ExtensionManager;
 use crate::filebrowser::FileBrowser;
 use crate::terminal::{pty::PtyError, TerminalMultiplexer};
+use crate::theme::ThemePreset;
 use crate::ui::{
     editor_tabs::{EditorTabBar, EditorTabInfo},
     editor_widget::EditorWidget,
@@ -24,6 +28,7 @@ use crate::ui::{
     popup::{
         CommandPalette, ModeSwitcher, ModeSwitcherWidget, Popup, PopupKind, PopupWidget,
         ShellInstallPrompt, ShellInstallPromptWidget, ShellSelector, ShellSelectorWidget,
+        ThemeSelector, ThemeSelectorWidget,
     },
     statusbar::StatusBar,
     terminal_tabs::TerminalTabBar,
@@ -76,6 +81,8 @@ pub struct App {
     shell_selector: Option<ShellSelector>,
     /// Shell install prompt for unavailable shells.
     shell_install_prompt: Option<ShellInstallPrompt>,
+    /// Theme selector for choosing color theme.
+    theme_selector: Option<ThemeSelector>,
     /// Open files (tabs).
     open_files: Vec<OpenFile>,
     /// Current file index.
@@ -90,6 +97,8 @@ pub struct App {
     clipboard: Clipboard,
     /// Configuration.
     config: Config,
+    /// Cached terminal area for mouse coordinate conversion (interior mutability for render).
+    last_terminal_area: Cell<Rect>,
 }
 
 impl App {
@@ -131,6 +140,7 @@ impl App {
             mode_switcher: None,
             shell_selector: None,
             shell_install_prompt: None,
+            theme_selector: None,
             open_files: Vec::new(),
             current_file_idx: 0,
             running: true,
@@ -138,6 +148,7 @@ impl App {
             last_error: None,
             clipboard: Clipboard::new(),
             config,
+            last_terminal_area: Cell::new(Rect::default()),
         })
     }
 
@@ -479,6 +490,7 @@ impl App {
 
     /// Applies the selected shell from the selector.
     /// If the shell is not available, shows the install prompt instead.
+    /// Automatically creates a new tab with the selected shell.
     pub fn apply_shell_selection(&mut self) {
         if let Some(ref selector) = self.shell_selector {
             let selected_shell = selector.selected_shell();
@@ -494,21 +506,35 @@ impl App {
             // Shell is available - apply the selection
             self.config.shell = selected_shell;
 
-            // Show status with path info
-            if let Some(path) = selected_shell.get_shell_path() {
-                self.set_status(format!(
-                    "Shell set to {} ({}) - create new tab to use",
-                    selected_shell.display_name(),
-                    path.display()
-                ));
-            } else {
-                self.set_status(format!(
-                    "Shell set to {} - create new tab to use",
-                    selected_shell.display_name()
-                ));
+            // Close old tabs if configured
+            if self.config.auto_close_tabs_on_shell_change {
+                self.close_all_terminal_tabs();
             }
+
+            // Hide popup first so we can create new tab
+            self.shell_selector = None;
+            self.popup.hide();
+            self.mode = AppMode::Normal;
+
+            // Create new tab with the selected shell
+            self.add_terminal_tab();
+
+            // Focus terminal pane
+            self.layout.set_focused(crate::ui::layout::FocusedPane::Terminal);
+
+            return;
         }
         self.hide_popup();
+    }
+
+    /// Closes all terminal tabs except one, then closes the remaining one's shell.
+    fn close_all_terminal_tabs(&mut self) {
+        if let Some(ref mut terminals) = self.terminals {
+            // Close all tabs until only one remains
+            while terminals.tab_count() > 1 {
+                terminals.close_tab();
+            }
+        }
     }
 
     /// Cancels the shell selection.
@@ -532,6 +558,73 @@ impl App {
     #[must_use]
     pub fn current_shell(&self) -> ShellType {
         self.config.shell
+    }
+
+    /// Shows the theme selector popup.
+    pub fn show_theme_selector(&mut self) {
+        let current_preset = self.config.theme_manager.current_preset();
+        self.theme_selector = Some(ThemeSelector::new(current_preset));
+        self.popup.set_kind(PopupKind::ThemeSelector);
+        self.popup.show();
+        self.mode = AppMode::Popup;
+    }
+
+    /// Applies the selected theme.
+    pub fn apply_theme_selection(&mut self) {
+        if let Some(ref selector) = self.theme_selector {
+            let selected_theme = selector.selected_theme();
+            self.config.theme_manager.set_preset(selected_theme);
+
+            // Save to config file
+            if let Err(e) = self.config.save_theme() {
+                self.set_status(format!("Failed to save theme: {}", e));
+            } else {
+                self.set_status(format!("Theme changed to: {}", selected_theme.name()));
+            }
+        }
+        self.theme_selector = None;
+        self.hide_popup();
+    }
+
+    /// Shows installed extensions in the status bar.
+    pub fn show_installed_extensions(&mut self) {
+        let mut manager = ExtensionManager::new();
+        if let Err(e) = manager.init() {
+            self.set_status(format!("Failed to load extensions: {}", e));
+            return;
+        }
+
+        let extensions = manager.installed();
+        if extensions.is_empty() {
+            self.set_status("No extensions installed. Use: rat ext install <user/repo>".to_string());
+        } else {
+            let names: Vec<_> = extensions.values()
+                .map(|e| format!("{} v{}", e.name, e.version))
+                .collect();
+            self.set_status(format!("Extensions: {}", names.join(", ")));
+        }
+    }
+
+    /// Cancels the theme selection.
+    pub fn cancel_theme_selection(&mut self) {
+        self.theme_selector = None;
+        self.hide_popup();
+    }
+
+    /// Returns true if the theme selector is currently active.
+    #[must_use]
+    pub fn is_theme_selector_active(&self) -> bool {
+        self.theme_selector.is_some() && self.popup.kind().is_theme_selector()
+    }
+
+    /// Sets the theme to a specific preset.
+    pub fn set_theme(&mut self, preset: ThemePreset) {
+        self.config.theme_manager.set_preset(preset);
+        if let Err(e) = self.config.save_theme() {
+            self.set_status(format!("Failed to save theme: {}", e));
+        } else {
+            self.set_status(format!("Theme changed to: {}", preset.name()));
+        }
     }
 
     /// Switches to the next open file.
@@ -680,8 +773,11 @@ impl App {
         }
 
         if event::poll(Duration::from_millis(POLL_TIMEOUT_MS))? {
-            if let Event::Key(key) = event::read()? {
-                self.handle_key(key);
+            match event::read()? {
+                Event::Key(key) => self.handle_key(key),
+                Event::Mouse(mouse) => self.handle_mouse(mouse),
+                Event::Resize(width, height) => self.resize(width, height),
+                _ => {}
             }
         }
 
@@ -806,6 +902,10 @@ impl App {
                 // Just close the install prompt
                 self.hide_popup();
             }
+            PopupKind::ThemeSelector => {
+                // Theme selector is handled by apply_theme_selection
+                self.apply_theme_selection();
+            }
         }
     }
 
@@ -877,6 +977,26 @@ impl App {
             }
             "terminal.selectShell" => self.show_shell_selector(),
 
+            // Theme commands
+            "theme.select" => self.show_theme_selector(),
+            "theme.dark" => self.set_theme(ThemePreset::Dark),
+            "theme.light" => self.set_theme(ThemePreset::Light),
+            "theme.dracula" => self.set_theme(ThemePreset::Dracula),
+            "theme.gruvbox" => self.set_theme(ThemePreset::Gruvbox),
+            "theme.nord" => self.set_theme(ThemePreset::Nord),
+
+            // Extension commands
+            "extension.list" => self.show_installed_extensions(),
+            "extension.install" => {
+                self.set_status("Use CLI: rat ext install <user/repo>".to_string());
+            }
+            "extension.update" => {
+                self.set_status("Use CLI: rat ext update [name]".to_string());
+            }
+            "extension.remove" => {
+                self.set_status("Use CLI: rat ext remove <name>".to_string());
+            }
+
             // Application commands
             "app.quit" => self.running = false,
             "app.commandPalette" => self.show_popup(PopupKind::CommandPalette),
@@ -911,6 +1031,9 @@ impl App {
 
                 // Render terminal content in remaining area
                 let terminal_area = terminal_chunks[1];
+
+                // Cache the terminal area for mouse coordinate conversion
+                self.last_terminal_area.set(terminal_area);
 
                 if let Some(tab) = terminals.active_tab() {
                     match tab.split {
@@ -1022,6 +1145,10 @@ impl App {
                 // Use special widget for shell install prompt
                 let widget = ShellInstallPromptWidget::new(prompt);
                 frame.render_widget(widget, area);
+            } else if let Some(ref selector) = self.theme_selector {
+                // Use special widget for theme selector
+                let widget = ThemeSelectorWidget::new(selector);
+                frame.render_widget(widget, area);
             } else {
                 let popup_widget = PopupWidget::new(&self.popup);
                 frame.render_widget(popup_widget, area);
@@ -1085,5 +1212,114 @@ impl App {
         if let Some(ref mut terminals) = self.terminals {
             terminals.shutdown();
         }
+    }
+
+    /// Saves the current session state to disk.
+    ///
+    /// # Errors
+    /// Returns error if save fails.
+    pub fn save_session(&self) -> std::io::Result<()> {
+        use crate::session::{PersistedFile, Session};
+
+        let mut session = Session::default();
+
+        // Save open files with cursor positions
+        for (idx, file) in self.open_files.iter().enumerate() {
+            let (cursor_line, cursor_col) = if idx == self.current_file_idx {
+                let pos = self.editor.cursor_position();
+                (pos.line, pos.col)
+            } else {
+                (0, 0)
+            };
+
+            let scroll_offset = if idx == self.current_file_idx {
+                self.editor.view().scroll_top()
+            } else {
+                0
+            };
+
+            session.open_files.push(PersistedFile {
+                path: file.path.clone(),
+                cursor_line,
+                cursor_col,
+                modified: idx == self.current_file_idx && self.editor.is_modified(),
+                scroll_offset,
+            });
+        }
+
+        session.active_file_idx = self.current_file_idx;
+        session.cwd = self.file_browser.path().to_path_buf();
+
+        session.focused_pane = match self.layout.focused() {
+            FocusedPane::Terminal => 0,
+            FocusedPane::Editor => 1,
+        };
+
+        session.keybinding_mode = match self.config.mode {
+            KeybindingMode::Vim => "vim".to_string(),
+            KeybindingMode::Emacs => "emacs".to_string(),
+            KeybindingMode::VsCode => "vscode".to_string(),
+            KeybindingMode::Default => "default".to_string(),
+        };
+
+        if let Some(ref terminals) = self.terminals {
+            session.terminal_tab_count = terminals.tab_count();
+            session.active_terminal_idx = terminals.active_tab_index();
+        }
+
+        session.save()
+    }
+
+    /// Restores session state from disk if available.
+    ///
+    /// # Errors
+    /// Returns error if restore fails.
+    pub fn restore_session(&mut self) -> std::io::Result<bool> {
+        use crate::editor::edit::Position;
+        use crate::session::Session;
+
+        if !Session::exists() {
+            return Ok(false);
+        }
+
+        let session = Session::load()?;
+
+        // Restore open files
+        for persisted_file in &session.open_files {
+            if persisted_file.path.exists() {
+                if let Ok(()) = self.open_file(persisted_file.path.clone()) {
+                    // File opened successfully
+                }
+            }
+        }
+
+        // Restore active file
+        if session.active_file_idx < self.open_files.len() {
+            self.current_file_idx = session.active_file_idx;
+            if let Some(file) = self.open_files.get(self.current_file_idx) {
+                let _ = self.editor.open(&file.path);
+            }
+        }
+
+        // Restore cursor position for active file if we have one
+        if let Some(persisted_file) = session.open_files.get(session.active_file_idx) {
+            let pos = Position::new(persisted_file.cursor_line, persisted_file.cursor_col);
+            self.editor.set_cursor_position(pos);
+            self.editor.goto_line(persisted_file.scroll_offset);
+        }
+
+        // Restore working directory
+        let _ = self.file_browser.change_dir(&session.cwd);
+
+        // Restore focused pane
+        let focused = match session.focused_pane {
+            0 => FocusedPane::Terminal,
+            _ => FocusedPane::Editor,
+        };
+        self.layout.set_focused(focused);
+
+        self.set_status("Session restored".to_string());
+
+        Ok(true)
     }
 }
