@@ -1,167 +1,179 @@
-# Ratatui Full IDE
+# Ratterm
 
-A split-terminal TUI application with a PTY-based terminal emulator on the left and an LSP-powered code editor on the right.
+A split-terminal TUI application with a PTY-based terminal emulator and code editor.
 
-## Features
-
-### Terminal Emulator (Left Pane)
-- Full PTY (pseudo-terminal) support via `portable-pty`
-- ANSI/VT100 escape sequence parsing via `vte`
-- Supports interactive programs (bash, zsh, vim, etc.)
-- 256-color and true color support
-- Alternate screen buffer support
-- Scrollback history
-
-### Code Editor (Right Pane)
-- Efficient text buffer using `ropey` rope data structure
-- Vim-like keybindings (Normal, Insert, Visual modes)
-- Undo/redo support
-- Syntax highlighting (via Tree-sitter - planned)
-- LSP integration for autocomplete, diagnostics (planned)
-
-### UI
-- Resizable split panes
-- Focus management with `Alt+Left/Right` or `Alt+Tab`
-- Status bar with mode, cursor position, file info
-
-## Prerequisites
-
-- Rust 1.75 or later
-- A terminal emulator
-
-### Windows
-- Windows 10 1809 or later (for ConPTY support)
-
-### Linux/macOS
-- Standard POSIX PTY support
+```
+  ╦═╗╔═╗╔╦╗╔╦╗╔═╗╦═╗╔╦╗
+  ╠╦╝╠═╣ ║  ║ ║╣ ╠╦╝║║║
+  ╩╚═╩ ╩ ╩  ╩ ╚═╝╩╚═╩ ╩
+```
 
 ## Installation
 
+### Quick Install
+
 ```bash
-# Clone the repository
-git clone https://github.com/your-username/ratatui-full-ide
-cd ratatui-full-ide
+# Linux/macOS
+curl -fsSL https://raw.githubusercontent.com/hastur-dev/ratterm/main/install.sh | bash
 
-# Build in release mode
-cargo build --release
-
-# Run
-cargo run --release
+# Windows (PowerShell)
+irm https://raw.githubusercontent.com/hastur-dev/ratterm/main/install.ps1 | iex
 ```
 
-## Usage
+### From Source
 
-### Keybindings
+```bash
+git clone https://github.com/hastur-dev/ratterm
+cd ratterm
+cargo install --path .
+```
 
-#### Global
+### Usage
+
+```bash
+rat              # Start ratterm
+rat myfile.rs    # Open with a file
+rat --version    # Show version
+rat --update     # Check for updates
+```
+
+## Features
+
+### Terminal Emulator
+- Full PTY (pseudo-terminal) support
+- Multiple terminal tabs (`Ctrl+T` to create, `Ctrl+W` to close)
+- Split terminals horizontally (`Ctrl+S`) or vertically (`Ctrl+Shift+S`)
+- ANSI/VT100 escape sequence parsing
+- 256-color and true color support
+- Scrollback history (`Shift+PageUp/Down`)
+- Alternate screen buffer support
+
+### Code Editor
+- Vim, Emacs, and Default keybinding modes (configurable in `~/.ratrc`)
+- Modal editing (Normal, Insert, Visual, Command modes in Vim mode)
+- Undo/redo support
+- File browser (`Ctrl+O`)
+- Search in file (`Ctrl+F`)
+- Multiple file tabs (`Alt+Shift+Left/Right` to switch)
+
+### General
+- Resizable split panes (`Alt+[` / `Alt+]`)
+- Clipboard support (`Ctrl+Shift+C` to copy, `Ctrl+V` to paste)
+- Save confirmation on exit
+- Auto-updates (checks on startup)
+
+## Keybindings
+
+### Global
 | Key | Action |
 |-----|--------|
 | `Alt+Left` | Focus terminal pane |
 | `Alt+Right` | Focus editor pane |
-| `Alt+Tab` | Toggle between panes |
-| `Alt+[` | Move split left |
-| `Alt+]` | Move split right |
+| `Alt+Up/Down` | Switch between split terminals |
+| `Alt+Tab` | Toggle focus between panes |
+| `Alt+[` / `Alt+]` | Resize split |
 | `Ctrl+Q` | Quit |
+| `Ctrl+O` | Open file browser |
+| `Ctrl+Shift+C` | Copy |
+| `Ctrl+V` | Paste |
 
-#### Editor - Normal Mode
+### Terminal
+| Key | Action |
+|-----|--------|
+| `Ctrl+T` | New terminal tab |
+| `Ctrl+W` | Close terminal tab |
+| `Ctrl+Left/Right` | Switch terminal tabs |
+| `Ctrl+S` | Split horizontal |
+| `Ctrl+Shift+S` | Split vertical |
+| `Ctrl+Shift+W` | Close split |
+| `Ctrl+Tab` | Toggle split focus |
+| `Shift+PageUp/Down` | Scroll history |
+
+### Editor (Vim Mode - Default)
+
+#### Normal Mode
 | Key | Action |
 |-----|--------|
 | `i` | Enter Insert mode |
-| `a` | Enter Insert mode after cursor |
+| `a` | Append after cursor |
 | `v` | Enter Visual mode |
-| `h/j/k/l` or arrows | Move cursor |
-| `0` | Go to line start |
-| `$` or `End` | Go to line end |
-| `w` | Move to next word |
-| `b` | Move to previous word |
-| `g` | Go to buffer start |
-| `G` | Go to buffer end |
+| `:` | Enter Command mode |
+| `h/j/k/l` | Move cursor |
+| `0` / `$` | Line start/end |
+| `w` / `b` | Word forward/back |
+| `g` / `G` | Buffer start/end |
 | `x` | Delete character |
 | `u` | Undo |
 | `Ctrl+R` | Redo |
-| `Ctrl+S` | Save file |
-| `PageUp/Down` | Page navigation |
+| `Ctrl+S` | Save |
 
-#### Editor - Insert Mode
+#### Insert Mode
 | Key | Action |
 |-----|--------|
 | `Esc` | Return to Normal mode |
-| `Backspace` | Delete character before cursor |
-| `Delete` | Delete character at cursor |
-| `Enter` | Insert newline |
-| `Tab` | Insert 4 spaces |
-| arrows | Move cursor |
-| `Ctrl+S` | Save file |
+| `Backspace` | Delete before cursor |
+| `Enter` | New line |
+| `Tab` | Insert spaces |
 
-#### Editor - Visual Mode
+### Editor (Emacs Mode)
 | Key | Action |
 |-----|--------|
-| `Esc` | Cancel selection, return to Normal mode |
-| `h/l` or arrows | Extend selection |
-| `d` or `x` | Delete selection |
+| `Ctrl+B/F/P/N` | Move left/right/up/down |
+| `Ctrl+A/E` | Line start/end |
+| `Alt+F/B` | Word forward/back |
+| `Ctrl+D` | Delete character |
+| `Ctrl+K` | Kill to end of line |
+| `Ctrl+/` | Undo |
+| `Ctrl+X` | Save |
 
-## Architecture
+### Editor (Default Mode)
+| Key | Action |
+|-----|--------|
+| Arrow keys | Move cursor |
+| `Home/End` | Line start/end |
+| `Ctrl+Left/Right` | Word navigation |
+| `Ctrl+Z/Y` | Undo/Redo |
+| `Ctrl+S` | Save |
 
+## Configuration
+
+Ratterm reads configuration from `~/.ratrc` on startup.
+
+```bash
+# Keybinding mode: vim, emacs, or default
+mode = vim
+
+# Custom keybindings (optional)
+# quit = ctrl+q
+# copy = ctrl+shift+c
+# paste = ctrl+v
 ```
-src/
-├── main.rs                 # Entry point
-├── lib.rs                  # Library root
-├── app.rs                  # Application state and event loop
-├── terminal/               # Terminal emulator
-│   ├── mod.rs              # Terminal orchestration
-│   ├── pty.rs              # PTY spawning via portable-pty
-│   ├── parser.rs           # ANSI escape sequence parser
-│   ├── grid.rs             # Terminal cell grid
-│   └── style.rs            # Colors and attributes
-├── editor/                 # Code editor
-│   ├── mod.rs              # Editor orchestration
-│   ├── buffer.rs           # Text buffer with ropey
-│   ├── cursor.rs           # Cursor and selection
-│   └── view.rs             # Viewport management
-└── ui/                     # User interface
-    ├── mod.rs              # UI module root
-    ├── layout.rs           # Split pane layout
-    ├── terminal_widget.rs  # Terminal rendering
-    ├── editor_widget.rs    # Editor rendering
-    └── statusbar.rs        # Status bar
-```
+
+## Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `RATTERM_NO_UPDATE` | Disable auto-update checks |
+| `RATTERM_INSTALL_DIR` | Custom install directory |
+
+## Requirements
+
+- **Windows**: Windows 10 1809+ (ConPTY support)
+- **Linux/macOS**: Standard POSIX PTY support
+- **Rust**: 1.75+ (for building from source)
 
 ## Development
 
-### Running Tests
-
 ```bash
-# Run all tests
+# Run tests
 cargo test
 
-# Run library tests only
-cargo test --lib
+# Build release
+cargo build --release
 
-# Run with verbose output
-cargo test -- --nocapture
+# Run with logging
+RUST_LOG=debug cargo run
 ```
-
-### Code Quality
-
-```bash
-# Check formatting
-cargo fmt -- --check
-
-# Run clippy
-cargo clippy --all-targets -- -D warnings
-
-# Build with all warnings as errors
-RUSTFLAGS="-D warnings" cargo build
-```
-
-## Planned Features
-
-- [ ] LSP integration for language servers
-- [ ] Syntax highlighting via Tree-sitter
-- [ ] File picker with fuzzy search
-- [ ] Multiple editor tabs
-- [ ] Configuration file support
-- [ ] Theming
 
 ## License
 
@@ -171,5 +183,4 @@ MIT
 
 - [ratatui](https://github.com/ratatui-org/ratatui) - TUI framework
 - [portable-pty](https://github.com/wez/wezterm/tree/main/pty) - Cross-platform PTY
-- [vte](https://github.com/alacritty/vte) - ANSI parser
 - [ropey](https://github.com/cessen/ropey) - Rope data structure
