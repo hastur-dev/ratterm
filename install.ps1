@@ -19,31 +19,31 @@ $AppName = "ratterm"
 # Enable verbose mode from env var or parameter
 $IsVerbose = $VerboseOutput -or ($env:VERBOSE -eq "true")
 
-# Logging functions
+# Logging functions (colors removed for compatibility)
 function Write-Info {
     param([string]$Message)
-    Write-Host "[INFO] $Message" -ForegroundColor Blue
+    Write-Host "[INFO] $Message"
 }
 
 function Write-Success {
     param([string]$Message)
-    Write-Host "[SUCCESS] $Message" -ForegroundColor Green
+    Write-Host "[SUCCESS] $Message"
 }
 
 function Write-Warn {
     param([string]$Message)
-    Write-Host "[WARN] $Message" -ForegroundColor Yellow
+    Write-Host "[WARN] $Message"
 }
 
 function Write-Err {
     param([string]$Message)
-    Write-Host "[ERROR] $Message" -ForegroundColor Red
+    Write-Host "[ERROR] $Message"
 }
 
 function Write-Debug {
     param([string]$Message)
     if ($IsVerbose) {
-        Write-Host "[DEBUG] $Message" -ForegroundColor DarkGray
+        Write-Host "[DEBUG] $Message"
     }
 }
 
@@ -63,9 +63,9 @@ function Write-SystemInfo {
 
 # ASCII art banner
 Write-Host ""
-Write-Host "  ╦═╗╔═╗╔╦╗╔╦╗╔═╗╦═╗╔╦╗" -ForegroundColor Cyan
-Write-Host "  ╠╦╝╠═╣ ║  ║ ║╣ ╠╦╝║║║" -ForegroundColor Cyan
-Write-Host "  ╩╚═╩ ╩ ╩  ╩ ╚═╝╩╚═╩ ╩" -ForegroundColor Cyan
+Write-Host "  ╦═╗╔═╗╔╦╗╔╦╗╔═╗╦═╗╔╦╗"
+Write-Host "  ╠╦╝╠═╣ ║  ║ ║╣ ╠╦╝║║║"
+Write-Host "  ╩╚═╩ ╩ ╩  ╩ ╚═╝╩╚═╩ ╩"
 Write-Host ""
 
 # Detect if running from remote or local
@@ -184,7 +184,7 @@ function Install-Ratterm {
                 Write-Host ""
                 Write-Success "Installation complete!"
                 Write-Host ""
-                Write-Host "Run 'rat' to start ratterm." -ForegroundColor Cyan
+                Write-Host "Run 'rat' to start ratterm."
                 return
             }
         }
@@ -244,7 +244,7 @@ function Install-Ratterm {
     Write-Host ""
     Write-Success "Installation complete!"
     Write-Host ""
-    Write-Host "Run 'rat' to start ratterm." -ForegroundColor Cyan
+    Write-Host "Run 'rat' to start ratterm."
     Write-Host ""
     Write-Warn "Please restart your terminal for PATH changes to take effect."
 }
