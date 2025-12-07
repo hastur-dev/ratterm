@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 rust-version = "1.75"
 description = "A split-terminal TUI with PTY terminal and code editor"
-license = "MIT"
+license = "GPL-3.0-or-later"
 authors = ["Your Name"]
 
 [[bin]]
