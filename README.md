@@ -1,6 +1,7 @@
 # Ratterm
 
-# I don't want to use more than 1 window to do everything and I'm doing most things in the terminal anyway
+# "I don't want to use more than 1 window to do everything and I'm doing most things in the terminal anyway" :
+### Some guy who will later consider all this code to be trash
 
 A split-terminal TUI application with a PTY-based terminal emulator and code editor.
 
