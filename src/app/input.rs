@@ -160,6 +160,16 @@ impl App {
     /// Handles editor-specific global keybindings. Returns true if handled.
     fn handle_editor_global_key(&mut self, key: KeyEvent) -> bool {
         match (key.modifiers, key.code) {
+            // Ctrl+T: New editor tab (untitled buffer)
+            (KeyModifiers::CONTROL, KeyCode::Char('t')) => {
+                self.new_editor_tab();
+                true
+            }
+            // Ctrl+W: Close current editor tab
+            (KeyModifiers::CONTROL, KeyCode::Char('w')) => {
+                self.close_editor_tab();
+                true
+            }
             (KeyModifiers::CONTROL, KeyCode::Char('f')) => {
                 self.show_popup(PopupKind::SearchInFile);
                 true
