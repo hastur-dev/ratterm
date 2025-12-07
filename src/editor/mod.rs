@@ -167,6 +167,15 @@ impl Editor {
         Ok(())
     }
 
+    /// Creates a new empty buffer, clearing any existing content.
+    pub fn new_buffer(&mut self) {
+        self.buffer = Buffer::new();
+        self.cursor = Cursor::new();
+        self.path = None;
+        self.view.update_gutter_width(self.buffer.len_lines());
+        self.mode = EditorMode::Normal;
+    }
+
     /// Resizes the editor viewport.
     pub fn resize(&mut self, width: u16, height: u16) {
         self.view.resize(width as usize, height as usize);
