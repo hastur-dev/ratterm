@@ -83,9 +83,7 @@ impl TerminalTab {
         match (self.split, self.split_focus) {
             (SplitDirection::None, _) => &mut self.terminal,
             (_, SplitFocus::First) => &mut self.terminal,
-            (_, SplitFocus::Second) => {
-                self.split_terminal.as_mut().unwrap_or(&mut self.terminal)
-            }
+            (_, SplitFocus::Second) => self.split_terminal.as_mut().unwrap_or(&mut self.terminal),
         }
     }
 

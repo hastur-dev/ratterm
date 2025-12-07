@@ -84,7 +84,19 @@ impl ThemeSettings {
             // Parse key = value
             if let Some((key, value)) = line.split_once('=') {
                 let key = key.trim();
-                let value = value.split('#').next().unwrap_or(value).trim();
+                // Strip inline comments, but preserve hex colors that start with #
+                let value = value.trim();
+                let value = if value.starts_with('#') {
+                    // This is likely a hex color, look for a space before any comment
+                    if let Some(space_idx) = value.find(" #") {
+                        value[..space_idx].trim()
+                    } else {
+                        value
+                    }
+                } else {
+                    // Not a hex color, split on # for inline comments
+                    value.split('#').next().unwrap_or(value).trim()
+                };
 
                 // Apply setting based on current section
                 if current_section.is_none() {

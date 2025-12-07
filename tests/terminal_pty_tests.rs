@@ -2,6 +2,8 @@
 //!
 //! Note: These tests spawn actual processes and require a shell.
 
+#![allow(clippy::expect_used)]
+
 use ratterm::terminal::pty::{Pty, PtyConfig, PtyEvent};
 use std::time::Duration;
 

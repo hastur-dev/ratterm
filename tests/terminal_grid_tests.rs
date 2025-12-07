@@ -2,6 +2,8 @@
 //!
 //! Tests cover: cell operations, cursor movement, scrolling, line wrapping.
 
+#![allow(clippy::expect_used)]
+
 use ratterm::terminal::CursorShape;
 use ratterm::terminal::grid::Grid;
 use ratterm::terminal::style::{Attr, Color, Style};

@@ -624,10 +624,8 @@ fn test_invalid_sequences() {
 
     // Should not panic, may produce Unknown or be ignored
     for action in &actions {
-        match action {
-            ParsedAction::Unknown(_) => {} // OK
-            _ => {}                        // Also OK if ignored
-        }
+        // Unknown sequences are acceptable, other actions are also OK if ignored
+        let _ = matches!(action, ParsedAction::Unknown(_));
     }
 }
 

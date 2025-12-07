@@ -143,7 +143,13 @@ pub fn load_custom_theme(path: &Path) -> Result<Theme, CustomThemeError> {
 
     // Apply color overrides
     for (key, value) in &custom.colors {
-        let color_str = palette.get(value).unwrap_or(value);
+        // If value starts with $, look up in palette without the $ prefix
+        let color_str = if value.starts_with('$') {
+            let palette_key = value.trim_start_matches('$');
+            palette.get(palette_key).unwrap_or(value)
+        } else {
+            palette.get(value).unwrap_or(value)
+        };
         let Some(color) = parse_color(color_str) else {
             return Err(CustomThemeError::InvalidColor(value.clone()));
         };
@@ -264,6 +270,7 @@ pub fn list_custom_theme_info() -> Vec<CustomThemeInfo> {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used)]
 mod tests {
     use super::*;
     use std::io::Write;

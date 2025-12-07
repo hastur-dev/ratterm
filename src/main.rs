@@ -19,7 +19,7 @@
 //! A split-terminal TUI application with PTY terminal emulator and
 //! code editor.
 //!
-//! Usage: rat [OPTIONS] [FILE]
+//! Usage: rat \[OPTIONS\] \[FILE\]
 //!
 //! Options:
 //!   --version, -v    Show version
@@ -173,7 +173,7 @@ fn restore_terminal() -> io::Result<()> {
     Ok(())
 }
 
-/// Handles extension subcommands: rat ext <command>
+/// Handles extension subcommands: `rat ext <command>`
 fn handle_extension_command(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let installer = Installer::new();
     let mut manager = ExtensionManager::new();
