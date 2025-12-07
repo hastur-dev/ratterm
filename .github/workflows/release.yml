@@ -18,53 +18,7 @@ permissions:
   contents: write
 
 jobs:
-  create-release:
-    runs-on: ubuntu-latest
-    outputs:
-      upload_url: ${{ steps.create_release.outputs.upload_url }}
-      version: ${{ steps.get_version.outputs.version }}
-    steps:
-      - name: Get version
-        id: get_version
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
-          else
-            echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: v${{ steps.get_version.outputs.version }}
-          release_name: Ratterm v${{ steps.get_version.outputs.version }}
-          draft: false
-          prerelease: false
-          body: |
-            ## Installation
-
-            ### Quick Install (recommended)
-            ```bash
-            # Linux/macOS
-            curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/install.sh | bash
-
-            # Windows (PowerShell)
-            irm https://raw.githubusercontent.com/${{ github.repository }}/main/install.ps1 | iex
-            ```
-
-            ### Manual Download
-            Download the appropriate binary for your platform below.
-
-            ### Homebrew (macOS/Linux)
-            ```bash
-            brew install ${{ github.repository_owner }}/tap/ratterm
-            ```
-
   build:
-    needs: create-release
     strategy:
       matrix:
         include:
@@ -109,27 +63,80 @@ jobs:
         env:
           CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
 
-      - name: Upload Release Asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Rename binary
+        shell: bash
+        run: |
+          cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} ${{ matrix.asset_name }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
         with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
-          asset_name: ${{ matrix.asset_name }}
-          asset_content_type: application/octet-stream
+          name: ${{ matrix.asset_name }}
+          path: ${{ matrix.asset_name }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Get version
+        id: get_version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.get_version.outputs.version }}
+          name: Ratterm v${{ steps.get_version.outputs.version }}
+          draft: false
+          prerelease: false
+          files: artifacts/**/*
+          body: |
+            ## Installation
+
+            ### Quick Install (recommended)
+            ```bash
+            # Linux/macOS
+            curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/install.sh | bash
+
+            # Windows (PowerShell)
+            irm https://raw.githubusercontent.com/${{ github.repository }}/main/install.ps1 | iex
+            ```
+
+            ### Manual Download
+            Download the appropriate binary for your platform below.
 
   update-install-scripts:
-    needs: [create-release, build]
+    needs: release
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: main
+          ref: master
+
+      - name: Get version
+        id: get_version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+          fi
 
       - name: Update version in install scripts
         run: |
-          VERSION=${{ needs.create-release.outputs.version }}
+          VERSION=${{ steps.get_version.outputs.version }}
           sed -i "s/VERSION=\".*\"/VERSION=\"$VERSION\"/" install.sh
           sed -i "s/\$Version = \".*\"/\$Version = \"$VERSION\"/" install.ps1
 
@@ -138,5 +145,5 @@ jobs:
           git config user.name github-actions
           git config user.email github-actions@github.com
           git add install.sh install.ps1
-          git diff --staged --quiet || git commit -m "Update install scripts to v${{ needs.create-release.outputs.version }}"
+          git diff --staged --quiet || git commit -m "Update install scripts to v${{ steps.get_version.outputs.version }}"
           git push
