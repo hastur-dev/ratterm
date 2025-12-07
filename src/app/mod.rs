@@ -388,6 +388,67 @@ impl App {
             .collect()
     }
 
+    /// Creates a new untitled editor tab.
+    pub fn new_editor_tab(&mut self) {
+        // Count existing untitled buffers
+        let untitled_count = self
+            .open_files
+            .iter()
+            .filter(|f| f.name.starts_with("Untitled"))
+            .count();
+
+        let name = if untitled_count == 0 {
+            "Untitled".to_string()
+        } else {
+            format!("Untitled-{}", untitled_count + 1)
+        };
+
+        // Create new buffer in editor
+        self.editor.new_buffer();
+
+        // Add to open files
+        self.open_files.push(OpenFile {
+            path: PathBuf::from(&name),
+            name: name.clone(),
+        });
+        self.current_file_idx = self.open_files.len() - 1;
+
+        self.set_status(format!("Created {}", name));
+    }
+
+    /// Closes the current editor tab.
+    pub fn close_editor_tab(&mut self) {
+        if self.open_files.is_empty() {
+            self.set_status("No tabs to close");
+            return;
+        }
+
+        // Check for unsaved changes
+        if self.editor.is_modified() {
+            self.show_popup(PopupKind::ConfirmSaveBeforeExit);
+            return;
+        }
+
+        // Remove current file
+        let closed_name = self.open_files[self.current_file_idx].name.clone();
+        self.open_files.remove(self.current_file_idx);
+
+        // Adjust index
+        if self.current_file_idx >= self.open_files.len() && !self.open_files.is_empty() {
+            self.current_file_idx = self.open_files.len() - 1;
+        }
+
+        // Open the now-current file, or clear editor if no files left
+        if let Some(file) = self.open_files.get(self.current_file_idx) {
+            let _ = self.editor.open(&file.path);
+        } else {
+            self.editor.new_buffer();
+            self.current_file_idx = 0;
+        }
+
+        self.set_status(format!("Closed {}", closed_name));
+    }
+
     /// Handles terminal resize.
     pub fn resize(&mut self, cols: u16, rows: u16) {
         let areas = self
