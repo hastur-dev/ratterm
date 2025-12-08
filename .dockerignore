@@ -1,0 +1,32 @@
+# Build artifacts
+target/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+
+# Documentation build
+docs/_build/
+
+# Test artifacts
+*.profraw
+*.profdata
+
+# Docker (don't copy docker files into image recursively)
+docker/
+
+# Misc
+.DS_Store
+Thumbs.db
+*.log
