@@ -24,18 +24,10 @@ jobs:
             target: x86_64-unknown-linux-gnu
             artifact_name: rat
             asset_name: rat-linux-x86_64
-          - os: ubuntu-24.04-arm64
-            target: aarch64-unknown-linux-gnu
-            artifact_name: rat
-            asset_name: rat-linux-aarch64
-          - os: macos-latest
+          - os: macos-13
             target: x86_64-apple-darwin
             artifact_name: rat
             asset_name: rat-macos-x86_64
-          - os: macos-latest
-            target: aarch64-apple-darwin
-            artifact_name: rat
-            asset_name: rat-macos-aarch64
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             artifact_name: rat.exe
@@ -131,38 +123,6 @@ jobs:
           fi
           echo "Uninstall verified successfully"
 
-  test-install-linux-arm:
-    needs: release
-    runs-on: ubuntu-24.04-arm64
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Test install script (verbose)
-        run: |
-          echo "=== Testing install.sh on Linux (aarch64) ==="
-          chmod +x install.sh
-          ./install.sh --verbose
-
-      - name: Verify installation
-        run: |
-          echo "=== Verifying installation ==="
-          export PATH="$PATH:$HOME/.local/bin"
-          which rat || echo "rat not found in PATH"
-          rat --version || echo "rat --version failed"
-
-      - name: Test uninstall
-        run: |
-          echo "=== Testing uninstall ==="
-          ./install.sh --uninstall --verbose
-
-      - name: Verify uninstall
-        run: |
-          if [ -f "$HOME/.local/bin/rat" ]; then
-            echo "ERROR: rat binary still exists after uninstall"
-            exit 1
-          fi
-          echo "Uninstall verified successfully"
-
   test-install-macos-x86:
     needs: release
     runs-on: macos-13  # Intel Mac
@@ -172,30 +132,6 @@ jobs:
       - name: Test install script (verbose)
         run: |
           echo "=== Testing install.sh on macOS (x86_64) ==="
-          chmod +x install.sh
-          ./install.sh --verbose
-
-      - name: Verify installation
-        run: |
-          echo "=== Verifying installation ==="
-          export PATH="$PATH:$HOME/.local/bin"
-          which rat || echo "rat not found in PATH"
-          rat --version || echo "rat --version failed"
-
-      - name: Test uninstall
-        run: |
-          echo "=== Testing uninstall ==="
-          ./install.sh --uninstall --verbose
-
-  test-install-macos-arm:
-    needs: release
-    runs-on: macos-latest  # ARM Mac (M1/M2)
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Test install script (verbose)
-        run: |
-          echo "=== Testing install.sh on macOS (aarch64) ==="
           chmod +x install.sh
           ./install.sh --verbose
 
@@ -257,7 +193,7 @@ jobs:
           Write-Host "Uninstall verified successfully"
 
   update-install-scripts:
-    needs: [test-install-linux-x86, test-install-linux-arm, test-install-macos-x86, test-install-macos-arm, test-install-windows]
+    needs: [test-install-linux-x86, test-install-macos-x86, test-install-windows]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

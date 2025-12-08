@@ -1,0 +1,102 @@
+# Docker Compose for running CI tests locally
+# Usage: docker compose -f docker/docker-compose.yml up --build
+
+services:
+  # Run all CI checks (format, clippy, test, docs)
+  ci-all:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.test
+    environment:
+      - CARGO_TERM_COLOR=always
+      - RUSTFLAGS=-D warnings
+    volumes:
+      - cargo-cache:/usr/local/cargo/registry
+      - target-cache:/app/target
+
+  # Format check only
+  fmt:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.test
+    command: cargo fmt --all -- --check
+    environment:
+      - CARGO_TERM_COLOR=always
+    volumes:
+      - cargo-cache:/usr/local/cargo/registry
+      - target-cache:/app/target
+
+  # Clippy lints only
+  clippy:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.test
+    command: cargo clippy --all-targets --all-features -- -D warnings
+    environment:
+      - CARGO_TERM_COLOR=always
+      - RUSTFLAGS=-D warnings
+    volumes:
+      - cargo-cache:/usr/local/cargo/registry
+      - target-cache:/app/target
+
+  # Tests only
+  test:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.test
+    command: cargo test --all-features --verbose
+    environment:
+      - CARGO_TERM_COLOR=always
+      - RUSTFLAGS=-D warnings
+    volumes:
+      - cargo-cache:/usr/local/cargo/registry
+      - target-cache:/app/target
+
+  # Documentation build only
+  docs:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.test
+    command: cargo doc --no-deps --all-features
+    environment:
+      - CARGO_TERM_COLOR=always
+      - RUSTDOCFLAGS=-D warnings
+    volumes:
+      - cargo-cache:/usr/local/cargo/registry
+      - target-cache:/app/target
+
+  # Security audit only
+  audit:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.test
+    command: sh -c "cargo audit || true"
+    environment:
+      - CARGO_TERM_COLOR=always
+    volumes:
+      - cargo-cache:/usr/local/cargo/registry
+
+  # MSRV check (Minimum Supported Rust Version)
+  msrv:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.msrv
+    command: cargo check --all-features
+    environment:
+      - CARGO_TERM_COLOR=always
+    volumes:
+      - cargo-cache:/usr/local/cargo/registry
+      - target-cache-msrv:/app/target
+
+  # Install script test
+  install-test:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.install-test
+    environment:
+      - VERBOSE=true
+
+volumes:
+  cargo-cache:
+  target-cache:
+  target-cache-msrv:

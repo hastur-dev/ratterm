@@ -1,0 +1,22 @@
+# Dockerfile for testing install script on Linux
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y \
+    curl \
+    wget \
+    ca-certificates \
+    bash \
+    dos2unix \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /test
+
+# Copy install script and convert line endings
+COPY install.sh /test/install.sh
+RUN dos2unix /test/install.sh && chmod +x /test/install.sh
+
+# Copy test runner and convert line endings
+COPY scripts/docker-install-test.sh /test/run-test.sh
+RUN dos2unix /test/run-test.sh && chmod +x /test/run-test.sh
+
+CMD ["/test/run-test.sh"]
