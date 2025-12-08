@@ -28,7 +28,7 @@ impl<'a> FindIterator<'a> {
     }
 }
 
-impl<'a> Iterator for FindIterator<'a> {
+impl Iterator for FindIterator<'_> {
     type Item = Position;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -70,7 +70,7 @@ impl<'a> FindCaseInsensitiveIterator<'a> {
     }
 }
 
-impl<'a> Iterator for FindCaseInsensitiveIterator<'a> {
+impl Iterator for FindCaseInsensitiveIterator<'_> {
     type Item = Position;
 
     fn next(&mut self) -> Option<Self::Item> {

@@ -1,11 +1,11 @@
 #!/bin/bash
 # Ratterm Installer
-# Usage: curl -fsSL https://raw.githubusercontent.com/hastur-dev/ratterm/main/install.sh | bash
-# Debug: curl -fsSL https://raw.githubusercontent.com/hastur-dev/ratterm/main/install.sh | bash -s -- --verbose
+# Usage: curl -fsSL https://raw.githubusercontent.com/hastur-dev/ratterm/master/install.sh | bash
+# Debug: curl -fsSL https://raw.githubusercontent.com/hastur-dev/ratterm/master/install.sh | bash -s -- --verbose
 
 set -e
 
-VERSION="0.1.0"
+VERSION="0.1.1"
 REPO="hastur-dev/ratterm"
 BINARY_NAME="rat"
 INSTALL_DIR="${RATTERM_INSTALL_DIR:-$HOME/.local/bin}"

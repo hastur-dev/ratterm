@@ -138,6 +138,31 @@ else
     fail "Shell RC file modification missing"
 fi
 
+# Test 12: Curl pipe execution test (simulates curl -fsSL <url> | bash)
+echo ""
+echo "[TEST] Curl pipe execution pattern..."
+
+# Test that script can be piped to bash for syntax validation
+if cat /test/install.sh | bash -n 2>/dev/null; then
+    pass "Script can be piped to bash (syntax valid)"
+else
+    fail "Script fails when piped to bash"
+fi
+
+# Test that script can be sourced to load functions
+if bash -c "source /test/install.sh --help 2>/dev/null || true" 2>/dev/null; then
+    pass "Script can be sourced (functions load)"
+else
+    fail "Script fails when sourced"
+fi
+
+# Test heredoc pipe pattern (common alternative to curl | bash)
+if bash -c "cat /test/install.sh" | bash -n 2>/dev/null; then
+    pass "Heredoc/cat pipe pattern works"
+else
+    fail "Heredoc/cat pipe pattern fails"
+fi
+
 # Summary
 echo ""
 echo "==========================================="

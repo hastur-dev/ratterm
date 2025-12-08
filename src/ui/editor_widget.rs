@@ -291,7 +291,7 @@ impl<'a> EditorWidget<'a> {
     }
 }
 
-impl<'a> Widget for EditorWidget<'a> {
+impl Widget for EditorWidget<'_> {
     fn render(self, area: Rect, buf: &mut RatatuiBuffer) {
         // Create block with border - use theme if available
         let (border_focused, border_unfocused) = self

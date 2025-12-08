@@ -13,6 +13,8 @@ services:
     volumes:
       - cargo-cache:/usr/local/cargo/registry
       - target-cache:/app/target
+    mem_limit: 2g
+    memswap_limit: 2g
 
   # Format check only
   fmt:
@@ -25,6 +27,8 @@ services:
     volumes:
       - cargo-cache:/usr/local/cargo/registry
       - target-cache:/app/target
+    mem_limit: 2g
+    memswap_limit: 2g
 
   # Clippy lints only
   clippy:
@@ -38,6 +42,8 @@ services:
     volumes:
       - cargo-cache:/usr/local/cargo/registry
       - target-cache:/app/target
+    mem_limit: 2g
+    memswap_limit: 2g
 
   # Tests only
   test:
@@ -51,6 +57,8 @@ services:
     volumes:
       - cargo-cache:/usr/local/cargo/registry
       - target-cache:/app/target
+    mem_limit: 2g
+    memswap_limit: 2g
 
   # Documentation build only
   docs:
@@ -64,6 +72,8 @@ services:
     volumes:
       - cargo-cache:/usr/local/cargo/registry
       - target-cache:/app/target
+    mem_limit: 2g
+    memswap_limit: 2g
 
   # Security audit only
   audit:
@@ -75,6 +85,8 @@ services:
       - CARGO_TERM_COLOR=always
     volumes:
       - cargo-cache:/usr/local/cargo/registry
+    mem_limit: 2g
+    memswap_limit: 2g
 
   # MSRV check (Minimum Supported Rust Version)
   msrv:
@@ -87,6 +99,8 @@ services:
     volumes:
       - cargo-cache:/usr/local/cargo/registry
       - target-cache-msrv:/app/target
+    mem_limit: 2g
+    memswap_limit: 2g
 
   # Install script test
   install-test:
@@ -95,6 +109,8 @@ services:
       dockerfile: docker/Dockerfile.install-test
     environment:
       - VERBOSE=true
+    mem_limit: 2g
+    memswap_limit: 2g
 
 volumes:
   cargo-cache:

@@ -69,7 +69,7 @@ struct ParserPerformer<'a> {
     csi_intermediates: &'a mut Vec<u8>,
 }
 
-impl<'a> ParserPerformer<'a> {
+impl ParserPerformer<'_> {
     /// Flushes accumulated text to actions.
     fn flush_text(&mut self) {
         if !self.text_buffer.is_empty() {
@@ -392,7 +392,7 @@ fn url_decode(s: &str) -> String {
     result
 }
 
-impl<'a> vte::Perform for ParserPerformer<'a> {
+impl vte::Perform for ParserPerformer<'_> {
     fn print(&mut self, c: char) {
         self.text_buffer.push(c);
     }

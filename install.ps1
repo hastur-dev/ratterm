@@ -1,6 +1,6 @@
 # Ratterm Installer for Windows
-# Usage: irm https://raw.githubusercontent.com/hastur-dev/ratterm/main/install.ps1 | iex
-# Debug: $env:VERBOSE="true"; irm https://raw.githubusercontent.com/hastur-dev/ratterm/main/install.ps1 | iex
+# Usage: irm https://raw.githubusercontent.com/hastur-dev/ratterm/master/install.ps1 | iex
+# Debug: $env:VERBOSE="true"; irm https://raw.githubusercontent.com/hastur-dev/ratterm/master/install.ps1 | iex
 # Or: .\install.ps1 [-Uninstall] [-User] [-Verbose]
 
 param(
@@ -11,7 +11,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$Version = "0.1.0"
+$Version = "0.1.1"
 $Repo = "hastur-dev/ratterm"
 $BinaryName = "rat"
 $AppName = "ratterm"
@@ -52,7 +52,8 @@ function Write-SystemInfo {
     Write-Debug "Date: $(Get-Date)"
     Write-Debug "PowerShell Version: $($PSVersionTable.PSVersion)"
     Write-Debug "OS: $([System.Environment]::OSVersion.VersionString)"
-    Write-Debug "Architecture: $([System.Environment]::Is64BitOperatingSystem ? 'x64' : 'x86')"
+    $archName = if ([System.Environment]::Is64BitOperatingSystem) { 'x64' } else { 'x86' }
+    Write-Debug "Architecture: $archName"
     Write-Debug "User: $env:USERNAME"
     Write-Debug "Home: $env:USERPROFILE"
     Write-Debug "PWD: $(Get-Location)"
@@ -63,9 +64,7 @@ function Write-SystemInfo {
 
 # ASCII art banner
 Write-Host ""
-Write-Host "  ╦═╗╔═╗╔╦╗╔╦╗╔═╗╦═╗╔╦╗"
-Write-Host "  ╠╦╝╠═╣ ║  ║ ║╣ ╠╦╝║║║"
-Write-Host "  ╩╚═╩ ╩ ╩  ╩ ╚═╝╩╚═╩ ╩"
+Write-Host "  RATTERM"
 Write-Host ""
 
 # Detect if running from remote or local
@@ -210,7 +209,7 @@ function Install-Ratterm {
             $content = Get-Content $tempFile -Raw -ErrorAction SilentlyContinue
             Write-Debug "File contents (might be error): $content"
             Remove-Item $tempFile -Force -ErrorAction SilentlyContinue
-            Write-Err "Download failed: file too small ($fileSize bytes), likely an error page"
+            Write-Err "Download failed: file too small, likely an error page"
             throw "Download failed: file too small"
         }
 

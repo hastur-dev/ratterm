@@ -201,7 +201,7 @@ impl<'a> TerminalWidget<'a> {
     }
 }
 
-impl<'a> Widget for TerminalWidget<'a> {
+impl Widget for TerminalWidget<'_> {
     fn render(self, area: Rect, buf: &mut RatatuiBuffer) {
         // Create block with border - use theme if available
         let (border_focused, border_unfocused) = self
