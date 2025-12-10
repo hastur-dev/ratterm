@@ -11,7 +11,7 @@ pub mod pty;
 pub mod selection;
 pub mod style;
 
-pub use multiplexer::{SplitDirection, SplitFocus, TabInfo, TerminalMultiplexer, TerminalTab};
+pub use multiplexer::{GridDirection, SplitDirection, SplitFocus, TabInfo, TerminalGrid, TerminalMultiplexer, TerminalTab};
 pub use selection::{Selection, SelectionMode};
 
 use std::path::PathBuf;
@@ -409,7 +409,23 @@ impl Terminal {
                 self.input_buffer.clear();
 
                 if command.is_some() {
-                    // Don't send to PTY, return the command
+                    // Clear the shell's input line since we're intercepting the command
+                    // Move cursor to start of line and clear from there to end of screen
+                    // This aggressively clears any visual artifacts
+                    self.grid.carriage_return();
+                    self.grid.clear_to_eos();
+
+                    // Send Ctrl+C to cancel any pending input
+                    // Ctrl+C is more universally supported across shells than Ctrl+U
+                    self.pty.write(&[0x03])?; // Ctrl+C - cancel/interrupt
+
+                    // Small delay to let shell process the interrupt
+                    std::thread::sleep(std::time::Duration::from_millis(30));
+
+                    // Read and discard any shell output from the interrupt
+                    // This prevents escape sequences from corrupting our grid
+                    let _ = self.pty.read();
+
                     return Ok(command);
                 }
 
@@ -460,6 +476,12 @@ impl Terminal {
     /// Clears the input buffer (e.g., after Ctrl+C).
     pub fn clear_input_buffer(&mut self) {
         self.input_buffer.clear();
+    }
+
+    /// Clears the visible grid area (not scrollback).
+    /// Use this to prevent visual artifacts when switching modes.
+    pub fn clear_visible(&mut self) {
+        self.grid.clear();
     }
 
     // ========== Selection Methods ==========

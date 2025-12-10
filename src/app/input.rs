@@ -50,12 +50,20 @@ impl App {
     /// Handles global keybindings. Returns true if handled.
     fn handle_global_key(&mut self, key: KeyEvent) -> bool {
         match (key.modifiers, key.code) {
+            // Ctrl+I: Toggle IDE visibility
+            (KeyModifiers::CONTROL, KeyCode::Char('i')) => {
+                self.toggle_ide();
+                true
+            }
             (KeyModifiers::ALT, KeyCode::Left) => {
                 self.layout.set_focused(FocusedPane::Terminal);
                 true
             }
             (KeyModifiers::ALT, KeyCode::Right) => {
-                self.layout.set_focused(FocusedPane::Editor);
+                // Only focus editor if IDE is visible
+                if self.layout.ide_visible() {
+                    self.layout.set_focused(FocusedPane::Editor);
+                }
                 true
             }
             // Alt+Up/Down: Switch between split terminal panes
@@ -730,20 +738,39 @@ impl App {
     /// Handles intercepted terminal commands.
     fn handle_terminal_command(&mut self, cmd: &str) {
         if cmd == "open" {
-            // Open file browser
+            // Open file browser and show IDE
+            self.show_ide();
             self.show_file_browser();
         } else if let Some(filename) = cmd.strip_prefix("open ") {
-            // Open specific file
-            let path = self.file_browser.path().join(filename.trim());
+            // Open specific file - use terminal's CWD, not file browser path
+            let cwd = self
+                .terminals
+                .as_ref()
+                .and_then(|t| t.active_terminal())
+                .map(|t| t.current_working_dir())
+                .unwrap_or_else(|| self.file_browser.path().to_path_buf());
+
+            let filename = filename.trim();
+            // Handle absolute paths
+            let path = if std::path::Path::new(filename).is_absolute() {
+                std::path::PathBuf::from(filename)
+            } else {
+                cwd.join(filename)
+            };
+
             if path.exists() {
                 if path.is_file() {
+                    // Show IDE when opening a file
+                    self.show_ide();
                     let _ = self.open_file(path);
                 } else if path.is_dir() {
+                    // Show IDE and file browser for directories
+                    self.show_ide();
                     let _ = self.file_browser.change_dir(&path);
                     self.show_file_browser();
                 }
             } else {
-                self.set_status(format!("File not found: {}", filename));
+                self.set_status(format!("File not found: {}", path.display()));
             }
         } else if cmd == "update" {
             // Check for updates and auto-update
@@ -773,10 +800,16 @@ impl App {
 
                 // Perform update
                 match updater.update(&version) {
-                    Ok(()) => {
+                    Ok(true) => {
                         self.set_status(format!(
                             "Updated to v{}! Restart ratterm to use new version.",
                             version
+                        ));
+                    }
+                    Ok(false) => {
+                        self.set_status(format!(
+                            "Already running v{} (latest version)",
+                            VERSION
                         ));
                     }
                     Err(e) => {

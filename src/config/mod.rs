@@ -34,6 +34,12 @@ shell = system
 # When enabled, all existing terminal tabs are closed when you select a new shell
 # auto_close_tabs_on_shell_change = false
 
+# IDE Configuration
+# -----------------
+# Set to true to always show the IDE pane (editor) alongside terminals
+# When false (default), only terminals are shown until 'open' command or Ctrl+I
+# ide-always = false
+
 # Keybinding Mode
 # ---------------
 # Set the keybinding mode: vim, emacs, vscode, or default
@@ -120,6 +126,8 @@ pub struct Config {
     pub auto_close_tabs_on_shell_change: bool,
     /// Theme manager for UI customization.
     pub theme_manager: ThemeManager,
+    /// Whether to always show the IDE pane (false = terminal-first mode).
+    pub ide_always: bool,
 }
 
 impl Default for Config {
@@ -131,6 +139,7 @@ impl Default for Config {
             config_path: Self::default_config_path(),
             auto_close_tabs_on_shell_change: false,
             theme_manager: ThemeManager::default(),
+            ide_always: false, // Terminal-first by default
         }
     }
 }
@@ -266,6 +275,10 @@ impl Config {
             }
             "auto_close_tabs_on_shell_change" => {
                 self.auto_close_tabs_on_shell_change =
+                    matches!(value.to_lowercase().as_str(), "true" | "yes" | "1" | "on");
+            }
+            "ide_always" | "ide-always" => {
+                self.ide_always =
                     matches!(value.to_lowercase().as_str(), "true" | "yes" | "1" | "on");
             }
             _ => {

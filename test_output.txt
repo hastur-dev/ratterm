@@ -1,0 +1,24 @@
+=== Test Mode Started ===
+Terminal size: 120x30
+
+--- Step 1: Initial render ---
+Initial render complete
+
+--- Step 2: Show file browser ---
+Redraw requested after show_file_browser: true
+Terminal cleared
+File browser render complete
+
+--- Step 3: Open install.sh ---
+Test file path: "C:\\Users\\LecherousCthulhu\\Documents\\coding\\rust-work\\ratatui-full-IDE\\install.sh"
+File exists, opening...
+open_file result: true
+Redraw requested after open_file: true
+Clearing terminal...
+Terminal cleared with both methods
+Post-open render complete
+
+--- Step 4: Second render after file open ---
+Second render complete
+
+=== Test Complete ===

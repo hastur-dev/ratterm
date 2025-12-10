@@ -207,7 +207,7 @@ impl Widget for TerminalWidget<'_> {
         let (border_focused, border_unfocused) = self
             .theme
             .map(|t| (t.border_focused, t.border))
-            .unwrap_or((Color::Green, Color::DarkGray));
+            .unwrap_or((Color::Cyan, Color::DarkGray));
 
         let border_style = if self.focused {
             Style::default().fg(border_focused)

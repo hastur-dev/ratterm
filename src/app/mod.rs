@@ -99,6 +99,8 @@ pub struct App {
     config: Config,
     /// Cached terminal area for mouse coordinate conversion (interior mutability for render).
     last_terminal_area: Cell<Rect>,
+    /// Flag to request a full screen redraw (clears ghost artifacts).
+    needs_redraw: bool,
 }
 
 impl App {
@@ -129,11 +131,18 @@ impl App {
         let editor = Editor::new(cols / 2, rows.saturating_sub(4));
         let file_browser = FileBrowser::default();
 
+        // Create layout based on ide_always config
+        let layout = if config.ide_always {
+            SplitLayout::with_ide_visible()
+        } else {
+            SplitLayout::new() // Terminal-first, IDE hidden
+        };
+
         Ok(Self {
             terminals,
             editor,
             file_browser,
-            layout: SplitLayout::new(),
+            layout,
             mode: AppMode::Normal,
             popup: Popup::new(PopupKind::SearchInFile),
             command_palette: CommandPalette::new(),
@@ -149,7 +158,20 @@ impl App {
             clipboard: Clipboard::new(),
             config,
             last_terminal_area: Cell::new(Rect::default()),
+            needs_redraw: false,
         })
+    }
+
+    /// Takes the redraw request flag, resetting it to false.
+    /// Returns true if a full screen redraw was requested.
+    pub fn take_redraw_request(&mut self) -> bool {
+        std::mem::take(&mut self.needs_redraw)
+    }
+
+    /// Requests a full screen redraw on the next frame.
+    /// Use this when changing modes or after operations that may leave ghost artifacts.
+    pub fn request_redraw(&mut self) {
+        self.needs_redraw = true;
     }
 
     /// Returns a reference to the clipboard.
@@ -355,6 +377,18 @@ impl App {
         self.layout.set_focused(FocusedPane::Editor);
         self.mode = AppMode::Normal;
         self.file_browser.hide();
+
+        // Clear terminal grid to remove any artifacts from PTY output during file browser
+        // This is especially important after command interception where the shell
+        // may have output a new prompt or other characters
+        if let Some(ref mut terminals) = self.terminals {
+            if let Some(terminal) = terminals.active_terminal_mut() {
+                terminal.clear_visible();
+            }
+        }
+
+        // Request full redraw to clear any ghost artifacts from file browser
+        self.request_redraw();
         Ok(())
     }
 
@@ -364,13 +398,16 @@ impl App {
     /// if available, otherwise in its current directory.
     pub fn show_file_browser(&mut self) {
         // Try to get the terminal's current working directory
-        if let Some(ref terminals) = self.terminals {
-            if let Some(terminal) = terminals.active_terminal() {
+        if let Some(ref mut terminals) = self.terminals {
+            if let Some(terminal) = terminals.active_terminal_mut() {
                 let cwd = terminal.current_working_dir();
                 // Change to the terminal's CWD if it's different
                 if cwd.is_dir() && cwd != self.file_browser.path() {
                     let _ = self.file_browser.change_dir(&cwd);
                 }
+                // Clear the terminal's visible grid to prevent ghost artifacts
+                // This clears any "open" text or shell output that was shown
+                terminal.clear_visible();
             }
         }
 
@@ -378,12 +415,67 @@ impl App {
         self.file_browser.show();
         self.mode = AppMode::FileBrowser;
         self.layout.set_focused(FocusedPane::Editor);
+        // Request full redraw when showing file browser
+        self.request_redraw();
     }
 
     /// Hides the file browser.
     pub fn hide_file_browser(&mut self) {
         self.file_browser.hide();
         self.mode = AppMode::Normal;
+
+        // Clear terminal grid to remove any artifacts from PTY output during file browser
+        if let Some(ref mut terminals) = self.terminals {
+            if let Some(terminal) = terminals.active_terminal_mut() {
+                terminal.clear_visible();
+            }
+        }
+
+        // Request full redraw to clear file browser artifacts
+        self.request_redraw();
+    }
+
+    /// Shows the IDE pane (editor).
+    pub fn show_ide(&mut self) {
+        self.layout.show_ide();
+        self.request_redraw();
+        self.set_status("IDE opened");
+    }
+
+    /// Hides the IDE pane.
+    pub fn hide_ide(&mut self) {
+        self.layout.hide_ide();
+        self.request_redraw();
+        self.set_status("IDE closed");
+    }
+
+    /// Toggles the IDE pane visibility.
+    pub fn toggle_ide(&mut self) {
+        if self.layout.ide_visible() {
+            self.hide_ide();
+        } else {
+            self.show_ide();
+        }
+    }
+
+    /// Returns true if the IDE pane is visible.
+    #[must_use]
+    pub fn ide_visible(&self) -> bool {
+        self.layout.ide_visible()
+    }
+
+    /// Checks if IDE should auto-hide (no open files and not ide_always).
+    /// Called after closing editor tabs.
+    pub fn check_ide_auto_hide(&mut self) {
+        // Don't auto-hide if ide_always is set
+        if self.config.ide_always {
+            return;
+        }
+
+        // Hide IDE if no files are open
+        if self.open_files.is_empty() && self.layout.ide_visible() {
+            self.hide_ide();
+        }
     }
 
     /// Shows a popup dialog.
@@ -733,6 +825,9 @@ impl App {
         }
 
         self.set_status(format!("Closed {}", closed_name));
+
+        // Check if IDE should auto-hide now that a tab was closed
+        self.check_ide_auto_hide();
     }
 
     /// Closes the current file (alias for close_editor_tab).
@@ -772,9 +867,14 @@ impl App {
     /// # Errors
     /// Returns error if event processing fails.
     pub fn update(&mut self) -> io::Result<()> {
-        if let Some(ref mut terminals) = self.terminals {
-            if let Err(e) = terminals.process_all() {
-                self.last_error = Some(format!("Terminal error: {}", e));
+        // Only process PTY output when file browser is NOT visible
+        // This prevents the terminal grid from being corrupted by PTY output
+        // while the user is interacting with the file browser
+        if !self.file_browser.is_visible() {
+            if let Some(ref mut terminals) = self.terminals {
+                if let Err(e) = terminals.process_all() {
+                    self.last_error = Some(format!("Terminal error: {}", e));
+                }
             }
         }
 
@@ -1015,18 +1115,28 @@ impl App {
     /// Renders the application.
     pub fn render(&self, frame: &mut ratatui::Frame) {
         use ratatui::layout::{Constraint, Direction, Layout};
-        use ratatui::style::Style;
-        use ratatui::widgets::{Block, Clear};
+        use ratatui::style::{Color, Style};
+        use ratatui::widgets::Clear;
 
         let area = frame.area();
 
         // Clear the entire frame first to prevent rendering artifacts
         frame.render_widget(Clear, area);
 
-        // Fill with background color from theme
+        // Explicitly reset entire buffer to prevent ghost characters
+        // This clears character, style, and all modifiers
         let bg_color = self.config.theme_manager.current().editor.background;
-        let bg_block = Block::default().style(Style::default().bg(bg_color));
-        frame.render_widget(bg_block, area);
+        let clear_style = Style::default().bg(bg_color).fg(Color::Reset);
+        let buf = frame.buffer_mut();
+        for y in area.y..area.y + area.height {
+            for x in area.x..area.x + area.width {
+                if let Some(cell) = buf.cell_mut((x, y)) {
+                    cell.reset();
+                    cell.set_char(' ');
+                    cell.set_style(clear_style);
+                }
+            }
+        }
 
         let areas = self.layout.calculate(area);
 
@@ -1053,43 +1163,23 @@ impl App {
                 self.last_terminal_area.set(terminal_area);
 
                 if let Some(tab) = terminals.active_tab() {
-                    match tab.split {
-                        crate::terminal::SplitDirection::None => {
-                            // Single terminal
-                            let widget = TerminalWidget::new(&tab.terminal)
-                                .focused(is_focused)
-                                .title(tab.terminal.title());
-                            frame.render_widget(widget, terminal_area);
-                        }
-                        crate::terminal::SplitDirection::Horizontal => {
-                            // Top/bottom split
-                            let chunks = Layout::default()
-                                .direction(Direction::Vertical)
-                                .constraints([
-                                    Constraint::Percentage(50),
-                                    Constraint::Percentage(50),
-                                ])
-                                .split(terminal_area);
+                    let terminal_theme = &self.config.theme_manager.current().terminal;
+                    let (grid_cols, grid_rows) = tab.grid.dimensions();
+                    let focused_idx = tab.grid.focused_index();
 
-                            let first_focused =
-                                is_focused && tab.split_focus == crate::terminal::SplitFocus::First;
-                            let second_focused = is_focused
-                                && tab.split_focus == crate::terminal::SplitFocus::Second;
-
-                            let widget1 = TerminalWidget::new(&tab.terminal)
-                                .focused(first_focused)
-                                .title(tab.terminal.title());
-                            frame.render_widget(widget1, chunks[0]);
-
-                            if let Some(ref split_term) = tab.split_terminal {
-                                let widget2 = TerminalWidget::new(split_term)
-                                    .focused(second_focused)
-                                    .title(split_term.title());
-                                frame.render_widget(widget2, chunks[1]);
+                    match (grid_cols, grid_rows) {
+                        (1, 1) => {
+                            // Single terminal (no grid split)
+                            if let Some(terminal) = tab.grid.get(0) {
+                                let widget = TerminalWidget::new(terminal)
+                                    .focused(is_focused)
+                                    .title(terminal.title())
+                                    .theme(terminal_theme);
+                                frame.render_widget(widget, terminal_area);
                             }
                         }
-                        crate::terminal::SplitDirection::Vertical => {
-                            // Left/right split
+                        (2, 1) => {
+                            // Two terminals side-by-side (vertical split)
                             let chunks = Layout::default()
                                 .direction(Direction::Horizontal)
                                 .constraints([
@@ -1098,21 +1188,67 @@ impl App {
                                 ])
                                 .split(terminal_area);
 
-                            let first_focused =
-                                is_focused && tab.split_focus == crate::terminal::SplitFocus::First;
-                            let second_focused = is_focused
-                                && tab.split_focus == crate::terminal::SplitFocus::Second;
+                            for (i, chunk) in chunks.iter().enumerate() {
+                                if let Some(terminal) = tab.grid.get(i) {
+                                    let pane_focused = is_focused && focused_idx == i;
+                                    let widget = TerminalWidget::new(terminal)
+                                        .focused(pane_focused)
+                                        .title(terminal.title())
+                                        .theme(terminal_theme);
+                                    frame.render_widget(widget, *chunk);
+                                }
+                            }
+                        }
+                        (2, 2) => {
+                            // 2x2 grid
+                            let row_chunks = Layout::default()
+                                .direction(Direction::Vertical)
+                                .constraints([
+                                    Constraint::Percentage(50),
+                                    Constraint::Percentage(50),
+                                ])
+                                .split(terminal_area);
 
-                            let widget1 = TerminalWidget::new(&tab.terminal)
-                                .focused(first_focused)
-                                .title(tab.terminal.title());
-                            frame.render_widget(widget1, chunks[0]);
+                            // Top row
+                            let top_cols = Layout::default()
+                                .direction(Direction::Horizontal)
+                                .constraints([
+                                    Constraint::Percentage(50),
+                                    Constraint::Percentage(50),
+                                ])
+                                .split(row_chunks[0]);
 
-                            if let Some(ref split_term) = tab.split_terminal {
-                                let widget2 = TerminalWidget::new(split_term)
-                                    .focused(second_focused)
-                                    .title(split_term.title());
-                                frame.render_widget(widget2, chunks[1]);
+                            // Bottom row
+                            let bottom_cols = Layout::default()
+                                .direction(Direction::Horizontal)
+                                .constraints([
+                                    Constraint::Percentage(50),
+                                    Constraint::Percentage(50),
+                                ])
+                                .split(row_chunks[1]);
+
+                            // Grid layout: 0=top-left, 1=top-right, 2=bottom-left, 3=bottom-right
+                            let all_chunks = [top_cols[0], top_cols[1], bottom_cols[0], bottom_cols[1]];
+
+                            for (i, chunk) in all_chunks.iter().enumerate() {
+                                if let Some(terminal) = tab.grid.get(i) {
+                                    let pane_focused = is_focused && focused_idx == i;
+                                    let widget = TerminalWidget::new(terminal)
+                                        .focused(pane_focused)
+                                        .title(terminal.title())
+                                        .theme(terminal_theme);
+                                    frame.render_widget(widget, *chunk);
+                                }
+                            }
+                        }
+                        _ => {
+                            // Fallback: render focused terminal
+                            if let Some(terminal) = tab.grid.focused() {
+                                let widget = TerminalWidget::new(terminal)
+                                    .focused(is_focused)
+                                    .title(terminal.title())
+                                    .theme(terminal_theme);
+                                frame.render_widget(widget, terminal_area);
                             }
                         }
                     }
@@ -1140,7 +1276,9 @@ impl App {
                 frame.render_widget(tab_bar, editor_chunks[0]);
 
                 // Render editor content
-                let widget = EditorWidget::new(&self.editor).focused(is_focused);
+                let widget = EditorWidget::new(&self.editor)
+                    .focused(is_focused)
+                    .theme(&self.config.theme_manager.current().editor);
                 frame.render_widget(widget, editor_chunks[1]);
             }
         }

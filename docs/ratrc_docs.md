@@ -59,6 +59,34 @@ auto_close_tabs_on_shell_change = true
 
 ---
 
+### IDE Configuration
+
+```
+ide-always = <true|false>
+```
+
+Controls whether the IDE pane (editor) is always visible.
+
+| Value | Description |
+|-------|-------------|
+| `false` | Terminal-first mode (default) - IDE hidden until `open` command or `Ctrl+I` |
+| `true` / `yes` / `1` / `on` | Always show IDE pane alongside terminals |
+
+**Behavior:**
+- **When `false` (default):** The application starts with only terminals visible. The IDE pane appears when:
+  - You type `open` or `open <file>` in the terminal
+  - You press `Ctrl+I`
+  - The IDE auto-hides when all editor tabs are closed
+
+- **When `true`:** The IDE pane is always visible alongside terminals, similar to the traditional split layout.
+
+**Example:**
+```
+ide-always = true
+```
+
+---
+
 ### Keybinding Mode
 
 ```
@@ -385,6 +413,10 @@ shell = bash
 
 # Auto-close tabs when changing shell
 auto_close_tabs_on_shell_change = true
+
+# IDE Configuration
+# Show IDE pane always (false = terminal-first mode)
+ide-always = false
 
 # Use VSCode keybinding mode
 mode = vscode

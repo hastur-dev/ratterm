@@ -9,6 +9,7 @@ These hotkeys work regardless of which pane is focused or what mode you're in.
 | Hotkey | Action |
 |--------|--------|
 | `Ctrl+Q` | Quit application |
+| `Ctrl+I` | Toggle IDE pane visibility |
 | `Ctrl+P` | Open Command Palette |
 | `Ctrl+Shift+P` | Open Command Palette (alternative) |
 | `Ctrl+Shift+Tab` | Switch Editor Mode (cycles Vim/Emacs/Default/VSCode) |
@@ -16,9 +17,9 @@ These hotkeys work regardless of which pane is focused or what mode you're in.
 | `Ctrl+Shift+C` | Copy selection |
 | `Ctrl+V` | Paste from clipboard |
 | `Alt+Left` | Focus Terminal pane |
-| `Alt+Right` | Focus Editor pane |
-| `Alt+Tab` | Toggle focus between panes |
-| `Alt+Up` / `Alt+Down` | Switch between split terminals |
+| `Alt+Right` | Focus Editor pane (when IDE visible) |
+| `Alt+Tab` | Toggle focus between panes (when IDE visible) |
+| `Alt+Up` / `Alt+Down` | Navigate between terminal grid panes |
 | `Alt+[` | Shrink split (move divider left) |
 | `Alt+]` | Expand split (move divider right) |
 | `Alt+Shift+Left` | Previous file tab |
@@ -39,14 +40,20 @@ These hotkeys work when the terminal pane is focused.
 | `Ctrl+Left` | Previous terminal tab |
 | `Ctrl+Right` | Next terminal tab |
 
-### Split Management
+### Terminal Grid (Split Management)
+
+Terminals can be split into a 2x2 grid:
+- First split creates 2 panes side-by-side (vertical split)
+- Second split creates a 2x2 grid (4 panes)
 
 | Hotkey | Action |
 |--------|--------|
-| `Ctrl+S` | Split terminal horizontally |
-| `Ctrl+Shift+S` | Split terminal vertically |
-| `Ctrl+Shift+W` | Close current split |
-| `Ctrl+Tab` | Toggle focus between splits |
+| `Ctrl+S` | Split current terminal (progressive: 1→2→4) |
+| `Ctrl+Shift+S` | Split current terminal (same as Ctrl+S) |
+| `Ctrl+Shift+W` | Close current terminal pane |
+| `Ctrl+Tab` | Cycle focus between grid panes |
+| `Alt+Up` / `Alt+Down` | Navigate grid vertically |
+| `Alt+Left` / `Alt+Right` | Navigate grid horizontally (when in grid) |
 
 ### Scrolling & Input
 
@@ -74,9 +81,11 @@ Type these commands directly in the terminal:
 
 | Command | Action |
 |---------|--------|
-| `open` | Open file browser |
-| `open <file>` | Open specific file in editor |
+| `open` | Open file browser (shows IDE pane if hidden) |
+| `open <file>` | Open specific file in editor (shows IDE pane) |
 | `update` | Check for updates and auto-update if available |
+
+**Note:** The `open` command will automatically show the IDE pane if it's hidden.
 
 ---
 
