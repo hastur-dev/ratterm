@@ -16,10 +16,10 @@ A split-terminal TUI application with a PTY-based terminal emulator and code edi
 
 ```bash
 # Linux/macOS
-curl -fsSL https://raw.githubusercontent.com/hastur-dev/ratterm/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/hastur-dev/ratterm/master/install.sh | bash
 
 # Windows (PowerShell)
-irm https://raw.githubusercontent.com/hastur-dev/ratterm/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/hastur-dev/ratterm/master/install.ps1 | iex
 ```
 
 ### From Source
