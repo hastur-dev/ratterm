@@ -13,7 +13,7 @@
 
 param(
     [Parameter(Position=0)]
-    [ValidateSet("", "fmt", "clippy", "test", "docs", "audit", "msrv", "ci-all", "install-test", "clean", "help")]
+    [ValidateSet("", "fmt", "clippy", "test", "docs", "audit", "msrv", "ci-all", "install-test", "test-arm", "ci-all-arm", "clean", "help")]
     [string]$Command = ""
 )
 
@@ -143,15 +143,17 @@ function Show-Usage {
     Write-Host "Usage: .\scripts\test-local.ps1 [COMMAND]"
     Write-Host ""
     Write-Host "Commands:"
-    Write-Host "  (none)    Run all CI checks"
-    Write-Host "  fmt       Format check only"
-    Write-Host "  clippy    Clippy lints only"
-    Write-Host "  test      Tests only"
-    Write-Host "  docs      Documentation only"
-    Write-Host "  audit     Security audit only"
-    Write-Host "  msrv      MSRV check only"
+    Write-Host "  (none)       Run all CI checks"
+    Write-Host "  fmt          Format check only"
+    Write-Host "  clippy       Clippy lints only"
+    Write-Host "  test         Tests only"
+    Write-Host "  docs         Documentation only"
+    Write-Host "  audit        Security audit only"
+    Write-Host "  msrv         MSRV check only"
     Write-Host "  ci-all       Run all checks in one container"
     Write-Host "  install-test Test install script in Docker"
+    Write-Host "  test-arm     Run tests on ARM64 Linux (QEMU)"
+    Write-Host "  ci-all-arm   Run all checks on ARM64 Linux (QEMU)"
     Write-Host "  clean        Clean up Docker volumes and images"
     Write-Host "  help         Show this help message"
 }
@@ -171,6 +173,8 @@ switch ($Command) {
     "msrv" { Invoke-Service "msrv" }
     "ci-all" { Invoke-Service "ci-all" }
     "install-test" { Invoke-Service "install-test" }
+    "test-arm" { Invoke-Service "test-arm" }
+    "ci-all-arm" { Invoke-Service "ci-all-arm" }
     "clean" { Invoke-Clean }
     "help" { Show-Usage }
     default {

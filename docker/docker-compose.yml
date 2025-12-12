@@ -112,7 +112,42 @@ services:
     mem_limit: 2g
     memswap_limit: 2g
 
+  # ARM64 (aarch64) Linux tests using QEMU emulation
+  # Requires: docker buildx create --use
+  # Note: QEMU emulation is slow and memory-intensive; needs 8GB+ RAM
+  test-arm:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.test-arm
+    platform: linux/arm64
+    command: cargo test --all-features --verbose
+    environment:
+      - CARGO_TERM_COLOR=always
+      - RUSTFLAGS=-D warnings
+    volumes:
+      - cargo-cache-arm:/usr/local/cargo/registry
+      - target-cache-arm:/app/target
+    mem_limit: 8g
+    memswap_limit: 12g
+
+  # ARM64 all CI checks
+  ci-all-arm:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.test-arm
+    platform: linux/arm64
+    environment:
+      - CARGO_TERM_COLOR=always
+      - RUSTFLAGS=-D warnings
+    volumes:
+      - cargo-cache-arm:/usr/local/cargo/registry
+      - target-cache-arm:/app/target
+    mem_limit: 8g
+    memswap_limit: 12g
+
 volumes:
   cargo-cache:
   target-cache:
   target-cache-msrv:
+  cargo-cache-arm:
+  target-cache-arm:

@@ -1,0 +1,31 @@
+# Dockerfile for running CI tests on ARM Linux (aarch64)
+# Can be used with QEMU emulation or native ARM hardware/VMs
+#
+# Build for ARM:
+#   docker buildx build --platform linux/arm64 -f docker/Dockerfile.test-arm -t ratterm-test-arm .
+#
+# Run tests:
+#   docker run --rm ratterm-test-arm
+
+FROM --platform=linux/arm64 rust:1.85-bookworm
+
+# Install additional tools
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Rust components
+RUN rustup component add rustfmt clippy
+
+# Install cargo-audit for security checks (--locked to use compatible deps)
+RUN cargo install cargo-audit --locked
+
+# Set working directory
+WORKDIR /app
+
+# Copy the project
+COPY . .
+
+# Default command runs all checks
+CMD ["sh", "-c", "cargo fmt --all -- --check && cargo clippy --all-targets --all-features -- -D warnings && cargo test --all-features --verbose && cargo doc --no-deps --all-features"]

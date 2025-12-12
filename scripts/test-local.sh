@@ -124,15 +124,17 @@ usage() {
     echo "Usage: $0 [COMMAND]"
     echo ""
     echo "Commands:"
-    echo "  (none)    Run all CI checks"
-    echo "  fmt       Format check only"
-    echo "  clippy    Clippy lints only"
-    echo "  test      Tests only"
-    echo "  docs      Documentation only"
-    echo "  audit     Security audit only"
-    echo "  msrv      MSRV check only"
+    echo "  (none)       Run all CI checks"
+    echo "  fmt          Format check only"
+    echo "  clippy       Clippy lints only"
+    echo "  test         Tests only"
+    echo "  docs         Documentation only"
+    echo "  audit        Security audit only"
+    echo "  msrv         MSRV check only"
     echo "  ci-all       Run all checks in one container"
     echo "  install-test Test install script in Docker"
+    echo "  test-arm     Run tests on ARM64 Linux (QEMU)"
+    echo "  ci-all-arm   Run all checks on ARM64 Linux (QEMU)"
     echo "  clean        Clean up Docker volumes and images"
     echo "  help         Show this help message"
 }
@@ -145,7 +147,7 @@ main() {
         "")
             run_all
             ;;
-        fmt|clippy|test|docs|audit|msrv|ci-all|install-test)
+        fmt|clippy|test|docs|audit|msrv|ci-all|install-test|test-arm|ci-all-arm)
             run_service "$1"
             ;;
         clean)

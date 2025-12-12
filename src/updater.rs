@@ -364,16 +364,16 @@ pub fn check_for_updates() -> StartupUpdateResult {
                     }
                 }
                 // User declined
-                return StartupUpdateResult::UpdateAvailable {
+                StartupUpdateResult::UpdateAvailable {
                     current: VERSION.to_string(),
                     latest: version,
-                };
+                }
             } else {
                 eprintln!("Run 'rat --update' to update.");
-                return StartupUpdateResult::UpdateAvailable {
+                StartupUpdateResult::UpdateAvailable {
                     current: VERSION.to_string(),
                     latest: version,
-                };
+                }
             }
         }
         UpdateStatus::UpToDate => StartupUpdateResult::None,
