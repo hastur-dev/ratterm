@@ -41,7 +41,7 @@ use ratatui::{Terminal, backend::CrosstermBackend};
 
 use ratterm::app::App;
 use ratterm::extension::{ExtensionManager, installer::Installer};
-use ratterm::updater::{self, UpdateStatus, Updater, VERSION};
+use ratterm::updater::{self, StartupUpdateResult, UpdateStatus, Updater, VERSION};
 
 /// Maximum iterations for main loop (safety bound).
 const MAX_MAIN_ITERATIONS: usize = 10_000_000;
@@ -62,11 +62,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         match updater.check() {
             UpdateStatus::Available(version) => {
                 println!("Updating to v{version}...");
-                if let Err(e) = updater.update(&version) {
-                    eprintln!("Update failed: {e}");
-                    std::process::exit(1);
+                match updater.update(&version) {
+                    Ok(true) => {
+                        println!("Update complete! Please restart ratterm.");
+                    }
+                    Ok(false) => {
+                        println!("ratterm v{VERSION} is already up to date.");
+                    }
+                    Err(e) => {
+                        eprintln!("Update failed: {e}");
+                        std::process::exit(1);
+                    }
                 }
-                println!("Update complete! Please restart ratterm.");
             }
             UpdateStatus::UpToDate => {
                 println!("ratterm v{VERSION} is up to date.");
@@ -87,9 +94,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         return handle_extension_command(&args[2..]);
     }
 
+    // Handle --test mode for automated testing
+    if args.iter().any(|a| a == "--test") {
+        return run_test_mode();
+    }
+
     // Check for updates on startup (unless --no-update)
-    if !args.iter().any(|a| a == "--no-update") && updater::check_for_updates() {
-        // User updated, exit so they can restart
+    let update_result = if args.iter().any(|a| a == "--no-update") {
+        StartupUpdateResult::None
+    } else {
+        updater::check_for_updates()
+    };
+
+    // If update was performed, exit so user can restart
+    if matches!(update_result, StartupUpdateResult::UpdatePerformed { .. }) {
         return Ok(());
     }
 
@@ -122,6 +140,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create application
     let mut app = App::new(size.width, size.height)?;
 
+    // Immediately resize to ensure proper layout synchronization
+    // This fixes visual artifacts that occur before the first resize event
+    app.resize(size.width, size.height);
+
     // Try to restore previous session (e.g., after an update)
     match app.restore_session() {
         Ok(true) => {
@@ -142,9 +164,41 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
+    // Show update status in the app
+    match update_result {
+        StartupUpdateResult::DevModeUpdateAvailable { current, latest } => {
+            app.set_status(format!(
+                "[Dev] Update: v{} -> v{} (run 'rat --update')",
+                current, latest
+            ));
+        }
+        StartupUpdateResult::DevModeUpToDate { current } => {
+            app.set_status(format!("[Dev] v{} (up to date)", current));
+        }
+        StartupUpdateResult::DevModeCheckFailed { current, error } => {
+            app.set_status(format!("[Dev] v{} (update check failed: {})", current, error));
+        }
+        StartupUpdateResult::UpdateAvailable { current, latest } => {
+            app.set_status(format!(
+                "Update available: v{} -> v{} (run 'rat --update')",
+                current, latest
+            ));
+        }
+        _ => {}
+    }
+
     // Main event loop
     let mut iterations = 0;
     while app.is_running() && iterations < MAX_MAIN_ITERATIONS {
+        // Check if app requests a full redraw (e.g., after mode change)
+        // This clears the terminal buffer to prevent ghost artifacts
+        if app.take_redraw_request() {
+            // Force complete terminal reset
+            terminal.clear()?;
+            // Also send raw clear screen escape sequence
+            execute!(io::stdout(), crossterm::terminal::Clear(crossterm::terminal::ClearType::All))?;
+        }
+
         // Render
         terminal.draw(|frame| {
             app.render(frame);
@@ -307,5 +361,91 @@ fn handle_extension_command(args: &[String]) -> Result<(), Box<dyn std::error::E
         }
     }
 
+    Ok(())
+}
+
+/// Runs automated test mode to diagnose rendering issues.
+fn run_test_mode() -> Result<(), Box<dyn std::error::Error>> {
+    use std::fs::File;
+    use std::io::Write;
+
+    println!("=== Ratterm Test Mode ===");
+    println!("This mode tests the file browser open/close cycle.");
+    println!();
+
+    // Set up terminal
+    enable_raw_mode()?;
+    let mut stdout = io::stdout();
+    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::new(backend)?;
+
+    let size = terminal.size()?;
+    let mut app = App::new(size.width, size.height)?;
+    app.resize(size.width, size.height);
+
+    let mut log = File::create("test_output.txt")?;
+    writeln!(log, "=== Test Mode Started ===")?;
+    writeln!(log, "Terminal size: {}x{}", size.width, size.height)?;
+
+    // Step 1: Initial render
+    writeln!(log, "\n--- Step 1: Initial render ---")?;
+    terminal.draw(|frame| app.render(frame))?;
+    writeln!(log, "Initial render complete")?;
+
+    // Step 2: Show file browser
+    writeln!(log, "\n--- Step 2: Show file browser ---")?;
+    app.show_file_browser();
+    let redraw1 = app.take_redraw_request();
+    writeln!(log, "Redraw requested after show_file_browser: {}", redraw1)?;
+    if redraw1 {
+        terminal.clear()?;
+        writeln!(log, "Terminal cleared")?;
+    }
+    terminal.draw(|frame| app.render(frame))?;
+    writeln!(log, "File browser render complete")?;
+
+    // Step 3: Open a file (install.sh)
+    writeln!(log, "\n--- Step 3: Open install.sh ---")?;
+    let test_file = std::env::current_dir()?.join("install.sh");
+    writeln!(log, "Test file path: {:?}", test_file)?;
+    if test_file.exists() {
+        writeln!(log, "File exists, opening...")?;
+        let result = app.open_file(&test_file);
+        writeln!(log, "open_file result: {:?}", result.is_ok())?;
+    } else {
+        writeln!(log, "install.sh not found, skipping file open")?;
+    }
+
+    // Check redraw flag
+    let redraw2 = app.take_redraw_request();
+    writeln!(log, "Redraw requested after open_file: {}", redraw2)?;
+
+    if redraw2 {
+        writeln!(log, "Clearing terminal...")?;
+        terminal.clear()?;
+        execute!(io::stdout(), crossterm::terminal::Clear(crossterm::terminal::ClearType::All))?;
+        writeln!(log, "Terminal cleared with both methods")?;
+    }
+
+    terminal.draw(|frame| app.render(frame))?;
+    writeln!(log, "Post-open render complete")?;
+
+    // Step 4: Another render cycle
+    writeln!(log, "\n--- Step 4: Second render after file open ---")?;
+    terminal.draw(|frame| app.render(frame))?;
+    writeln!(log, "Second render complete")?;
+
+    // Wait a bit to let user see the result
+    std::thread::sleep(std::time::Duration::from_secs(2));
+
+    writeln!(log, "\n=== Test Complete ===")?;
+
+    // Cleanup
+    app.shutdown();
+    disable_raw_mode()?;
+    execute!(io::stdout(), LeaveAlternateScreen, DisableMouseCapture)?;
+
+    println!("Test complete. Check test_output.txt for results.");
     Ok(())
 }

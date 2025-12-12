@@ -134,6 +134,8 @@ impl Editor {
         self.buffer = Buffer::from_str(&content);
         self.cursor = Cursor::new();
         self.path = Some(path);
+        // Reset scroll position to top-left before updating gutter
+        self.view.reset_scroll();
         self.view.update_gutter_width(self.buffer.len_lines());
 
         Ok(())
@@ -172,6 +174,8 @@ impl Editor {
         self.buffer = Buffer::new();
         self.cursor = Cursor::new();
         self.path = None;
+        // Reset scroll position to top-left for new buffer
+        self.view.reset_scroll();
         self.view.update_gutter_width(self.buffer.len_lines());
         self.mode = EditorMode::Normal;
     }

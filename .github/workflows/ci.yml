@@ -1,10 +1,9 @@
 name: CI
 
 on:
-  push:
-    branches: [main, master, dev]
   pull_request:
-    branches: [main, master, dev]
+    branches: [main, master]
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
@@ -59,7 +58,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest, ubuntu-24.04-arm, windows-latest, macos-latest]
 
     steps:
       - uses: actions/checkout@v4
@@ -84,10 +83,9 @@ jobs:
       - name: Run doc tests
         run: cargo test --doc
 
-  # Install script tests on multiple platforms (main/master only)
+  # Install script tests on multiple platforms
   install-script:
     name: Install Script (${{ matrix.os }})
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false

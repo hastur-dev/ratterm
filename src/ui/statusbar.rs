@@ -107,13 +107,13 @@ impl<'a> StatusBar<'a> {
     }
 }
 
-impl<'a> Default for StatusBar<'a> {
+impl Default for StatusBar<'_> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<'a> Widget for StatusBar<'a> {
+impl Widget for StatusBar<'_> {
     fn render(self, area: Rect, buf: &mut RatatuiBuffer) {
         if area.height == 0 || area.width == 0 {
             return;
@@ -242,7 +242,7 @@ impl<'a> HelpBar<'a> {
     }
 }
 
-impl<'a> Widget for HelpBar<'a> {
+impl Widget for HelpBar<'_> {
     fn render(self, area: Rect, buf: &mut RatatuiBuffer) {
         if area.height == 0 || area.width == 0 {
             return;

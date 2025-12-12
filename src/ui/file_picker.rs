@@ -36,7 +36,7 @@ impl<'a> FilePickerWidget<'a> {
     }
 }
 
-impl<'a> Widget for FilePickerWidget<'a> {
+impl Widget for FilePickerWidget<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         // Draw border
         let border_style = if self.focused {
@@ -188,7 +188,7 @@ impl<'a> FileInfoBar<'a> {
     }
 }
 
-impl<'a> Widget for FileInfoBar<'a> {
+impl Widget for FileInfoBar<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         if area.height < 1 {
             return;

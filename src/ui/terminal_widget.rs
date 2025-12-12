@@ -201,13 +201,13 @@ impl<'a> TerminalWidget<'a> {
     }
 }
 
-impl<'a> Widget for TerminalWidget<'a> {
+impl Widget for TerminalWidget<'_> {
     fn render(self, area: Rect, buf: &mut RatatuiBuffer) {
         // Create block with border - use theme if available
         let (border_focused, border_unfocused) = self
             .theme
             .map(|t| (t.border_focused, t.border))
-            .unwrap_or((Color::Green, Color::DarkGray));
+            .unwrap_or((Color::Cyan, Color::DarkGray));
 
         let border_style = if self.focused {
             Style::default().fg(border_focused)

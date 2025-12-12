@@ -96,6 +96,14 @@ impl View {
         self.gutter_width = digits + 2; // padding
     }
 
+    /// Resets scroll position to origin (0, 0).
+    ///
+    /// Call this when opening a new file to ensure the view starts from the top.
+    pub fn reset_scroll(&mut self) {
+        self.scroll_top = 0;
+        self.scroll_left = 0;
+    }
+
     /// Scrolls to ensure the cursor is visible.
     pub fn ensure_cursor_visible(&mut self, cursor: Position) {
         // Vertical scrolling

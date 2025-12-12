@@ -33,7 +33,7 @@ impl Default for TerminalTheme {
             cursor: Color::White,
             selection: Color::Rgb(38, 79, 120),
             border: Color::DarkGray,
-            border_focused: Color::Green,
+            border_focused: Color::Cyan,
             palette: AnsiPalette::default(),
         }
     }

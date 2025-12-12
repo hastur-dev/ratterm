@@ -1,13 +1,14 @@
 //! Split pane layout management.
 //!
-//! Handles horizontal split between terminal and editor panes.
+//! Handles layout between terminal grid and IDE pane.
+//! By default, only terminal is shown. IDE appears when toggled or via open command.
 
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 
 /// Minimum pane size as percentage.
 const MIN_PANE_SIZE: u16 = 10;
 
-/// Default split position as percentage.
+/// Default split position as percentage (terminal:IDE).
 const DEFAULT_SPLIT: u16 = 50;
 
 /// Split resize step as percentage.
@@ -16,10 +17,10 @@ const RESIZE_STEP: u16 = 5;
 /// Which pane is focused.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum FocusedPane {
-    /// Terminal pane (left).
+    /// Terminal pane (left/full).
     #[default]
     Terminal,
-    /// Editor pane (right).
+    /// Editor pane (right, when IDE visible).
     Editor,
 }
 
@@ -35,27 +36,43 @@ impl FocusedPane {
 }
 
 /// Split layout manager.
+/// Manages terminal-first layout with optional IDE pane.
 #[derive(Debug, Clone)]
 pub struct SplitLayout {
-    /// Split position as percentage (0-100).
+    /// Split position as percentage (0-100) - terminal width when IDE visible.
     split_percent: u16,
     /// Currently focused pane.
     focused: FocusedPane,
-    /// Whether to show the terminal pane.
+    /// Whether to show the terminal pane (always true in new architecture).
     show_terminal: bool,
-    /// Whether to show the editor pane.
+    /// Whether to show the editor/IDE pane (false by default).
     show_editor: bool,
+    /// Whether IDE is visible (separate from show_editor for state management).
+    ide_visible: bool,
 }
 
 impl SplitLayout {
-    /// Creates a new split layout.
+    /// Creates a new split layout (terminal-first, IDE hidden).
     #[must_use]
     pub fn new() -> Self {
         Self {
             split_percent: DEFAULT_SPLIT,
             focused: FocusedPane::Terminal,
             show_terminal: true,
+            show_editor: false, // IDE hidden by default
+            ide_visible: false,
+        }
+    }
+
+    /// Creates a layout with IDE always visible (for ide-always = true).
+    #[must_use]
+    pub fn with_ide_visible() -> Self {
+        Self {
+            split_percent: DEFAULT_SPLIT,
+            focused: FocusedPane::Terminal,
+            show_terminal: true,
             show_editor: true,
+            ide_visible: true,
         }
     }
 
@@ -73,25 +90,35 @@ impl SplitLayout {
 
     /// Sets the focused pane.
     pub fn set_focused(&mut self, pane: FocusedPane) {
+        // Only allow focusing editor if IDE is visible
+        if pane == FocusedPane::Editor && !self.ide_visible {
+            return;
+        }
         self.focused = pane;
     }
 
-    /// Toggles between panes.
+    /// Toggles between panes (only if IDE is visible).
     pub fn toggle_focus(&mut self) {
-        self.focused = self.focused.toggle();
+        if self.ide_visible {
+            self.focused = self.focused.toggle();
+        }
     }
 
     /// Moves split left (increases terminal size).
     pub fn move_split_left(&mut self) {
-        self.split_percent = self
-            .split_percent
-            .saturating_sub(RESIZE_STEP)
-            .max(MIN_PANE_SIZE);
+        if self.ide_visible {
+            self.split_percent = self
+                .split_percent
+                .saturating_sub(RESIZE_STEP)
+                .max(MIN_PANE_SIZE);
+        }
     }
 
     /// Moves split right (increases editor size).
     pub fn move_split_right(&mut self) {
-        self.split_percent = (self.split_percent + RESIZE_STEP).min(100 - MIN_PANE_SIZE);
+        if self.ide_visible {
+            self.split_percent = (self.split_percent + RESIZE_STEP).min(100 - MIN_PANE_SIZE);
+        }
     }
 
     /// Sets the split percentage.
@@ -99,10 +126,40 @@ impl SplitLayout {
         self.split_percent = percent.clamp(MIN_PANE_SIZE, 100 - MIN_PANE_SIZE);
     }
 
-    /// Shows only the terminal (fullscreen).
+    /// Shows the IDE pane.
+    pub fn show_ide(&mut self) {
+        self.ide_visible = true;
+        self.show_editor = true;
+    }
+
+    /// Hides the IDE pane.
+    pub fn hide_ide(&mut self) {
+        self.ide_visible = false;
+        self.show_editor = false;
+        // Focus terminal when IDE is hidden
+        self.focused = FocusedPane::Terminal;
+    }
+
+    /// Toggles IDE visibility.
+    pub fn toggle_ide(&mut self) {
+        if self.ide_visible {
+            self.hide_ide();
+        } else {
+            self.show_ide();
+        }
+    }
+
+    /// Returns true if IDE is visible.
+    #[must_use]
+    pub const fn ide_visible(&self) -> bool {
+        self.ide_visible
+    }
+
+    /// Shows only the terminal (fullscreen) - hides IDE.
     pub fn fullscreen_terminal(&mut self) {
         self.show_terminal = true;
         self.show_editor = false;
+        self.ide_visible = false;
         self.focused = FocusedPane::Terminal;
     }
 
@@ -110,13 +167,15 @@ impl SplitLayout {
     pub fn fullscreen_editor(&mut self) {
         self.show_terminal = false;
         self.show_editor = true;
+        self.ide_visible = true;
         self.focused = FocusedPane::Editor;
     }
 
-    /// Shows both panes.
+    /// Shows both panes (enables IDE).
     pub fn show_both(&mut self) {
         self.show_terminal = true;
         self.show_editor = true;
+        self.ide_visible = true;
     }
 
     /// Returns true if terminal is visible.
@@ -233,11 +292,13 @@ mod tests {
         let layout = SplitLayout::new();
         assert_eq!(layout.split_percent(), 50);
         assert_eq!(layout.focused(), FocusedPane::Terminal);
+        assert!(!layout.ide_visible()); // IDE hidden by default
     }
 
     #[test]
     fn test_layout_toggle() {
         let mut layout = SplitLayout::new();
+        layout.show_ide(); // Must show IDE first to toggle focus
         layout.toggle_focus();
         assert_eq!(layout.focused(), FocusedPane::Editor);
         layout.toggle_focus();
@@ -245,8 +306,17 @@ mod tests {
     }
 
     #[test]
+    fn test_layout_toggle_without_ide() {
+        let mut layout = SplitLayout::new();
+        // Toggle should do nothing when IDE is hidden
+        layout.toggle_focus();
+        assert_eq!(layout.focused(), FocusedPane::Terminal);
+    }
+
+    #[test]
     fn test_layout_resize() {
         let mut layout = SplitLayout::new();
+        layout.show_ide(); // Must show IDE to resize
         layout.move_split_left();
         assert!(layout.split_percent() < 50);
         layout.move_split_right();
@@ -255,13 +325,37 @@ mod tests {
     }
 
     #[test]
-    fn test_layout_calculate() {
+    fn test_layout_calculate_terminal_only() {
         let layout = SplitLayout::new();
+        let area = Rect::new(0, 0, 100, 50);
+        let areas = layout.calculate(area);
+
+        assert!(areas.has_terminal());
+        assert!(!areas.has_editor()); // Editor hidden by default
+        assert_eq!(areas.terminal.width, 100); // Terminal uses full width
+    }
+
+    #[test]
+    fn test_layout_calculate_with_ide() {
+        let mut layout = SplitLayout::new();
+        layout.show_ide();
         let area = Rect::new(0, 0, 100, 50);
         let areas = layout.calculate(area);
 
         assert!(areas.has_terminal());
         assert!(areas.has_editor());
         assert_eq!(areas.terminal.width + areas.editor.width, 100);
+    }
+
+    #[test]
+    fn test_ide_toggle() {
+        let mut layout = SplitLayout::new();
+        assert!(!layout.ide_visible());
+
+        layout.toggle_ide();
+        assert!(layout.ide_visible());
+
+        layout.toggle_ide();
+        assert!(!layout.ide_visible());
     }
 }

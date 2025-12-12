@@ -352,7 +352,7 @@ impl<'a> PopupWidget<'a> {
     }
 }
 
-impl<'a> Widget for PopupWidget<'a> {
+impl Widget for PopupWidget<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         if !self.popup.visible {
             return;

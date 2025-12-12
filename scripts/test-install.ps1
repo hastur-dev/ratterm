@@ -41,9 +41,11 @@ function Test-Syntax {
     }
 
     try {
+        $errors = $null
+        $tokens = $null
         $null = [System.Management.Automation.Language.Parser]::ParseFile(
             $InstallScript,
-            [ref]$null,
+            [ref]$tokens,
             [ref]$errors
         )
 
@@ -119,6 +121,56 @@ function Test-DryRun {
 
     } catch {
         Write-Err "Dry run failed: $_"
+        exit 1
+    }
+}
+
+function Test-IrmPipeExecution {
+    Write-Info "Testing irm pipe execution (simulated)..."
+
+    # Test that the install script can be executed via piped input
+    # This simulates: irm <url> | iex
+    # For local testing, we read the file and invoke it via ScriptBlock
+
+    try {
+        # Read the install script content
+        $scriptContent = Get-Content $InstallScript -Raw
+
+        # Test that the script can be parsed as a ScriptBlock
+        $scriptBlock = [ScriptBlock]::Create($scriptContent)
+        if ($null -eq $scriptBlock) {
+            Write-Err "Failed to create ScriptBlock from install script"
+            exit 1
+        }
+
+        Write-Success "Script can be parsed as ScriptBlock for irm | iex execution"
+
+        # Test piping cat to pwsh -Command (alternative validation) - optional
+        if (Get-Command pwsh -ErrorAction SilentlyContinue) {
+            Write-Info "Testing cat | pwsh -Command execution pattern..."
+            $testResult = Get-Content $InstallScript -Raw | pwsh -NoProfile -Command {
+                param([Parameter(ValueFromPipeline)]$content)
+                # Just validate it parses without errors
+                try {
+                    $null = [ScriptBlock]::Create($content)
+                    Write-Output "OK"
+                } catch {
+                    Write-Output "FAIL: $_"
+                }
+            }
+
+            if ($testResult -eq "OK") {
+                Write-Success "Pipe execution pattern validated"
+            } else {
+                Write-Err "Pipe execution pattern failed: $testResult"
+                exit 1
+            }
+        } else {
+            Write-Info "pwsh (PowerShell 7) not available, skipping pipe execution test"
+        }
+
+    } catch {
+        Write-Err "irm pipe execution test failed: $_"
         exit 1
     }
 }
@@ -226,6 +278,7 @@ switch ($Command) {
     "" {
         Test-Syntax
         Test-DryRun
+        Test-IrmPipeExecution
         Write-Host ""
         Write-Success "All tests passed!"
     }
@@ -234,10 +287,12 @@ switch ($Command) {
     }
     "dry-run" {
         Test-DryRun
+        Test-IrmPipeExecution
     }
     "full" {
         Test-Syntax
         Test-DryRun
+        Test-IrmPipeExecution
         Test-FullInstall
     }
     "help" {

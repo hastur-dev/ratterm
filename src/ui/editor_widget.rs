@@ -291,13 +291,14 @@ impl<'a> EditorWidget<'a> {
     }
 }
 
-impl<'a> Widget for EditorWidget<'a> {
+impl Widget for EditorWidget<'_> {
     fn render(self, area: Rect, buf: &mut RatatuiBuffer) {
         // Create block with border - use theme if available
+        // Fallback colors match EditorTheme::default() for consistency
         let (border_focused, border_unfocused) = self
             .theme
             .map(|t| (t.border_focused, t.border))
-            .unwrap_or((Color::Green, Color::DarkGray));
+            .unwrap_or((Color::Rgb(86, 156, 214), Color::DarkGray));
 
         let border_style = if self.focused {
             Style::default().fg(border_focused)
