@@ -41,6 +41,8 @@ use ratatui::{Terminal, backend::CrosstermBackend};
 
 use ratterm::app::App;
 use ratterm::extension::{ExtensionManager, installer::Installer};
+#[cfg(not(windows))]
+use ratterm::updater::restart_application;
 use ratterm::updater::{self, StartupUpdateResult, UpdateStatus, Updater, VERSION};
 
 /// Maximum iterations for main loop (safety bound).
@@ -62,9 +64,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         match updater.check() {
             UpdateStatus::Available(version) => {
                 println!("Updating to v{version}...");
-                match updater.update(&version) {
+                match updater.update_and_restart(&version) {
                     Ok(true) => {
-                        println!("Update complete! Please restart ratterm.");
+                        // On Windows, the batch script handles restart
+                        // On Unix, we restart here
+                        #[cfg(not(windows))]
+                        {
+                            println!("Update complete! Restarting...");
+                            restart_application();
+                        }
+                        #[cfg(windows)]
+                        {
+                            println!("Update prepared. Application will restart automatically.");
+                        }
                     }
                     Ok(false) => {
                         println!("ratterm v{VERSION} is already up to date.");
@@ -106,9 +118,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         updater::check_for_updates()
     };
 
-    // If update was performed, exit so user can restart
-    if matches!(update_result, StartupUpdateResult::UpdatePerformed { .. }) {
-        return Ok(());
+    // If update was performed, handle restart
+    if let StartupUpdateResult::UpdatePerformed { version } = &update_result {
+        // On Windows, the batch script handles restart - just exit
+        // On Unix, we restart here
+        #[cfg(not(windows))]
+        {
+            eprintln!("Update to v{version} complete! Restarting...");
+            restart_application();
+        }
+        #[cfg(windows)]
+        {
+            eprintln!("Update to v{version} prepared. Restarting automatically...");
+            return Ok(());
+        }
     }
 
     // Get file path (skip flags)
@@ -176,7 +199,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             app.set_status(format!("[Dev] v{} (up to date)", current));
         }
         StartupUpdateResult::DevModeCheckFailed { current, error } => {
-            app.set_status(format!("[Dev] v{} (update check failed: {})", current, error));
+            app.set_status(format!(
+                "[Dev] v{} (update check failed: {})",
+                current, error
+            ));
         }
         StartupUpdateResult::UpdateAvailable { current, latest } => {
             app.set_status(format!(
@@ -196,7 +222,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // Force complete terminal reset
             terminal.clear()?;
             // Also send raw clear screen escape sequence
-            execute!(io::stdout(), crossterm::terminal::Clear(crossterm::terminal::ClearType::All))?;
+            execute!(
+                io::stdout(),
+                crossterm::terminal::Clear(crossterm::terminal::ClearType::All)
+            )?;
         }
 
         // Render
@@ -210,11 +239,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         iterations += 1;
     }
 
+    // Check if restart was requested (in-app update)
+    let needs_restart = app.needs_restart_after_update();
+
     // Shutdown
     app.shutdown();
 
     // Restore terminal
     restore_terminal()?;
+
+    // If update was performed in-app, handle restart
+    if needs_restart {
+        // On Windows, the batch script handles restart
+        // On Unix, restart here
+        #[cfg(not(windows))]
+        {
+            restart_application();
+        }
+        // On Windows, just exit - batch script will restart
+    }
 
     // Force exit to avoid waiting for background threads
     std::process::exit(0);
@@ -424,7 +467,10 @@ fn run_test_mode() -> Result<(), Box<dyn std::error::Error>> {
     if redraw2 {
         writeln!(log, "Clearing terminal...")?;
         terminal.clear()?;
-        execute!(io::stdout(), crossterm::terminal::Clear(crossterm::terminal::ClearType::All))?;
+        execute!(
+            io::stdout(),
+            crossterm::terminal::Clear(crossterm::terminal::ClearType::All)
+        )?;
         writeln!(log, "Terminal cleared with both methods")?;
     }
 

@@ -101,6 +101,8 @@ pub struct App {
     last_terminal_area: Cell<Rect>,
     /// Flag to request a full screen redraw (clears ghost artifacts).
     needs_redraw: bool,
+    /// Flag to request restart after update (for in-app updates).
+    request_restart_after_update: bool,
 }
 
 impl App {
@@ -159,6 +161,7 @@ impl App {
             config,
             last_terminal_area: Cell::new(Rect::default()),
             needs_redraw: false,
+            request_restart_after_update: false,
         })
     }
 
@@ -172,6 +175,12 @@ impl App {
     /// Use this when changing modes or after operations that may leave ghost artifacts.
     pub fn request_redraw(&mut self) {
         self.needs_redraw = true;
+    }
+
+    /// Returns true if the app requested a restart after an in-app update.
+    #[must_use]
+    pub fn needs_restart_after_update(&self) -> bool {
+        self.request_restart_after_update
     }
 
     /// Returns a reference to the clipboard.
@@ -1228,7 +1237,8 @@ impl App {
                                 .split(row_chunks[1]);
 
                             // Grid layout: 0=top-left, 1=top-right, 2=bottom-left, 3=bottom-right
-                            let all_chunks = [top_cols[0], top_cols[1], bottom_cols[0], bottom_cols[1]];
+                            let all_chunks =
+                                [top_cols[0], top_cols[1], bottom_cols[0], bottom_cols[1]];
 
                             for (i, chunk) in all_chunks.iter().enumerate() {
                                 if let Some(terminal) = tab.grid.get(i) {

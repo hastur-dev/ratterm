@@ -155,7 +155,10 @@ impl TerminalGrid {
 
     /// Returns all terminals as a vector of mutable references.
     pub fn all_terminals_mut(&mut self) -> Vec<&mut Terminal> {
-        self.terminals.iter_mut().filter_map(|t| t.as_mut()).collect()
+        self.terminals
+            .iter_mut()
+            .filter_map(|t| t.as_mut())
+            .collect()
     }
 
     /// Splits the grid, adding a new terminal.
@@ -211,11 +214,11 @@ impl TerminalGrid {
             }
             3 | 4 => {
                 // Already at max capacity
-                Err(PtyError::Other("Grid is at maximum capacity (2x2)".to_string()))
+                Err(PtyError::Other(
+                    "Grid is at maximum capacity (2x2)".to_string(),
+                ))
             }
-            _ => {
-                Err(PtyError::Other("Invalid grid state".to_string()))
-            }
+            _ => Err(PtyError::Other("Invalid grid state".to_string())),
         }
     }
 
@@ -324,16 +327,32 @@ impl TerminalGrid {
 
         let new_pos = match direction {
             GridDirection::Up => {
-                if row > 0 { (col, row - 1) } else { (col, row) }
+                if row > 0 {
+                    (col, row - 1)
+                } else {
+                    (col, row)
+                }
             }
             GridDirection::Down => {
-                if row < self.rows - 1 { (col, row + 1) } else { (col, row) }
+                if row < self.rows - 1 {
+                    (col, row + 1)
+                } else {
+                    (col, row)
+                }
             }
             GridDirection::Left => {
-                if col > 0 { (col - 1, row) } else { (col, row) }
+                if col > 0 {
+                    (col - 1, row)
+                } else {
+                    (col, row)
+                }
             }
             GridDirection::Right => {
-                if col < self.cols - 1 { (col + 1, row) } else { (col, row) }
+                if col < self.cols - 1 {
+                    (col + 1, row)
+                } else {
+                    (col, row)
+                }
             }
         };
 
@@ -432,7 +451,7 @@ pub struct TerminalTab {
     /// Tab index.
     pub index: usize,
     // Legacy fields for backward compatibility in rendering
-    /// Primary terminal instance (reference to grid[0]).
+    /// Primary terminal instance (reference to grid\[0\]).
     /// Note: This is kept for backward compatibility with rendering code.
     pub terminal: DummyTerminalRef,
     /// Secondary terminal (for backward compat - always None now).
@@ -561,7 +580,9 @@ impl TerminalMultiplexer {
     /// Returns a reference to the active terminal (focused one in grid).
     #[must_use]
     pub fn active_terminal(&self) -> Option<&Terminal> {
-        self.tabs.get(self.active_tab).and_then(|t| t.focused_terminal())
+        self.tabs
+            .get(self.active_tab)
+            .and_then(|t| t.focused_terminal())
     }
 
     /// Returns a mutable reference to the active terminal.
@@ -797,18 +818,24 @@ impl TerminalMultiplexer {
     /// Returns the focused terminal index within the grid.
     #[must_use]
     pub fn current_grid_focus(&self) -> Option<usize> {
-        self.tabs.get(self.active_tab).map(|t| t.grid.focused_index())
+        self.tabs
+            .get(self.active_tab)
+            .map(|t| t.grid.focused_index())
     }
 
     /// Returns a reference to a terminal by grid index in the active tab.
     #[must_use]
     pub fn get_terminal(&self, index: usize) -> Option<&Terminal> {
-        self.tabs.get(self.active_tab).and_then(|t| t.grid.get(index))
+        self.tabs
+            .get(self.active_tab)
+            .and_then(|t| t.grid.get(index))
     }
 
     /// Returns a mutable reference to a terminal by grid index.
     pub fn get_terminal_mut(&mut self, index: usize) -> Option<&mut Terminal> {
-        self.tabs.get_mut(self.active_tab).and_then(|t| t.grid.get_mut(index))
+        self.tabs
+            .get_mut(self.active_tab)
+            .and_then(|t| t.grid.get_mut(index))
     }
 
     /// Resizes all terminals.
