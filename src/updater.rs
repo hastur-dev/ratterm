@@ -5,12 +5,17 @@
 use std::env;
 use std::fs;
 use std::io::{self, Write};
+use std::path::Path;
+use std::process::Command;
 
 /// Current version of ratterm.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// GitHub repository for updates.
 const REPO: &str = "hastur-dev/ratterm";
+
+/// Maximum retry attempts for HTTP requests.
+const MAX_HTTP_RETRIES: usize = 3;
 
 /// Update check result.
 #[derive(Debug)]
@@ -94,46 +99,54 @@ impl Updater {
         }
     }
 
-    /// Fetches the latest version from GitHub.
+    /// Fetches the latest version from GitHub using reqwest.
     fn fetch_latest_version(&self) -> Result<String, String> {
         let url = format!("https://api.github.com/repos/{}/releases/latest", self.repo);
 
-        // Use a simple blocking HTTP request
-        // In production, you might want to use reqwest or ureq
-        let output = std::process::Command::new("curl")
-            .args([
-                "-fsSL",
-                "-H",
-                "Accept: application/vnd.github.v3+json",
-                &url,
-            ])
-            .output()
-            .map_err(|e| format!("Failed to run curl: {}", e))?;
-
-        if !output.status.success() {
-            return Err("Failed to fetch release info".to_string());
-        }
-
-        let body = String::from_utf8_lossy(&output.stdout);
-
-        // Simple JSON parsing for tag_name
-        for line in body.lines() {
-            if line.contains("\"tag_name\"") {
-                if let Some(start) = line.find(": \"v") {
-                    if let Some(end) = line[start + 4..].find('"') {
-                        return Ok(line[start + 4..start + 4 + end].to_string());
-                    }
+        // Retry loop with bounded iterations
+        for attempt in 0..MAX_HTTP_RETRIES {
+            match self.fetch_version_attempt(&url) {
+                Ok(version) => return Ok(version),
+                Err(_) if attempt < MAX_HTTP_RETRIES - 1 => {
+                    // Wait before retry (exponential backoff)
+                    std::thread::sleep(std::time::Duration::from_millis(100 * (1 << attempt)));
+                    continue;
                 }
-                if let Some(start) = line.find(": \"") {
-                    if let Some(end) = line[start + 3..].find('"') {
-                        let version = &line[start + 3..start + 3 + end];
-                        return Ok(version.trim_start_matches('v').to_string());
-                    }
-                }
+                Err(e) => return Err(e),
             }
         }
 
-        Err("Could not parse version from response".to_string())
+        Err("Max retries exceeded".to_string())
+    }
+
+    /// Single attempt to fetch version from GitHub API.
+    fn fetch_version_attempt(&self, url: &str) -> Result<String, String> {
+        let client = reqwest::blocking::Client::builder()
+            .user_agent("ratterm-updater")
+            .timeout(std::time::Duration::from_secs(30))
+            .build()
+            .map_err(|e| format!("Failed to create HTTP client: {e}"))?;
+
+        let response = client
+            .get(url)
+            .header("Accept", "application/vnd.github.v3+json")
+            .send()
+            .map_err(|e| format!("Failed to fetch release info: {e}"))?;
+
+        if !response.status().is_success() {
+            return Err(format!("GitHub API returned status {}", response.status()));
+        }
+
+        let json: serde_json::Value = response
+            .json()
+            .map_err(|e| format!("Failed to parse JSON: {e}"))?;
+
+        let tag_name = json
+            .get("tag_name")
+            .and_then(|v| v.as_str())
+            .ok_or("No tag_name in response")?;
+
+        Ok(tag_name.trim_start_matches('v').to_string())
     }
 
     /// Checks if the given version is newer than current.
@@ -149,7 +162,10 @@ impl Updater {
     pub fn update(&self, new_version: &str) -> Result<bool, String> {
         // Double-check version before downloading to avoid unnecessary work
         if !self.is_newer(new_version) {
-            eprintln!("Already running v{} (requested v{}).", self.current_version, new_version);
+            eprintln!(
+                "Already running v{} (requested v{}).",
+                self.current_version, new_version
+            );
             return Ok(false);
         }
 
@@ -161,24 +177,13 @@ impl Updater {
 
         // Get current executable path
         let current_exe =
-            env::current_exe().map_err(|e| format!("Failed to get current exe path: {}", e))?;
+            env::current_exe().map_err(|e| format!("Failed to get current exe path: {e}"))?;
 
-        let backup_path = current_exe.with_extension("old");
         let temp_path = current_exe.with_extension("new");
 
-        // Download new version
-        eprintln!("Downloading ratterm v{}...", new_version);
-
-        let output = std::process::Command::new("curl")
-            .args(["-fsSL", "-o", temp_path.to_str().unwrap_or(""), &url])
-            .output()
-            .map_err(|e| format!("Failed to download: {}", e))?;
-
-        if !output.status.success() {
-            // Clean up temp file if it exists
-            let _ = fs::remove_file(&temp_path);
-            return Err("Download failed - release asset may not exist for this platform".to_string());
-        }
+        // Download new version using reqwest
+        eprintln!("Downloading ratterm v{new_version}...");
+        self.download_file(&url, &temp_path)?;
 
         // Verify download actually produced a file
         let temp_meta = fs::metadata(&temp_path)
@@ -198,7 +203,10 @@ impl Updater {
 
                 if current_bytes == temp_bytes {
                     let _ = fs::remove_file(&temp_path);
-                    eprintln!("Already running the latest version (v{}).", self.current_version);
+                    eprintln!(
+                        "Already running the latest version (v{}).",
+                        self.current_version
+                    );
                     return Ok(false);
                 }
             }
@@ -209,31 +217,178 @@ impl Updater {
         {
             use std::os::unix::fs::PermissionsExt;
             let mut perms = fs::metadata(&temp_path)
-                .map_err(|e| format!("Failed to get permissions: {}", e))?
+                .map_err(|e| format!("Failed to get permissions: {e}"))?
                 .permissions();
             perms.set_mode(0o755);
             fs::set_permissions(&temp_path, perms)
-                .map_err(|e| format!("Failed to set permissions: {}", e))?;
+                .map_err(|e| format!("Failed to set permissions: {e}"))?;
         }
+
+        // Platform-specific installation
+        #[cfg(windows)]
+        {
+            self.install_windows_update(&current_exe, &temp_path, new_version)?;
+        }
+
+        #[cfg(not(windows))]
+        {
+            self.install_unix_update(&current_exe, &temp_path, new_version)?;
+        }
+
+        Ok(true)
+    }
+
+    /// Downloads a file from a URL to a local path using reqwest.
+    fn download_file(&self, url: &str, dest: &Path) -> Result<(), String> {
+        let client = reqwest::blocking::Client::builder()
+            .user_agent("ratterm-updater")
+            .timeout(std::time::Duration::from_secs(300))
+            .build()
+            .map_err(|e| format!("Failed to create HTTP client: {e}"))?;
+
+        let response = client
+            .get(url)
+            .send()
+            .map_err(|e| format!("Failed to download: {e}"))?;
+
+        if !response.status().is_success() {
+            return Err(format!(
+                "Download failed with status {} - release asset may not exist for this platform",
+                response.status()
+            ));
+        }
+
+        let bytes = response
+            .bytes()
+            .map_err(|e| format!("Failed to read response body: {e}"))?;
+
+        fs::write(dest, &bytes).map_err(|e| format!("Failed to write file: {e}"))?;
+
+        Ok(())
+    }
+
+    /// Installs update on Windows using a helper script.
+    /// Windows cannot replace a running executable directly.
+    #[cfg(windows)]
+    fn install_windows_update(
+        &self,
+        current_exe: &Path,
+        temp_path: &Path,
+        new_version: &str,
+    ) -> Result<(), String> {
+        let script_path = current_exe.with_extension("update.bat");
+        let current_exe_str = current_exe.to_string_lossy();
+        let temp_path_str = temp_path.to_string_lossy();
+        let backup_path = current_exe.with_extension("old");
+        let backup_path_str = backup_path.to_string_lossy();
+
+        // Create a batch script that:
+        // 1. Waits for the current process to exit
+        // 2. Replaces the executable
+        // 3. Restarts the application
+        // 4. Cleans up
+        let script_content = format!(
+            r#"@echo off
+setlocal
+echo Updating ratterm to v{new_version}...
+set RETRIES=30
+:WAIT_LOOP
+if %RETRIES% LEQ 0 goto :ERROR
+tasklist /FI "PID eq %~1" 2>NUL | find /I /N "%~1" >NUL
+if "%ERRORLEVEL%"=="0" (
+    timeout /t 1 /nobreak >NUL
+    set /a RETRIES=%RETRIES%-1
+    goto :WAIT_LOOP
+)
+echo Process exited, installing update...
+if exist "{backup_path_str}" del /f /q "{backup_path_str}"
+move /y "{current_exe_str}" "{backup_path_str}"
+if errorlevel 1 goto :ERROR
+move /y "{temp_path_str}" "{current_exe_str}"
+if errorlevel 1 (
+    move /y "{backup_path_str}" "{current_exe_str}"
+    goto :ERROR
+)
+del /f /q "{backup_path_str}" 2>NUL
+echo Update complete! Starting ratterm...
+start "" "{current_exe_str}"
+del /f /q "%~f0"
+exit /b 0
+:ERROR
+echo Update failed!
+if exist "{backup_path_str}" move /y "{backup_path_str}" "{current_exe_str}"
+if exist "{temp_path_str}" del /f /q "{temp_path_str}"
+pause
+del /f /q "%~f0"
+exit /b 1
+"#
+        );
+
+        fs::write(&script_path, &script_content)
+            .map_err(|e| format!("Failed to create update script: {e}"))?;
+
+        // Launch the script with current PID as argument
+        let pid = std::process::id();
+        Command::new("cmd")
+            .args([
+                "/c",
+                "start",
+                "/min",
+                "",
+                script_path.to_str().unwrap_or(""),
+                &pid.to_string(),
+            ])
+            .spawn()
+            .map_err(|e| format!("Failed to launch update script: {e}"))?;
+
+        eprintln!("Update prepared. Application will restart automatically...");
+
+        Ok(())
+    }
+
+    /// Installs update on Unix systems.
+    #[cfg(not(windows))]
+    fn install_unix_update(
+        &self,
+        current_exe: &Path,
+        temp_path: &Path,
+        new_version: &str,
+    ) -> Result<(), String> {
+        let backup_path = current_exe.with_extension("old");
 
         // Backup current executable
         if current_exe.exists() {
-            fs::rename(&current_exe, &backup_path)
-                .map_err(|e| format!("Failed to backup current exe: {}", e))?;
+            fs::rename(current_exe, &backup_path)
+                .map_err(|e| format!("Failed to backup current exe: {e}"))?;
         }
 
         // Move new executable into place
-        fs::rename(&temp_path, &current_exe).map_err(|e| {
+        fs::rename(temp_path, current_exe).map_err(|e| {
             // Try to restore backup
-            let _ = fs::rename(&backup_path, &current_exe);
-            format!("Failed to install new exe: {}", e)
+            let _ = fs::rename(&backup_path, current_exe);
+            format!("Failed to install new exe: {e}")
         })?;
 
         // Remove backup
         let _ = fs::remove_file(&backup_path);
 
-        eprintln!("Updated to v{}. Please restart ratterm.", new_version);
+        eprintln!("Updated to v{new_version}.");
 
+        Ok(())
+    }
+
+    /// Performs update and triggers application restart.
+    /// On Windows, the restart happens automatically via batch script.
+    /// On Unix, this returns true to signal the caller to restart.
+    pub fn update_and_restart(&self, new_version: &str) -> Result<bool, String> {
+        let updated = self.update(new_version)?;
+
+        if !updated {
+            return Ok(false);
+        }
+
+        // On Windows, the batch script handles restart
+        // On Unix, we signal the caller to restart
         Ok(true)
     }
 
@@ -276,6 +431,39 @@ fn parse_version(version: &str) -> (u32, u32, u32) {
         parts.get(1).copied().unwrap_or(0),
         parts.get(2).copied().unwrap_or(0),
     )
+}
+
+/// Restarts the application by spawning a new process and exiting.
+/// On Windows, this is handled by the update batch script.
+/// On Unix, we exec the new binary directly.
+#[allow(clippy::expect_used)] // Fatal error in divergent function is acceptable
+pub fn restart_application() -> ! {
+    let exe = env::current_exe().expect("Failed to get current executable path");
+    let args: Vec<String> = env::args().skip(1).collect();
+
+    eprintln!("Restarting ratterm...");
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        // exec replaces the current process
+        let err = Command::new(&exe).args(&args).exec();
+        eprintln!("Failed to restart: {err}");
+        std::process::exit(1);
+    }
+
+    #[cfg(windows)]
+    {
+        // On Windows, spawn a new process and exit
+        let _ = Command::new(&exe).args(&args).spawn();
+        std::process::exit(0);
+    }
+
+    #[cfg(not(any(unix, windows)))]
+    {
+        eprintln!("Restart not supported on this platform. Please restart manually.");
+        std::process::exit(0);
+    }
 }
 
 /// Result of checking for updates at startup.
@@ -345,9 +533,9 @@ pub fn check_for_updates() -> StartupUpdateResult {
                 if io::stdin().read_line(&mut input).is_ok() {
                     let input = input.trim().to_lowercase();
                     if input.is_empty() || input == "y" || input == "yes" {
-                        match updater.update(&version) {
+                        match updater.update_and_restart(&version) {
                             Ok(true) => {
-                                // Actual update performed - need restart
+                                // Update performed - signal caller to exit/restart
                                 return StartupUpdateResult::UpdatePerformed {
                                     version: version.clone(),
                                 };
@@ -357,7 +545,7 @@ pub fn check_for_updates() -> StartupUpdateResult {
                                 eprintln!("Continuing with current version...");
                             }
                             Err(e) => {
-                                eprintln!("Update failed: {}", e);
+                                eprintln!("Update failed: {e}");
                                 eprintln!("Continuing with current version...");
                             }
                         }

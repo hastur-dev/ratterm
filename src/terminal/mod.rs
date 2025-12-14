@@ -11,7 +11,10 @@ pub mod pty;
 pub mod selection;
 pub mod style;
 
-pub use multiplexer::{GridDirection, SplitDirection, SplitFocus, TabInfo, TerminalGrid, TerminalMultiplexer, TerminalTab};
+pub use multiplexer::{
+    GridDirection, SplitDirection, SplitFocus, TabInfo, TerminalGrid, TerminalMultiplexer,
+    TerminalTab,
+};
 pub use selection::{Selection, SelectionMode};
 
 use std::path::PathBuf;

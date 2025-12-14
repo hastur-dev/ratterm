@@ -794,34 +794,33 @@ impl App {
 
                 // Save session before updating
                 if let Err(e) = self.save_session() {
-                    self.set_status(format!("Failed to save session: {}", e));
+                    self.set_status(format!("Failed to save session: {e}"));
                     return;
                 }
 
-                // Perform update
-                match updater.update(&version) {
+                // Perform update with auto-restart support
+                match updater.update_and_restart(&version) {
                     Ok(true) => {
-                        self.set_status(format!(
-                            "Updated to v{}! Restart ratterm to use new version.",
-                            version
-                        ));
+                        self.set_status(format!("Updated to v{version}! Restarting..."));
+                        // Signal app to quit so restart can happen
+                        // On Windows, the batch script handles restart
+                        // On Unix, the restart happens after terminal cleanup
+                        self.request_restart_after_update = true;
+                        self.running = false;
                     }
                     Ok(false) => {
-                        self.set_status(format!(
-                            "Already running v{} (latest version)",
-                            VERSION
-                        ));
+                        self.set_status(format!("Already running v{VERSION} (latest version)"));
                     }
                     Err(e) => {
-                        self.set_status(format!("Update failed: {}", e));
+                        self.set_status(format!("Update failed: {e}"));
                     }
                 }
             }
             UpdateStatus::UpToDate => {
-                self.set_status(format!("Already up to date (v{})", VERSION));
+                self.set_status(format!("Already up to date (v{VERSION})"));
             }
             UpdateStatus::Failed(e) => {
-                self.set_status(format!("Update check failed: {}", e));
+                self.set_status(format!("Update check failed: {e}"));
             }
             UpdateStatus::Disabled => {
                 self.set_status("Updates disabled via RATTERM_NO_UPDATE".to_string());
