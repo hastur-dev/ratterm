@@ -10,15 +10,26 @@ REPO="hastur-dev/ratterm"
 BINARY_NAME="rat"
 INSTALL_DIR="${RATTERM_INSTALL_DIR:-$HOME/.local/bin}"
 VERBOSE="${VERBOSE:-false}"
+SKIP_VERSION_CHECK=false
 
 # Parse arguments
-for arg in "$@"; do
-    case $arg in
+while [[ $# -gt 0 ]]; do
+    case $1 in
         --verbose|-v)
             VERBOSE=true
+            shift
             ;;
         --uninstall|-u)
             UNINSTALL=true
+            shift
+            ;;
+        --version)
+            VERSION="$2"
+            SKIP_VERSION_CHECK=true
+            shift 2
+            ;;
+        *)
+            shift
             ;;
     esac
 done
@@ -369,7 +380,12 @@ main() {
     fi
 
     detect_platform
-    get_latest_version
+
+    if [ "$SKIP_VERSION_CHECK" = true ]; then
+        info "Using provided version: v$VERSION"
+    else
+        get_latest_version
+    fi
 
     debug "Starting download..."
     TEMP_FILE=$(download)

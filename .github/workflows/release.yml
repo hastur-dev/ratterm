@@ -102,6 +102,8 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Test install script (verbose)
+        env:
+          RATTERM_VERSION: ${{ github.event.inputs.version }}
         run: |
           echo "=== Testing install.sh on Linux (x86_64) ==="
           chmod +x install.sh
@@ -137,7 +139,7 @@ jobs:
         run: |
           echo "=== Testing install.sh on Linux (aarch64) ==="
           chmod +x install.sh
-          ./install.sh --verbose
+          ./install.sh --version ${{ github.event.inputs.version }} --verbose
 
       - name: Verify installation
         run: |
