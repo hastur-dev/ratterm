@@ -139,7 +139,7 @@ jobs:
         run: |
           echo "=== Testing install.sh on Linux (aarch64) ==="
           chmod +x install.sh
-          ./install.sh --version ${{ github.event.inputs.version }} --verbose
+          ./install.sh --verbose
 
       - name: Verify installation
         run: |
