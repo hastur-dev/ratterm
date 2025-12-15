@@ -104,6 +104,7 @@ jobs:
       - name: Test install script (verbose)
         env:
           RATTERM_VERSION: ${{ github.event.inputs.version }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           echo "=== Testing install.sh on Linux (x86_64) ==="
           chmod +x install.sh
