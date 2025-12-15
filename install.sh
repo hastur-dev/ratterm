@@ -5,7 +5,7 @@
 
 set -e
 
-VERSION="0.1.1"
+VERSION="0.1.2"
 REPO="hastur-dev/ratterm"
 BINARY_NAME="rat"
 INSTALL_DIR="${RATTERM_INSTALL_DIR:-$HOME/.local/bin}"
@@ -119,7 +119,8 @@ get_latest_version() {
             return
         }
         debug "API response received (${#response} bytes)"
-        LATEST=$(echo "$response" | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/')
+        # Parse version and strip any carriage returns/whitespace
+        LATEST=$(echo "$response" | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/' | tr -d '\r\n ')
     elif command -v wget &> /dev/null; then
         debug "Using wget to fetch version..."
         local response
@@ -130,15 +131,18 @@ get_latest_version() {
             return
         }
         debug "API response received (${#response} bytes)"
-        LATEST=$(echo "$response" | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/')
+        # Parse version and strip any carriage returns/whitespace
+        LATEST=$(echo "$response" | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/' | tr -d '\r\n ')
     else
         error "Neither curl nor wget found. Please install one of them."
     fi
 
     debug "Parsed version: '$LATEST'"
+    debug "Version bytes: $(echo -n "$LATEST" | od -c 2>/dev/null | head -1 || echo 'od not available')"
 
     if [ -n "$LATEST" ] && [ "$LATEST" != "" ]; then
         VERSION="$LATEST"
+        debug "VERSION updated to: '$VERSION'"
         info "Latest version: v$VERSION"
     else
         warn "Could not parse latest version, using default: v$VERSION"
