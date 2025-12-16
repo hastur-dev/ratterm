@@ -416,6 +416,24 @@ impl Grid {
         self.rows.get(index)
     }
 
+    /// Returns the grid size as (cols, rows).
+    #[must_use]
+    pub fn size(&self) -> (u16, u16) {
+        (self.cols, self.visible_rows)
+    }
+
+    /// Returns the text content of a row as a string.
+    /// Trailing whitespace is trimmed.
+    #[must_use]
+    pub fn row_text(&self, row_index: usize) -> String {
+        if let Some(row) = self.rows.get(row_index) {
+            let text: String = row.cells().iter().map(|c| c.character()).collect();
+            text.trim_end().to_string()
+        } else {
+            String::new()
+        }
+    }
+
     /// Inserts n blank lines at cursor position.
     pub fn insert_lines(&mut self, n: u16) {
         let n = n.min(self.visible_rows - self.cursor_row) as usize;

@@ -359,15 +359,23 @@ impl Widget for PopupWidget<'_> {
         }
 
         let popup_area = self.popup_area(area);
+        let bg_color = Color::Rgb(30, 30, 30);
 
-        // Clear background
+        // Clear background and fill with explicit color to prevent Windows rendering artifacts
         Clear.render(popup_area, buf);
+        for y in popup_area.y..popup_area.bottom() {
+            for x in popup_area.x..popup_area.right() {
+                if let Some(cell) = buf.cell_mut((x, y)) {
+                    cell.set_bg(bg_color);
+                }
+            }
+        }
 
-        // Draw border
+        // Draw border with explicit background
         let block = Block::default()
             .title(self.popup.kind.title())
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::Cyan));
+            .border_style(Style::default().fg(Color::Cyan).bg(bg_color));
 
         let inner = block.inner(popup_area);
         block.render(popup_area, buf);
@@ -382,23 +390,24 @@ impl Widget for PopupWidget<'_> {
             ])
             .split(inner);
 
-        // Render prompt and input
+        // Render prompt and input with explicit backgrounds
         let prompt = self.popup.kind.prompt();
         let input_display = if let Some(ref suggestion) = self.popup.suggestion {
-            let input_style = Style::default().fg(Color::White);
+            let input_style = Style::default().fg(Color::White).bg(bg_color);
             let suggestion_style = Style::default()
                 .fg(Color::DarkGray)
+                .bg(bg_color)
                 .add_modifier(Modifier::ITALIC);
 
             Line::from(vec![
-                Span::raw(prompt),
+                Span::styled(prompt, Style::default().fg(Color::White).bg(bg_color)),
                 Span::styled(&self.popup.input, input_style),
                 Span::styled(suggestion, suggestion_style),
             ])
         } else {
             Line::from(vec![
-                Span::raw(prompt),
-                Span::styled(&self.popup.input, Style::default().fg(Color::White)),
+                Span::styled(prompt, Style::default().fg(Color::White).bg(bg_color)),
+                Span::styled(&self.popup.input, Style::default().fg(Color::White).bg(bg_color)),
             ])
         };
 
@@ -414,11 +423,11 @@ impl Widget for PopupWidget<'_> {
 
         // Render error if any
         if let Some(ref error) = self.popup.error {
-            let error_para = Paragraph::new(error.as_str()).style(Style::default().fg(Color::Red));
+            let error_para = Paragraph::new(error.as_str()).style(Style::default().fg(Color::Red).bg(bg_color));
             error_para.render(chunks[1], buf);
         }
 
-        // Render results
+        // Render results with explicit backgrounds
         if !self.popup.results.is_empty() {
             let visible_results: Vec<Line> = self
                 .popup
@@ -430,7 +439,7 @@ impl Widget for PopupWidget<'_> {
                     let style = if i == self.popup.selected_result {
                         Style::default().bg(Color::Blue).fg(Color::White)
                     } else {
-                        Style::default().fg(Color::Gray)
+                        Style::default().fg(Color::Gray).bg(bg_color)
                     };
                     Line::styled(result.as_str(), style)
                 })
@@ -820,16 +829,24 @@ impl<'a> ModeSwitcherWidget<'a> {
 impl Widget for ModeSwitcherWidget<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let popup_area = self.popup_area(area);
+        let bg_color = Color::Rgb(30, 30, 30);
 
-        // Clear background
+        // Clear background and fill with explicit color to prevent Windows rendering artifacts
         Clear.render(popup_area, buf);
+        for y in popup_area.y..popup_area.bottom() {
+            for x in popup_area.x..popup_area.right() {
+                if let Some(cell) = buf.cell_mut((x, y)) {
+                    cell.set_bg(bg_color);
+                }
+            }
+        }
 
-        // Draw border
+        // Draw border with explicit background
         let block = Block::default()
             .title(" Switch Editor Mode ")
             .title_alignment(Alignment::Center)
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::Cyan));
+            .border_style(Style::default().fg(Color::Cyan).bg(bg_color));
 
         let inner = block.inner(popup_area);
         block.render(popup_area, buf);
@@ -846,7 +863,7 @@ impl Widget for ModeSwitcherWidget<'_> {
             ])
             .split(inner);
 
-        // Render each mode
+        // Render each mode with explicit backgrounds
         for (i, (mode, is_selected)) in self.switcher.modes_with_selection().iter().enumerate() {
             if i >= chunks.len() {
                 break;
@@ -862,7 +879,7 @@ impl Widget for ModeSwitcherWidget<'_> {
                     "► ",
                 )
             } else {
-                (Style::default().fg(Color::DarkGray), "  ")
+                (Style::default().fg(Color::DarkGray).bg(bg_color), "  ")
             };
 
             let text = format!("{}{}", prefix, name);
@@ -1011,16 +1028,24 @@ impl<'a> ShellSelectorWidget<'a> {
 impl Widget for ShellSelectorWidget<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let popup_area = self.popup_area(area);
+        let bg_color = Color::Rgb(30, 30, 30);
 
-        // Clear background
+        // Clear background and fill with explicit color to prevent Windows rendering artifacts
         Clear.render(popup_area, buf);
+        for y in popup_area.y..popup_area.bottom() {
+            for x in popup_area.x..popup_area.right() {
+                if let Some(cell) = buf.cell_mut((x, y)) {
+                    cell.set_bg(bg_color);
+                }
+            }
+        }
 
-        // Draw border
+        // Draw border with explicit background
         let block = Block::default()
             .title(" Select Terminal Shell ")
             .title_alignment(Alignment::Center)
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::Cyan));
+            .border_style(Style::default().fg(Color::Cyan).bg(bg_color));
 
         let inner = block.inner(popup_area);
         block.render(popup_area, buf);
@@ -1039,7 +1064,7 @@ impl Widget for ShellSelectorWidget<'_> {
             .constraints(constraints)
             .split(inner);
 
-        // Render each shell
+        // Render each shell with explicit backgrounds
         for (i, (shell, is_selected)) in self.selector.shells_with_selection().iter().enumerate() {
             if i >= chunks.len() {
                 break;
@@ -1057,7 +1082,7 @@ impl Widget for ShellSelectorWidget<'_> {
             };
 
             let (style, prefix) = if *is_selected {
-                let bg_color = if shell.available {
+                let selected_bg = if shell.available {
                     Color::Cyan
                 } else {
                     Color::Yellow
@@ -1065,14 +1090,14 @@ impl Widget for ShellSelectorWidget<'_> {
                 (
                     Style::default()
                         .fg(Color::Black)
-                        .bg(bg_color)
+                        .bg(selected_bg)
                         .add_modifier(Modifier::BOLD),
                     "► ",
                 )
             } else if shell.available {
-                (Style::default().fg(Color::White), "  ")
+                (Style::default().fg(Color::White).bg(bg_color), "  ")
             } else {
-                (Style::default().fg(Color::DarkGray), "  ")
+                (Style::default().fg(Color::DarkGray).bg(bg_color), "  ")
             };
 
             let text = format!("{}{}{}", prefix, name, status);
@@ -1080,15 +1105,15 @@ impl Widget for ShellSelectorWidget<'_> {
             para.render(chunks[i], buf);
         }
 
-        // Render instructions at the bottom
+        // Render instructions at the bottom with explicit backgrounds
         if chunks.len() > shell_count {
             let instructions = Line::from(vec![
-                Span::styled("↑↓", Style::default().fg(Color::Cyan)),
-                Span::raw(" Select  "),
-                Span::styled("Enter", Style::default().fg(Color::Cyan)),
-                Span::raw(" Confirm  "),
-                Span::styled("Esc", Style::default().fg(Color::Cyan)),
-                Span::raw(" Cancel"),
+                Span::styled("↑↓", Style::default().fg(Color::Cyan).bg(bg_color)),
+                Span::styled(" Select  ", Style::default().fg(Color::White).bg(bg_color)),
+                Span::styled("Enter", Style::default().fg(Color::Cyan).bg(bg_color)),
+                Span::styled(" Confirm  ", Style::default().fg(Color::White).bg(bg_color)),
+                Span::styled("Esc", Style::default().fg(Color::Cyan).bg(bg_color)),
+                Span::styled(" Cancel", Style::default().fg(Color::White).bg(bg_color)),
             ]);
             Paragraph::new(instructions)
                 .alignment(Alignment::Center)
@@ -1182,17 +1207,25 @@ impl<'a> ShellInstallPromptWidget<'a> {
 impl Widget for ShellInstallPromptWidget<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let popup_area = self.popup_area(area);
+        let bg_color = Color::Rgb(30, 30, 30);
 
-        // Clear background
+        // Clear background and fill with explicit color to prevent Windows rendering artifacts
         Clear.render(popup_area, buf);
+        for y in popup_area.y..popup_area.bottom() {
+            for x in popup_area.x..popup_area.right() {
+                if let Some(cell) = buf.cell_mut((x, y)) {
+                    cell.set_bg(bg_color);
+                }
+            }
+        }
 
-        // Draw border
+        // Draw border with explicit background
         let title = format!(" {} Not Installed ", self.prompt.shell_type.display_name());
         let block = Block::default()
             .title(title)
             .title_alignment(Alignment::Center)
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::Yellow));
+            .border_style(Style::default().fg(Color::Yellow).bg(bg_color));
 
         let inner = block.inner(popup_area);
         block.render(popup_area, buf);
@@ -1215,20 +1248,20 @@ impl Widget for ShellInstallPromptWidget<'_> {
             .constraints(constraints)
             .split(inner);
 
-        // Render header
+        // Render header with explicit background
         let header = "To use this shell, please install it:";
         Paragraph::new(header)
-            .style(Style::default().fg(Color::White))
+            .style(Style::default().fg(Color::White).bg(bg_color))
             .render(chunks[0], buf);
 
-        // Render instructions
+        // Render instructions with explicit backgrounds
         for (i, instruction) in self.prompt.instructions.iter().enumerate() {
             if i + 1 >= chunks.len() {
                 break;
             }
             let text = format!("  {}. {}", i + 1, instruction);
             Paragraph::new(text)
-                .style(Style::default().fg(Color::Gray))
+                .style(Style::default().fg(Color::Gray).bg(bg_color))
                 .render(chunks[i + 1], buf);
         }
 
@@ -1238,17 +1271,17 @@ impl Widget for ShellInstallPromptWidget<'_> {
             if footer_idx < chunks.len() {
                 let url_text = format!("  URL: {}", url);
                 Paragraph::new(url_text)
-                    .style(Style::default().fg(Color::Cyan))
+                    .style(Style::default().fg(Color::Cyan).bg(bg_color))
                     .render(chunks[footer_idx], buf);
                 footer_idx += 1;
             }
         }
 
-        // Render footer instructions
+        // Render footer instructions with explicit backgrounds
         if footer_idx < chunks.len() {
             let footer = Line::from(vec![
-                Span::styled("Esc", Style::default().fg(Color::Cyan)),
-                Span::raw(" Close  "),
+                Span::styled("Esc", Style::default().fg(Color::Cyan).bg(bg_color)),
+                Span::styled(" Close  ", Style::default().fg(Color::White).bg(bg_color)),
             ]);
             Paragraph::new(footer)
                 .alignment(Alignment::Center)
@@ -1347,16 +1380,24 @@ impl<'a> ThemeSelectorWidget<'a> {
 impl Widget for ThemeSelectorWidget<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let popup_area = self.popup_area(area);
+        let bg_color = Color::Rgb(30, 30, 30);
 
-        // Clear background
+        // Clear background and fill with explicit color to prevent Windows rendering artifacts
         Clear.render(popup_area, buf);
+        for y in popup_area.y..popup_area.bottom() {
+            for x in popup_area.x..popup_area.right() {
+                if let Some(cell) = buf.cell_mut((x, y)) {
+                    cell.set_bg(bg_color);
+                }
+            }
+        }
 
-        // Draw border
+        // Draw border with explicit background
         let block = Block::default()
             .title(" Select Theme ")
             .title_alignment(Alignment::Center)
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::Cyan));
+            .border_style(Style::default().fg(Color::Cyan).bg(bg_color));
 
         let inner = block.inner(popup_area);
         block.render(popup_area, buf);
@@ -1375,7 +1416,7 @@ impl Widget for ThemeSelectorWidget<'_> {
             .constraints(constraints)
             .split(inner);
 
-        // Render each theme
+        // Render each theme with explicit backgrounds
         for (i, (theme, is_selected)) in self.selector.themes_with_selection().iter().enumerate() {
             if i >= chunks.len() {
                 break;
@@ -1400,7 +1441,7 @@ impl Widget for ThemeSelectorWidget<'_> {
                     "► ",
                 )
             } else {
-                (Style::default().fg(Color::White), "  ")
+                (Style::default().fg(Color::White).bg(bg_color), "  ")
             };
 
             let text = format!("{}{}", prefix, display_name);
@@ -1410,15 +1451,15 @@ impl Widget for ThemeSelectorWidget<'_> {
             para.render(chunks[i], buf);
         }
 
-        // Render instructions at the bottom
+        // Render instructions at the bottom with explicit backgrounds
         if chunks.len() > theme_count {
             let instructions = Line::from(vec![
-                Span::styled("↑↓", Style::default().fg(Color::Cyan)),
-                Span::raw(" Select  "),
-                Span::styled("Enter", Style::default().fg(Color::Cyan)),
-                Span::raw(" Apply  "),
-                Span::styled("Esc", Style::default().fg(Color::Cyan)),
-                Span::raw(" Cancel"),
+                Span::styled("↑↓", Style::default().fg(Color::Cyan).bg(bg_color)),
+                Span::styled(" Select  ", Style::default().fg(Color::White).bg(bg_color)),
+                Span::styled("Enter", Style::default().fg(Color::Cyan).bg(bg_color)),
+                Span::styled(" Apply  ", Style::default().fg(Color::White).bg(bg_color)),
+                Span::styled("Esc", Style::default().fg(Color::Cyan).bg(bg_color)),
+                Span::styled(" Cancel", Style::default().fg(Color::White).bg(bg_color)),
             ]);
             Paragraph::new(instructions)
                 .alignment(Alignment::Center)

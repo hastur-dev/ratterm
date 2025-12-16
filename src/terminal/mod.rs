@@ -3,6 +3,7 @@
 //! Provides PTY-based terminal emulation with ANSI escape sequence parsing.
 
 pub mod action;
+pub mod background;
 pub mod cell;
 pub mod grid;
 pub mod multiplexer;
@@ -11,6 +12,7 @@ pub mod pty;
 pub mod selection;
 pub mod style;
 
+pub use background::{BackgroundManager, ProcessInfo, ProcessStatus};
 pub use multiplexer::{
     GridDirection, SplitDirection, SplitFocus, TabInfo, TerminalGrid, TerminalMultiplexer,
     TerminalTab,

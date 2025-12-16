@@ -44,6 +44,16 @@ impl Widget for TerminalTabBar<'_> {
             return;
         }
 
+        let bg_color = Color::Black;
+
+        // Render background first with explicit color to prevent Windows rendering artifacts
+        for x in area.x..area.x + area.width {
+            if let Some(cell) = buf.cell_mut((x, area.y)) {
+                cell.set_char(' ');
+                cell.set_style(Style::default().fg(Color::White).bg(bg_color));
+            }
+        }
+
         // Build the tab line
         let mut spans = Vec::new();
         let tab_count = self.tabs.len();
@@ -65,36 +75,28 @@ impl Widget for TerminalTabBar<'_> {
                         .add_modifier(Modifier::BOLD)
                 }
             } else {
-                Style::default().fg(Color::Gray).bg(Color::Black)
+                Style::default().fg(Color::Gray).bg(bg_color)
             };
 
             spans.push(Span::styled(tab_num, style));
 
-            // Add separator between tabs (except after last)
+            // Add separator between tabs (except after last) with explicit background
             if i < tab_count - 1 {
-                spans.push(Span::styled("│", Style::default().fg(Color::DarkGray)));
+                spans.push(Span::styled("│", Style::default().fg(Color::DarkGray).bg(bg_color)));
             }
         }
 
-        // Add hint for creating new tab
+        // Add hint for creating new tab with explicit background
         let remaining_width = area.width as usize - spans.iter().map(|s| s.width()).sum::<usize>();
         if remaining_width > 10 {
             let hint = " Ctrl+T:new ";
             spans.push(Span::styled(
                 format!("{:>width$}", hint, width = remaining_width),
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(Color::DarkGray).bg(bg_color),
             ));
         }
 
         let line = Line::from(spans);
-
-        // Render background
-        for x in area.x..area.x + area.width {
-            if let Some(cell) = buf.cell_mut((x, area.y)) {
-                cell.set_char(' ');
-                cell.set_style(Style::default().bg(Color::Black));
-            }
-        }
 
         // Render the tab line
         buf.set_line(area.x, area.y, &line, area.width);

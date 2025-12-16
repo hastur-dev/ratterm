@@ -209,10 +209,16 @@ impl Widget for TerminalWidget<'_> {
             .map(|t| (t.border_focused, t.border))
             .unwrap_or((Color::Cyan, Color::DarkGray));
 
+        // Get background color for border - must be explicit to prevent Windows rendering artifacts
+        let border_bg = self
+            .theme
+            .map(|t| t.background)
+            .unwrap_or(Color::Rgb(30, 30, 30));
+
         let border_style = if self.focused {
-            Style::default().fg(border_focused)
+            Style::default().fg(border_focused).bg(border_bg)
         } else {
-            Style::default().fg(border_unfocused)
+            Style::default().fg(border_unfocused).bg(border_bg)
         };
 
         let title = self.title.unwrap_or("Terminal");

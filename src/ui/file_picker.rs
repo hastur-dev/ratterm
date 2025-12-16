@@ -38,11 +38,12 @@ impl<'a> FilePickerWidget<'a> {
 
 impl Widget for FilePickerWidget<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        // Draw border
+        // Draw border with explicit background to prevent Windows rendering artifacts
+        let bg_color = Color::Rgb(30, 30, 30);
         let border_style = if self.focused {
-            Style::default().fg(Color::Cyan)
+            Style::default().fg(Color::Cyan).bg(bg_color)
         } else {
-            Style::default().fg(Color::DarkGray)
+            Style::default().fg(Color::DarkGray).bg(bg_color)
         };
 
         let title = format!(" {} ", self.browser.path().display());
@@ -116,9 +117,10 @@ impl Widget for FilePickerWidget<'_> {
                     EntryKind::Directory => Color::Blue,
                     EntryKind::File => Color::White,
                 };
+                // Explicit background for non-selected items to prevent Windows rendering artifacts
                 (
-                    Style::default().fg(fg).add_modifier(Modifier::BOLD),
-                    Style::default().fg(fg),
+                    Style::default().fg(fg).bg(bg_color).add_modifier(Modifier::BOLD),
+                    Style::default().fg(fg).bg(bg_color),
                 )
             };
 
@@ -165,7 +167,8 @@ impl Widget for FilePickerWidget<'_> {
             let scrollbar_x = entries_area.right().saturating_sub(1);
             for y in 0..scrollbar_height {
                 let char = if y == thumb_pos { '█' } else { '░' };
-                let style = Style::default().fg(Color::DarkGray);
+                // Explicit background for scrollbar to prevent Windows rendering artifacts
+                let style = Style::default().fg(Color::DarkGray).bg(bg_color);
                 if let Some(cell) = buf.cell_mut((scrollbar_x, entries_area.y + y)) {
                     cell.set_char(char);
                     cell.set_style(style);
@@ -201,7 +204,9 @@ impl Widget for FileInfoBar<'_> {
 
         let info = format!("{} items ({} files, {} dirs)", total, files, dirs);
 
-        let style = Style::default().fg(Color::DarkGray);
+        // Explicit background to prevent Windows rendering artifacts
+        let bg_color = Color::Rgb(30, 30, 30);
+        let style = Style::default().fg(Color::DarkGray).bg(bg_color);
         let para = Paragraph::new(info).style(style);
         para.render(area, buf);
     }

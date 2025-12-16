@@ -34,6 +34,7 @@
 #![allow(clippy::similar_names)]
 #![allow(clippy::struct_excessive_bools)]
 
+pub mod api;
 pub mod app;
 pub mod clipboard;
 pub mod config;
