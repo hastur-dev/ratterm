@@ -406,10 +406,10 @@ fn get_process_cwd(pid: u32) -> Option<PathBuf> {
     // Windows API bindings
     #[link(name = "kernel32")]
     unsafe extern "system" {
-        fn OpenProcess(access: u32, inherit: i32, pid: u32) -> *mut std::ffi::c_void;
-        fn CloseHandle(handle: *mut std::ffi::c_void) -> i32;
+        fn OpenProcess(access: u32, inherit: i32, pid: u32) -> isize;
+        fn CloseHandle(handle: isize) -> i32;
         fn ReadProcessMemory(
-            process: *mut std::ffi::c_void,
+            process: isize,
             base: *const std::ffi::c_void,
             buffer: *mut std::ffi::c_void,
             size: usize,
@@ -420,7 +420,7 @@ fn get_process_cwd(pid: u32) -> Option<PathBuf> {
     #[link(name = "ntdll")]
     unsafe extern "system" {
         fn NtQueryInformationProcess(
-            process: *mut std::ffi::c_void,
+            process: isize,
             info_class: u32,
             info: *mut std::ffi::c_void,
             info_length: u32,
@@ -463,7 +463,7 @@ fn get_process_cwd(pid: u32) -> Option<PathBuf> {
     unsafe {
         // Open the process with query and read permissions
         let handle = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, 0, pid);
-        if handle.is_null() {
+        if handle == 0 {
             return None;
         }
 

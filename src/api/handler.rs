@@ -636,7 +636,7 @@ mod tests {
 
     #[test]
     fn test_handler_creation() {
-        let handler = ApiHandler::new();
+        let _handler = ApiHandler::new();
         // Handler should be created without panicking
         assert!(true);
     }

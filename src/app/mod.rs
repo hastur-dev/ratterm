@@ -511,16 +511,7 @@ impl App {
         self.mode = AppMode::Normal;
         self.file_browser.hide();
 
-        // Clear terminal grid to remove any artifacts from PTY output during file browser
-        // This is especially important after command interception where the shell
-        // may have output a new prompt or other characters
-        if let Some(ref mut terminals) = self.terminals {
-            if let Some(terminal) = terminals.active_terminal_mut() {
-                terminal.clear_visible();
-            }
-        }
-
-        // Request full redraw to clear any ghost artifacts from file browser
+        // Request full redraw to ensure clean rendering
         self.request_redraw();
         Ok(())
     }
@@ -538,9 +529,6 @@ impl App {
                 if cwd.is_dir() && cwd != self.file_browser.path() {
                     let _ = self.file_browser.change_dir(&cwd);
                 }
-                // Clear the terminal's visible grid to prevent ghost artifacts
-                // This clears any "open" text or shell output that was shown
-                terminal.clear_visible();
             }
         }
 
@@ -557,14 +545,7 @@ impl App {
         self.file_browser.hide();
         self.mode = AppMode::Normal;
 
-        // Clear terminal grid to remove any artifacts from PTY output during file browser
-        if let Some(ref mut terminals) = self.terminals {
-            if let Some(terminal) = terminals.active_terminal_mut() {
-                terminal.clear_visible();
-            }
-        }
-
-        // Request full redraw to clear file browser artifacts
+        // Request full redraw to ensure clean rendering
         self.request_redraw();
     }
 

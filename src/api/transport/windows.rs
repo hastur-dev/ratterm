@@ -230,7 +230,7 @@ impl Drop for WindowsConnection {
 }
 
 /// Pipe reader wrapper for std::io::Read.
-struct PipeReader(isize);
+pub struct PipeReader(isize);
 
 impl std::io::Read for PipeReader {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
@@ -271,7 +271,7 @@ impl std::io::Read for PipeReader {
 }
 
 /// Pipe writer wrapper for std::io::Write.
-struct PipeWriter(isize);
+pub struct PipeWriter(isize);
 
 impl std::io::Write for PipeWriter {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
