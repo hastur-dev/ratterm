@@ -55,18 +55,20 @@ impl Widget for EditorTabBar<'_> {
             return;
         }
 
-        // Render background
+        let bg_color = Color::Black;
+
+        // Render background with explicit color to prevent Windows rendering artifacts
         for x in area.x..area.x + area.width {
             if let Some(cell) = buf.cell_mut((x, area.y)) {
                 cell.set_char(' ');
-                cell.set_style(Style::default().bg(Color::Black));
+                cell.set_style(Style::default().fg(Color::White).bg(bg_color));
             }
         }
 
         if self.tabs.is_empty() {
-            // Show hint when no files are open
+            // Show hint when no files are open with explicit background
             let hint = " Ctrl+O: Open file ";
-            let hint_span = Span::styled(hint, Style::default().fg(Color::DarkGray));
+            let hint_span = Span::styled(hint, Style::default().fg(Color::DarkGray).bg(bg_color));
             let line = Line::from(vec![hint_span]);
             buf.set_line(area.x, area.y, &line, area.width);
             return;
@@ -85,8 +87,8 @@ impl Widget for EditorTabBar<'_> {
 
             // Check if we have room
             if total_width + tab_width + 1 > max_width {
-                // Add overflow indicator
-                spans.push(Span::styled("...", Style::default().fg(Color::DarkGray)));
+                // Add overflow indicator with explicit background
+                spans.push(Span::styled("...", Style::default().fg(Color::DarkGray).bg(bg_color)));
                 break;
             }
 
@@ -103,17 +105,17 @@ impl Widget for EditorTabBar<'_> {
                         .add_modifier(Modifier::BOLD)
                 }
             } else if tab.is_modified {
-                Style::default().fg(Color::Yellow).bg(Color::Black)
+                Style::default().fg(Color::Yellow).bg(bg_color)
             } else {
-                Style::default().fg(Color::Gray).bg(Color::Black)
+                Style::default().fg(Color::Gray).bg(bg_color)
             };
 
             spans.push(Span::styled(tab_text, style));
             total_width += tab_width;
 
-            // Add separator between tabs (except after last)
+            // Add separator between tabs (except after last) with explicit background
             if i < self.tabs.len() - 1 {
-                spans.push(Span::styled("│", Style::default().fg(Color::DarkGray)));
+                spans.push(Span::styled("│", Style::default().fg(Color::DarkGray).bg(bg_color)));
                 total_width += 1;
             }
         }

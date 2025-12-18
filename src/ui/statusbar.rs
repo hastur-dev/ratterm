@@ -32,6 +32,10 @@ pub struct StatusBar<'a> {
     terminal_title: Option<&'a str>,
     /// Theme for rendering colors.
     theme: Option<&'a StatusBarTheme>,
+    /// Number of running background processes.
+    bg_running_count: usize,
+    /// Number of background processes with errors.
+    bg_error_count: usize,
 }
 
 impl<'a> StatusBar<'a> {
@@ -47,6 +51,8 @@ impl<'a> StatusBar<'a> {
             file_path: None,
             terminal_title: None,
             theme: None,
+            bg_running_count: 0,
+            bg_error_count: 0,
         }
     }
 
@@ -103,6 +109,14 @@ impl<'a> StatusBar<'a> {
     #[must_use]
     pub fn theme(mut self, theme: &'a StatusBarTheme) -> Self {
         self.theme = Some(theme);
+        self
+    }
+
+    /// Sets the background process counts.
+    #[must_use]
+    pub fn background_processes(mut self, running: usize, errors: usize) -> Self {
+        self.bg_running_count = running;
+        self.bg_error_count = errors;
         self
     }
 }
@@ -209,19 +223,42 @@ impl Widget for StatusBar<'_> {
             }
         }
 
-        // Right side: cursor position
-        if let Some(pos) = self.cursor_position {
-            let right_content = format!(" Ln {}, Col {} ", pos.line + 1, pos.col + 1);
-            let start_x = area.x + area.width - right_content.len() as u16;
+        // Right side: background indicators + cursor position
+        let mut right_parts: Vec<(String, Style)> = Vec::new();
 
-            for (i, c) in right_content.chars().enumerate() {
-                let x = start_x + i as u16;
-                if x < area.x || x >= area.x + area.width {
-                    continue;
-                }
-                if let Some(cell) = buf.cell_mut((x, area.y)) {
-                    cell.set_char(c);
-                    cell.set_style(bg_style);
+        // Background process indicators
+        if self.bg_error_count > 0 {
+            // Red error indicator
+            let error_style = Style::default().bg(Color::Red).fg(Color::White);
+            right_parts.push((format!(" ERR:{} ", self.bg_error_count), error_style));
+        }
+        if self.bg_running_count > 0 {
+            // Green running indicator
+            let running_style = Style::default().bg(Color::Green).fg(Color::Black);
+            right_parts.push((format!(" BG:{} ", self.bg_running_count), running_style));
+        }
+
+        // Cursor position
+        if let Some(pos) = self.cursor_position {
+            right_parts.push((format!(" Ln {}, Col {} ", pos.line + 1, pos.col + 1), bg_style));
+        }
+
+        // Calculate total width of right parts
+        let right_total_width: usize = right_parts.iter().map(|(s, _)| s.len()).sum();
+
+        if right_total_width > 0 && area.width as usize > right_total_width {
+            let mut x = area.x + area.width - right_total_width as u16;
+
+            for (content, style) in &right_parts {
+                for c in content.chars() {
+                    if x >= area.x + area.width {
+                        break;
+                    }
+                    if let Some(cell) = buf.cell_mut((x, area.y)) {
+                        cell.set_char(c);
+                        cell.set_style(*style);
+                    }
+                    x += 1;
                 }
             }
         }

@@ -245,16 +245,19 @@ impl Style {
     }
 
     /// Converts to ratatui Style for rendering.
+    ///
+    /// Note: Always sets explicit fg/bg colors to ensure consistent rendering
+    /// across all platforms, especially Windows where Color::Reset can behave
+    /// inconsistently.
     #[must_use]
     pub fn to_ratatui(self) -> ratatui::style::Style {
         let mut style = ratatui::style::Style::default();
 
-        if let Some(fg) = self.fg {
-            style = style.fg(fg.to_ratatui());
-        }
-        if let Some(bg) = self.bg {
-            style = style.bg(bg.to_ratatui());
-        }
+        // Always set explicit colors - use Reset for None to ensure consistent behavior
+        // On Windows, not setting colors can cause ghosting and color artifacts
+        let fg_color = self.fg.map(|c| c.to_ratatui()).unwrap_or(ratatui::style::Color::Reset);
+        let bg_color = self.bg.map(|c| c.to_ratatui()).unwrap_or(ratatui::style::Color::Reset);
+        style = style.fg(fg_color).bg(bg_color);
 
         if self.has_attr(Attr::Bold) {
             style = style.add_modifier(ratatui::style::Modifier::BOLD);

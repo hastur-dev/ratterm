@@ -7,18 +7,22 @@ mod keymap;
 
 use std::cell::Cell;
 use std::io;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::sync::mpsc::TryRecvError;
 use std::time::Duration;
 
 use crossterm::event::{self, Event};
 use ratatui::layout::Rect;
+use tracing::{debug, info, warn};
+
+use crate::api::{ApiHandler, ApiServer, RequestReceiver, MAX_REQUESTS_PER_FRAME};
 
 use crate::clipboard::Clipboard;
 use crate::config::{Config, KeybindingMode, ShellType};
 use crate::editor::Editor;
 use crate::extension::ExtensionManager;
 use crate::filebrowser::FileBrowser;
-use crate::terminal::{TerminalMultiplexer, pty::PtyError};
+use crate::terminal::{BackgroundManager, ProcessInfo, TerminalMultiplexer, pty::PtyError};
 use crate::theme::ThemePreset;
 use crate::ui::{
     editor_tabs::{EditorTabBar, EditorTabInfo},
@@ -103,6 +107,12 @@ pub struct App {
     needs_redraw: bool,
     /// Flag to request restart after update (for in-app updates).
     request_restart_after_update: bool,
+    /// API server (runs in background thread).
+    api_server: Option<ApiServer>,
+    /// API request receiver (from background thread).
+    api_request_rx: Option<RequestReceiver>,
+    /// Background process manager.
+    background_manager: BackgroundManager,
 }
 
 impl App {
@@ -140,6 +150,18 @@ impl App {
             SplitLayout::new() // Terminal-first, IDE hidden
         };
 
+        // Start API server
+        let (api_server, api_request_rx) = match ApiServer::start(None) {
+            Ok((server, rx)) => {
+                info!("API server started");
+                (Some(server), Some(rx))
+            }
+            Err(e) => {
+                warn!("Failed to start API server: {}", e);
+                (None, None)
+            }
+        };
+
         Ok(Self {
             terminals,
             editor,
@@ -162,6 +184,9 @@ impl App {
             last_terminal_area: Cell::new(Rect::default()),
             needs_redraw: false,
             request_restart_after_update: false,
+            api_server,
+            api_request_rx,
+            background_manager: BackgroundManager::new(),
         })
     }
 
@@ -193,6 +218,105 @@ impl App {
     #[must_use]
     pub fn keybinding_mode(&self) -> KeybindingMode {
         self.config.mode
+    }
+
+    /// Returns a reference to the editor.
+    #[must_use]
+    pub fn editor(&self) -> &Editor {
+        &self.editor
+    }
+
+    /// Returns a mutable reference to the editor.
+    pub fn editor_mut(&mut self) -> &mut Editor {
+        &mut self.editor
+    }
+
+    /// Returns a reference to the layout manager.
+    #[must_use]
+    pub fn layout(&self) -> &SplitLayout {
+        &self.layout
+    }
+
+    /// Returns a mutable reference to the layout manager.
+    pub fn layout_mut(&mut self) -> &mut SplitLayout {
+        &mut self.layout
+    }
+
+    /// Returns the status message.
+    #[must_use]
+    pub fn status(&self) -> &str {
+        &self.status
+    }
+
+    /// Returns the current file path (if any).
+    #[must_use]
+    pub fn current_file_path(&self) -> Option<&Path> {
+        self.open_files
+            .get(self.current_file_idx)
+            .map(|f| f.path.as_path())
+    }
+
+    /// Returns true if the current file has unsaved modifications.
+    #[must_use]
+    pub fn is_file_modified(&self) -> bool {
+        self.editor.is_modified()
+    }
+
+    /// Saves the file at the given path.
+    ///
+    /// # Errors
+    /// Returns error if save fails.
+    pub fn save_file(&mut self, path: &Path) -> io::Result<()> {
+        self.editor.save_as(path)?;
+        self.set_status(format!("Saved {}", path.display()));
+        Ok(())
+    }
+
+    /// Returns terminal tab information for the API.
+    #[must_use]
+    pub fn terminal_tabs(&self) -> Vec<crate::api::protocol::TerminalTabInfo> {
+        use crate::api::protocol::TerminalTabInfo;
+
+        if let Some(ref terminals) = self.terminals {
+            let tab_info = terminals.tab_info();
+            tab_info
+                .iter()
+                .enumerate()
+                .map(|(i, info)| TerminalTabInfo {
+                    index: i,
+                    name: info.name.clone(),
+                    active: info.is_active,
+                })
+                .collect()
+        } else {
+            Vec::new()
+        }
+    }
+
+    /// Returns editor tab information for the API.
+    #[must_use]
+    pub fn editor_tabs(&self) -> Vec<crate::api::protocol::EditorTabInfo> {
+        use crate::api::protocol::EditorTabInfo;
+
+        self.open_files
+            .iter()
+            .enumerate()
+            .map(|(i, file)| EditorTabInfo {
+                index: i,
+                name: file.name.clone(),
+                path: Some(file.path.to_string_lossy().into_owned()),
+                modified: i == self.current_file_idx && self.editor.is_modified(),
+                active: i == self.current_file_idx,
+            })
+            .collect()
+    }
+
+    /// Switches to the terminal tab at the given index.
+    pub fn switch_terminal_tab(&mut self, index: usize) {
+        if let Some(ref mut terminals) = self.terminals {
+            terminals.switch_to(index);
+            self.set_status(format!("Terminal {}", index + 1));
+        }
     }
 
     /// Returns the active terminal (if any).
@@ -387,16 +511,7 @@ impl App {
         self.mode = AppMode::Normal;
         self.file_browser.hide();
 
-        // Clear terminal grid to remove any artifacts from PTY output during file browser
-        // This is especially important after command interception where the shell
-        // may have output a new prompt or other characters
-        if let Some(ref mut terminals) = self.terminals {
-            if let Some(terminal) = terminals.active_terminal_mut() {
-                terminal.clear_visible();
-            }
-        }
-
-        // Request full redraw to clear any ghost artifacts from file browser
+        // Request full redraw to ensure clean rendering
         self.request_redraw();
         Ok(())
     }
@@ -414,9 +529,6 @@ impl App {
                 if cwd.is_dir() && cwd != self.file_browser.path() {
                     let _ = self.file_browser.change_dir(&cwd);
                 }
-                // Clear the terminal's visible grid to prevent ghost artifacts
-                // This clears any "open" text or shell output that was shown
-                terminal.clear_visible();
             }
         }
 
@@ -433,14 +545,7 @@ impl App {
         self.file_browser.hide();
         self.mode = AppMode::Normal;
 
-        // Clear terminal grid to remove any artifacts from PTY output during file browser
-        if let Some(ref mut terminals) = self.terminals {
-            if let Some(terminal) = terminals.active_terminal_mut() {
-                terminal.clear_visible();
-            }
-        }
-
-        // Request full redraw to clear file browser artifacts
+        // Request full redraw to ensure clean rendering
         self.request_redraw();
     }
 
@@ -844,6 +949,71 @@ impl App {
         self.close_editor_tab();
     }
 
+    // ========================================================================
+    // Background process methods
+    // ========================================================================
+
+    /// Starts a command in the background.
+    ///
+    /// # Errors
+    /// Returns error message if the process cannot be started.
+    pub fn start_background_process(&mut self, command: &str) -> Result<u64, String> {
+        let id = self.background_manager.start(command)?;
+        self.set_status(format!("Started background process {} : {}", id, command));
+        Ok(id)
+    }
+
+    /// Lists all background processes with counts.
+    #[must_use]
+    pub fn list_background_processes(&mut self) -> (Vec<ProcessInfo>, usize, usize) {
+        self.background_manager.update_counts();
+        let processes = self.background_manager.list();
+        let running = self.background_manager.running_count();
+        let errors = self.background_manager.error_count();
+        (processes, running, errors)
+    }
+
+    /// Gets information about a specific background process.
+    #[must_use]
+    pub fn get_background_process_info(&self, id: u64) -> Option<ProcessInfo> {
+        self.background_manager.get_info(id)
+    }
+
+    /// Gets the output of a specific background process.
+    #[must_use]
+    pub fn get_background_process_output(&self, id: u64) -> Option<String> {
+        self.background_manager.get_output(id)
+    }
+
+    /// Kills a background process.
+    ///
+    /// # Errors
+    /// Returns error message if the process cannot be killed.
+    pub fn kill_background_process(&mut self, id: u64) -> Result<(), String> {
+        self.background_manager.kill(id)?;
+        self.set_status(format!("Killed background process {}", id));
+        Ok(())
+    }
+
+    /// Clears finished background processes.
+    pub fn clear_finished_background_processes(&mut self) {
+        self.background_manager.clear_finished();
+        self.background_manager.clear_errors();
+        self.set_status("Cleared finished background processes".to_string());
+    }
+
+    /// Returns the number of running background processes.
+    #[must_use]
+    pub fn background_running_count(&self) -> usize {
+        self.background_manager.running_count()
+    }
+
+    /// Returns the number of background processes with errors.
+    #[must_use]
+    pub fn background_error_count(&self) -> usize {
+        self.background_manager.error_count()
+    }
+
     /// Handles terminal resize.
     pub fn resize(&mut self, cols: u16, rows: u16) {
         let areas = self
@@ -876,6 +1046,12 @@ impl App {
     /// # Errors
     /// Returns error if event processing fails.
     pub fn update(&mut self) -> io::Result<()> {
+        // Process API requests (non-blocking, bounded)
+        self.process_api_requests();
+
+        // Update background process counts
+        self.background_manager.update_counts();
+
         // Only process PTY output when file browser is NOT visible
         // This prevents the terminal grid from being corrupted by PTY output
         // while the user is interacting with the file browser
@@ -897,6 +1073,47 @@ impl App {
         }
 
         Ok(())
+    }
+
+    /// Processes pending API requests (non-blocking, bounded).
+    fn process_api_requests(&mut self) {
+        // Take the receiver temporarily to avoid borrow issues
+        let Some(rx) = self.api_request_rx.take() else {
+            return;
+        };
+
+        // Create handler locally to avoid borrow issues
+        // (ApiHandler is stateless, so this is cheap)
+        let handler = ApiHandler::new();
+
+        // Process up to MAX_REQUESTS_PER_FRAME requests
+        for _ in 0..MAX_REQUESTS_PER_FRAME {
+            match rx.try_recv() {
+                Ok((request, response_tx)) => {
+                    debug!("Processing API request: {}", request.method);
+
+                    // Handle the request
+                    let response = handler.handle(request, self);
+
+                    // Send response back
+                    if let Err(e) = response_tx.send(response) {
+                        warn!("Failed to send API response: {:?}", e);
+                    }
+                }
+                Err(TryRecvError::Empty) => {
+                    // No more requests
+                    break;
+                }
+                Err(TryRecvError::Disconnected) => {
+                    // Channel closed, don't put it back
+                    warn!("API request channel disconnected");
+                    return;
+                }
+            }
+        }
+
+        // Put the receiver back
+        self.api_request_rx = Some(rx);
     }
 
     /// Updates popup results based on current input.
@@ -1369,11 +1586,24 @@ impl App {
             status_bar = status_bar.message(&final_message);
         }
 
+        // Add background process indicators
+        status_bar = status_bar.background_processes(
+            self.background_running_count(),
+            self.background_error_count(),
+        );
+
         frame.render_widget(status_bar, areas.status_bar);
     }
 
     /// Shuts down the application.
     pub fn shutdown(&mut self) {
+        // Shutdown API server first
+        if let Some(server) = self.api_server.take() {
+            info!("Shutting down API server");
+            server.shutdown();
+        }
+
+        // Then shutdown terminals
         if let Some(ref mut terminals) = self.terminals {
             terminals.shutdown();
         }
