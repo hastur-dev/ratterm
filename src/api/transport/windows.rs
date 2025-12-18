@@ -1,7 +1,7 @@
 //! Windows Named Pipe transport implementation.
 
-use crate::api::transport::{BufferedConnection, Connection, DEFAULT_PIPE_NAME};
 use crate::api::ApiError;
+use crate::api::transport::{BufferedConnection, Connection, DEFAULT_PIPE_NAME};
 use std::ffi::OsStr;
 use std::io::{BufReader, BufWriter};
 use std::os::windows::ffi::OsStrExt;

@@ -88,7 +88,10 @@ impl Widget for EditorTabBar<'_> {
             // Check if we have room
             if total_width + tab_width + 1 > max_width {
                 // Add overflow indicator with explicit background
-                spans.push(Span::styled("...", Style::default().fg(Color::DarkGray).bg(bg_color)));
+                spans.push(Span::styled(
+                    "...",
+                    Style::default().fg(Color::DarkGray).bg(bg_color),
+                ));
                 break;
             }
 
@@ -115,7 +118,10 @@ impl Widget for EditorTabBar<'_> {
 
             // Add separator between tabs (except after last) with explicit background
             if i < self.tabs.len() - 1 {
-                spans.push(Span::styled("│", Style::default().fg(Color::DarkGray).bg(bg_color)));
+                spans.push(Span::styled(
+                    "│",
+                    Style::default().fg(Color::DarkGray).bg(bg_color),
+                ));
                 total_width += 1;
             }
         }

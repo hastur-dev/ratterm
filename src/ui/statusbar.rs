@@ -240,7 +240,10 @@ impl Widget for StatusBar<'_> {
 
         // Cursor position
         if let Some(pos) = self.cursor_position {
-            right_parts.push((format!(" Ln {}, Col {} ", pos.line + 1, pos.col + 1), bg_style));
+            right_parts.push((
+                format!(" Ln {}, Col {} ", pos.line + 1, pos.col + 1),
+                bg_style,
+            ));
         }
 
         // Calculate total width of right parts

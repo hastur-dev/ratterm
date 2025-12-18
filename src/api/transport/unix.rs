@@ -1,7 +1,7 @@
 //! Unix domain socket transport implementation.
 
-use crate::api::transport::{default_socket_path, BufferedConnection, Connection};
 use crate::api::ApiError;
+use crate::api::transport::{BufferedConnection, Connection, default_socket_path};
 use std::io::{BufReader, BufWriter};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::PathBuf;

@@ -15,7 +15,7 @@ use crossterm::event::{self, Event};
 use ratatui::layout::Rect;
 use tracing::{debug, info, warn};
 
-use crate::api::{ApiHandler, ApiServer, RequestReceiver, MAX_REQUESTS_PER_FRAME};
+use crate::api::{ApiHandler, ApiServer, MAX_REQUESTS_PER_FRAME, RequestReceiver};
 
 use crate::clipboard::Clipboard;
 use crate::config::{Config, KeybindingMode, ShellType};

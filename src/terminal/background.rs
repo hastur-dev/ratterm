@@ -302,7 +302,8 @@ impl BackgroundManager {
                     }
                     Err(e) => {
                         proc.info.status = ProcessStatus::Error;
-                        proc.info.error_message = Some(format!("Failed to wait for process: {}", e));
+                        proc.info.error_message =
+                            Some(format!("Failed to wait for process: {}", e));
                         proc.info.finished_at = Some(Instant::now());
                     }
                 }

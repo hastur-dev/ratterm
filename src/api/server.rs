@@ -5,10 +5,10 @@
 
 use crate::api::protocol::{ApiRequest, ApiResponse};
 use crate::api::transport::Connection;
-use crate::api::{request_channel, ApiError, RequestSender};
+use crate::api::{ApiError, RequestSender, request_channel};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
-use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use tracing::{debug, error, info, warn};
 
@@ -99,11 +99,7 @@ impl ApiServer {
 
     /// Windows server loop.
     #[cfg(windows)]
-    fn run_windows(
-        pipe_name: Option<&str>,
-        request_tx: RequestSender,
-        shutdown: Arc<AtomicBool>,
-    ) {
+    fn run_windows(pipe_name: Option<&str>, request_tx: RequestSender, shutdown: Arc<AtomicBool>) {
         let server = WindowsServer::new(pipe_name);
         info!("API server started on pipe: {}", server.pipe_name());
 
@@ -221,19 +217,18 @@ impl ApiServer {
             }
 
             // Wait for response with timeout
-            let response = match resp_rx.recv_timeout(std::time::Duration::from_millis(
-                RESPONSE_TIMEOUT_MS,
-            )) {
-                Ok(r) => r,
-                Err(mpsc::RecvTimeoutError::Timeout) => {
-                    warn!("Request timed out: {}", request.method);
-                    ApiResponse::error(request.id, -32000, "Request timed out")
-                }
-                Err(mpsc::RecvTimeoutError::Disconnected) => {
-                    error!("Response channel disconnected");
-                    ApiResponse::error(request.id, -32603, "Internal error")
-                }
-            };
+            let response =
+                match resp_rx.recv_timeout(std::time::Duration::from_millis(RESPONSE_TIMEOUT_MS)) {
+                    Ok(r) => r,
+                    Err(mpsc::RecvTimeoutError::Timeout) => {
+                        warn!("Request timed out: {}", request.method);
+                        ApiResponse::error(request.id, -32000, "Request timed out")
+                    }
+                    Err(mpsc::RecvTimeoutError::Disconnected) => {
+                        error!("Response channel disconnected");
+                        ApiResponse::error(request.id, -32603, "Internal error")
+                    }
+                };
 
             // Send response
             if let Err(e) = Self::send_response(conn, &response) {
