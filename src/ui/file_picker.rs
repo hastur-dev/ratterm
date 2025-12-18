@@ -119,7 +119,10 @@ impl Widget for FilePickerWidget<'_> {
                 };
                 // Explicit background for non-selected items to prevent Windows rendering artifacts
                 (
-                    Style::default().fg(fg).bg(bg_color).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(fg)
+                        .bg(bg_color)
+                        .add_modifier(Modifier::BOLD),
                     Style::default().fg(fg).bg(bg_color),
                 )
             };

@@ -82,7 +82,10 @@ impl Widget for TerminalTabBar<'_> {
 
             // Add separator between tabs (except after last) with explicit background
             if i < tab_count - 1 {
-                spans.push(Span::styled("│", Style::default().fg(Color::DarkGray).bg(bg_color)));
+                spans.push(Span::styled(
+                    "│",
+                    Style::default().fg(Color::DarkGray).bg(bg_color),
+                ));
             }
         }
 

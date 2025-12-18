@@ -102,8 +102,14 @@ mod tests {
 
     #[test]
     fn test_error_codes() {
-        assert_eq!(ApiError::MethodNotFound("test".into()).to_error_code(), -32601);
-        assert_eq!(ApiError::InvalidParams("test".into()).to_error_code(), -32602);
+        assert_eq!(
+            ApiError::MethodNotFound("test".into()).to_error_code(),
+            -32601
+        );
+        assert_eq!(
+            ApiError::InvalidParams("test".into()).to_error_code(),
+            -32602
+        );
         assert_eq!(ApiError::NoActiveTerminal.to_error_code(), -32000);
     }
 }

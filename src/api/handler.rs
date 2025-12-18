@@ -2,13 +2,13 @@
 //!
 //! Dispatches API requests to App operations.
 
-use crate::api::protocol::*;
 use crate::api::ApiError;
+use crate::api::protocol::*;
 use crate::app::App;
 use crate::editor::edit::Position;
 use crate::terminal::ProcessStatus;
 use crate::ui::layout::FocusedPane;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tracing::debug;
 
 /// API request handler.
@@ -189,7 +189,9 @@ impl ApiHandler {
     ) -> Result<Value, ApiError> {
         let editor = app.editor();
         let content = editor.buffer().text();
-        let path = app.current_file_path().map(|p| p.to_string_lossy().into_owned());
+        let path = app
+            .current_file_path()
+            .map(|p| p.to_string_lossy().into_owned());
         let modified = app.is_file_modified();
         let pos = editor.cursor_position();
 
@@ -239,11 +241,7 @@ impl ApiHandler {
         }
     }
 
-    fn handle_editor_close(
-        &self,
-        _request: &ApiRequest,
-        app: &mut App,
-    ) -> Result<Value, ApiError> {
+    fn handle_editor_close(&self, _request: &ApiRequest, app: &mut App) -> Result<Value, ApiError> {
         app.close_current_file();
         Ok(json!({}))
     }
@@ -294,7 +292,7 @@ impl ApiHandler {
                 return Err(ApiError::InvalidParams(format!(
                     "Invalid pane: {}",
                     params.pane
-                )))
+                )));
             }
         }
 
@@ -499,7 +497,7 @@ impl ApiHandler {
 
         let id = app
             .start_background_process(&params.command)
-            .map_err(|e| ApiError::Internal(e))?;
+            .map_err(ApiError::Internal)?;
 
         let result = BackgroundStartResult { id };
         Ok(serde_json::to_value(result)?)
@@ -515,9 +513,9 @@ impl ApiHandler {
         let process_results: Vec<BackgroundStatusResult> = processes
             .into_iter()
             .map(|info| {
-                let duration_ms = info.finished_at.map(|end| {
-                    end.duration_since(info.started_at).as_millis() as u64
-                });
+                let duration_ms = info
+                    .finished_at
+                    .map(|end| end.duration_since(info.started_at).as_millis() as u64);
 
                 BackgroundStatusResult {
                     id: info.id,
@@ -550,9 +548,9 @@ impl ApiHandler {
             .get_background_process_info(params.id)
             .ok_or_else(|| ApiError::Internal(format!("Process {} not found", params.id)))?;
 
-        let duration_ms = info.finished_at.map(|end| {
-            end.duration_since(info.started_at).as_millis() as u64
-        });
+        let duration_ms = info
+            .finished_at
+            .map(|end| end.duration_since(info.started_at).as_millis() as u64);
 
         let result = BackgroundStatusResult {
             id: info.id,
@@ -598,7 +596,7 @@ impl ApiHandler {
         let params: BackgroundProcessParams = serde_json::from_value(request.params.clone())?;
 
         app.kill_background_process(params.id)
-            .map_err(|e| ApiError::Internal(e))?;
+            .map_err(ApiError::Internal)?;
 
         let result = BackgroundKillResult { id: params.id };
         Ok(serde_json::to_value(result)?)

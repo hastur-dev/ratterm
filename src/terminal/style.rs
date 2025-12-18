@@ -255,8 +255,14 @@ impl Style {
 
         // Always set explicit colors - use Reset for None to ensure consistent behavior
         // On Windows, not setting colors can cause ghosting and color artifacts
-        let fg_color = self.fg.map(|c| c.to_ratatui()).unwrap_or(ratatui::style::Color::Reset);
-        let bg_color = self.bg.map(|c| c.to_ratatui()).unwrap_or(ratatui::style::Color::Reset);
+        let fg_color = self
+            .fg
+            .map(|c| c.to_ratatui())
+            .unwrap_or(ratatui::style::Color::Reset);
+        let bg_color = self
+            .bg
+            .map(|c| c.to_ratatui())
+            .unwrap_or(ratatui::style::Color::Reset);
         style = style.fg(fg_color).bg(bg_color);
 
         if self.has_attr(Attr::Bold) {

@@ -407,7 +407,10 @@ impl Widget for PopupWidget<'_> {
         } else {
             Line::from(vec![
                 Span::styled(prompt, Style::default().fg(Color::White).bg(bg_color)),
-                Span::styled(&self.popup.input, Style::default().fg(Color::White).bg(bg_color)),
+                Span::styled(
+                    &self.popup.input,
+                    Style::default().fg(Color::White).bg(bg_color),
+                ),
             ])
         };
 
@@ -423,18 +426,29 @@ impl Widget for PopupWidget<'_> {
 
         // Render error if any
         if let Some(ref error) = self.popup.error {
-            let error_para = Paragraph::new(error.as_str()).style(Style::default().fg(Color::Red).bg(bg_color));
+            let error_para =
+                Paragraph::new(error.as_str()).style(Style::default().fg(Color::Red).bg(bg_color));
             error_para.render(chunks[1], buf);
         }
 
-        // Render results with explicit backgrounds
+        // Render results with explicit backgrounds and scrolling
         if !self.popup.results.is_empty() {
+            let visible_count = chunks[2].height as usize;
+
+            // Calculate scroll offset to keep selected item visible
+            let scroll_offset = if self.popup.selected_result >= visible_count {
+                self.popup.selected_result.saturating_sub(visible_count - 1)
+            } else {
+                0
+            };
+
             let visible_results: Vec<Line> = self
                 .popup
                 .results
                 .iter()
                 .enumerate()
-                .take(chunks[2].height as usize)
+                .skip(scroll_offset)
+                .take(visible_count)
                 .map(|(i, result)| {
                     let style = if i == self.popup.selected_result {
                         Style::default().bg(Color::Blue).fg(Color::White)
