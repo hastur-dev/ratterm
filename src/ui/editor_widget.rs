@@ -298,7 +298,7 @@ impl Widget for EditorWidget<'_> {
         let (border_focused, border_unfocused) = self
             .theme
             .map(|t| (t.border_focused, t.border))
-            .unwrap_or((Color::Rgb(86, 156, 214), Color::DarkGray));
+            .unwrap_or((Color::Rgb(204, 60, 60), Color::DarkGray));
 
         // Get background color for border - must be explicit to prevent Windows rendering artifacts
         let border_bg = self

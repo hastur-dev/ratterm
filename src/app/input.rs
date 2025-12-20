@@ -78,11 +78,11 @@ impl App {
                 true
             }
             (KeyModifiers::ALT, KeyCode::Char('[')) => {
-                self.layout.move_split_left();
+                self.move_split_left();
                 true
             }
             (KeyModifiers::ALT, KeyCode::Char(']')) => {
-                self.layout.move_split_right();
+                self.move_split_right();
                 true
             }
             (KeyModifiers::CONTROL, KeyCode::Char('q')) => {

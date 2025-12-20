@@ -117,6 +117,8 @@ pub struct App {
     background_manager: BackgroundManager,
     /// Lua plugin manager.
     lua_plugins: LuaPluginManager,
+    /// Last known screen size for layout-triggered resizes.
+    last_screen_size: (u16, u16),
 }
 
 impl App {
@@ -192,6 +194,7 @@ impl App {
             api_request_rx,
             background_manager: BackgroundManager::new(),
             lua_plugins: LuaPluginManager::new(),
+            last_screen_size: (80, 24), // Default, will be updated on first resize
         })
     }
 
@@ -557,6 +560,7 @@ impl App {
     /// Shows the IDE pane (editor).
     pub fn show_ide(&mut self) {
         self.layout.show_ide();
+        self.resize_for_current_layout();
         self.request_redraw();
         self.set_status("IDE opened");
     }
@@ -564,6 +568,7 @@ impl App {
     /// Hides the IDE pane.
     pub fn hide_ide(&mut self) {
         self.layout.hide_ide();
+        self.resize_for_current_layout();
         self.request_redraw();
         self.set_status("IDE closed");
     }
@@ -581,6 +586,20 @@ impl App {
     #[must_use]
     pub fn ide_visible(&self) -> bool {
         self.layout.ide_visible()
+    }
+
+    /// Moves split left (increases terminal size, decreases editor size).
+    pub fn move_split_left(&mut self) {
+        self.layout.move_split_left();
+        self.resize_for_current_layout();
+        self.request_redraw();
+    }
+
+    /// Moves split right (decreases terminal size, increases editor size).
+    pub fn move_split_right(&mut self) {
+        self.layout.move_split_right();
+        self.resize_for_current_layout();
+        self.request_redraw();
     }
 
     /// Checks if IDE should auto-hide (no open files and not ide_always).
@@ -1021,6 +1040,15 @@ impl App {
 
     /// Handles terminal resize.
     pub fn resize(&mut self, cols: u16, rows: u16) {
+        // Store screen size for layout-triggered resizes
+        self.last_screen_size = (cols, rows);
+        self.resize_for_current_layout();
+    }
+
+    /// Resizes terminal and editor based on current layout and stored screen size.
+    /// Called after layout changes (IDE show/hide, split resize).
+    fn resize_for_current_layout(&mut self) {
+        let (cols, rows) = self.last_screen_size;
         let areas = self
             .layout
             .calculate(ratatui::layout::Rect::new(0, 0, cols, rows));
@@ -1295,8 +1323,8 @@ impl App {
             "view.focusTerminal" => self.layout.set_focused(FocusedPane::Terminal),
             "view.focusEditor" => self.layout.set_focused(FocusedPane::Editor),
             "view.toggleFocus" => self.layout.toggle_focus(),
-            "view.splitLeft" => self.layout.move_split_left(),
-            "view.splitRight" => self.layout.move_split_right(),
+            "view.splitLeft" => self.move_split_left(),
+            "view.splitRight" => self.move_split_right(),
 
             // Terminal commands
             "terminal.new" => self.add_terminal_tab(),

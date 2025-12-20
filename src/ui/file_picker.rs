@@ -114,7 +114,7 @@ impl Widget for FilePickerWidget<'_> {
             } else {
                 let fg = match entry.kind() {
                     EntryKind::ParentDir => Color::Cyan,
-                    EntryKind::Directory => Color::Blue,
+                    EntryKind::Directory => Color::Rgb(204, 60, 60),
                     EntryKind::File => Color::White,
                 };
                 // Explicit background for non-selected items to prevent Windows rendering artifacts

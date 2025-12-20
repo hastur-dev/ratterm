@@ -42,6 +42,10 @@ pub struct ThemeSettings {
     pub editor_current_line: Option<Color>,
     /// Editor cursor color.
     pub editor_cursor: Option<Color>,
+    /// Editor border color (unfocused).
+    pub editor_border: Option<Color>,
+    /// Editor border color (focused).
+    pub editor_border_focused: Option<Color>,
     /// Status bar background color.
     pub statusbar_background: Option<Color>,
     /// Status bar foreground color.
@@ -123,6 +127,8 @@ impl ThemeSettings {
             "editor.line_numbers" => self.editor_line_numbers_fg = parse_color(value),
             "editor.current_line" => self.editor_current_line = parse_color(value),
             "editor.cursor" => self.editor_cursor = parse_color(value),
+            "editor.border" => self.editor_border = parse_color(value),
+            "editor.border_focused" => self.editor_border_focused = parse_color(value),
             "statusbar.background" => self.statusbar_background = parse_color(value),
             "statusbar.foreground" => self.statusbar_foreground = parse_color(value),
             "tab.active_bg" => self.tab_active_bg = parse_color(value),
@@ -181,6 +187,12 @@ impl ThemeSettings {
         }
         if let Some(color) = self.editor_cursor {
             theme.editor.cursor = color;
+        }
+        if let Some(color) = self.editor_border {
+            theme.editor.border = color;
+        }
+        if let Some(color) = self.editor_border_focused {
+            theme.editor.border_focused = color;
         }
 
         // Status bar settings

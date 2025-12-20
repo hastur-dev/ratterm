@@ -73,7 +73,7 @@ impl Default for EditorTheme {
             selection: Color::Rgb(38, 79, 120),
             cursor: Color::White,
             border: Color::DarkGray,
-            border_focused: Color::Rgb(86, 156, 214),
+            border_focused: Color::Rgb(204, 60, 60),
         }
     }
 }
@@ -186,7 +186,7 @@ impl Default for FileBrowserTheme {
         Self {
             background: Color::Rgb(37, 37, 38),
             foreground: Color::Rgb(204, 204, 204),
-            directory: Color::Rgb(86, 156, 214),
+            directory: Color::Rgb(204, 60, 60),
             file: Color::Rgb(204, 204, 204),
             selected_bg: Color::Rgb(9, 71, 113),
             selected_fg: Color::White,
