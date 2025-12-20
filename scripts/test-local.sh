@@ -133,6 +133,8 @@ usage() {
     echo "  msrv         MSRV check only"
     echo "  ci-all       Run all checks in one container"
     echo "  install-test Test install script in Docker"
+    echo "  lua-test     Run Lua extension tests"
+    echo "  lua-test-arm Run Lua extension tests on ARM64 (QEMU)"
     echo "  test-arm     Run tests on ARM64 Linux (QEMU)"
     echo "  ci-all-arm   Run all checks on ARM64 Linux (QEMU)"
     echo "  clean        Clean up Docker volumes and images"
@@ -147,7 +149,7 @@ main() {
         "")
             run_all
             ;;
-        fmt|clippy|test|docs|audit|msrv|ci-all|install-test|test-arm|ci-all-arm)
+        fmt|clippy|test|docs|audit|msrv|ci-all|install-test|lua-test|lua-test-arm|test-arm|ci-all-arm)
             run_service "$1"
             ;;
         clean)

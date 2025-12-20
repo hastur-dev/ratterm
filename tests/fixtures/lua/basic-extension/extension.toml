@@ -1,0 +1,8 @@
+[extension]
+name = "basic-test"
+version = "1.0.0"
+type = "lua"
+description = "Basic test extension for integration testing"
+
+[lua]
+main = "init.lua"

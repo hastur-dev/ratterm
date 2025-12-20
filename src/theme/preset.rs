@@ -4,6 +4,7 @@
 
 use ratatui::style::Color;
 
+use super::colors::AnsiPalette;
 use super::component::{
     EditorTheme, FileBrowserTheme, PopupTheme, StatusBarTheme, TabTheme, TerminalTheme, Theme,
 };
@@ -21,6 +22,8 @@ pub enum ThemePreset {
     Gruvbox,
     /// Nord theme.
     Nord,
+    /// Matrix theme (bright green on black).
+    Matrix,
 }
 
 impl ThemePreset {
@@ -33,6 +36,7 @@ impl ThemePreset {
             ThemePreset::Dracula,
             ThemePreset::Gruvbox,
             ThemePreset::Nord,
+            ThemePreset::Matrix,
         ]
     }
 
@@ -45,6 +49,7 @@ impl ThemePreset {
             ThemePreset::Dracula => "dracula",
             ThemePreset::Gruvbox => "gruvbox",
             ThemePreset::Nord => "nord",
+            ThemePreset::Matrix => "matrix",
         }
     }
 
@@ -57,6 +62,7 @@ impl ThemePreset {
             ThemePreset::Dracula => create_dracula_theme(),
             ThemePreset::Gruvbox => create_gruvbox_theme(),
             ThemePreset::Nord => create_nord_theme(),
+            ThemePreset::Matrix => create_matrix_theme(),
         }
     }
 
@@ -69,6 +75,7 @@ impl ThemePreset {
             "dracula" => Some(ThemePreset::Dracula),
             "gruvbox" => Some(ThemePreset::Gruvbox),
             "nord" => Some(ThemePreset::Nord),
+            "matrix" => Some(ThemePreset::Matrix),
             _ => None,
         }
     }
@@ -349,6 +356,93 @@ fn create_nord_theme() -> Theme {
     }
 }
 
+/// Creates a Matrix theme (bright green on black).
+fn create_matrix_theme() -> Theme {
+    // Matrix colors - brightest possible green
+    let bg = Color::Rgb(0, 0, 0);
+    let fg = Color::Rgb(0, 255, 0); // Brightest green
+    let bright_red = Color::Rgb(255, 0, 0); // Bright red for errors
+    let bright_blue = Color::Rgb(0, 128, 255); // Bright blue for info
+    let dim_green = Color::Rgb(0, 180, 0);
+    let dark_green = Color::Rgb(0, 100, 0);
+    let selection = Color::Rgb(0, 80, 0);
+
+    // Custom ANSI palette - all greens except red/blue for errors/info
+    let matrix_palette = AnsiPalette {
+        black: bg,
+        red: bright_red,                    // Keep red for errors
+        green: fg,                          // Bright green
+        yellow: Color::Rgb(0, 255, 128),    // Green-tinted yellow
+        blue: bright_blue,                  // Keep blue for info
+        magenta: Color::Rgb(0, 200, 100),   // Green-tinted magenta
+        cyan: Color::Rgb(0, 255, 180),      // Green-tinted cyan
+        white: fg,                          // Bright green instead of white
+        bright_black: dark_green,           // Dark green
+        bright_red: bright_red,             // Keep bright red
+        bright_green: fg,                   // Bright green
+        bright_yellow: Color::Rgb(100, 255, 100), // Light green
+        bright_blue: bright_blue,           // Keep bright blue
+        bright_magenta: Color::Rgb(50, 255, 150), // Green-tinted
+        bright_cyan: Color::Rgb(0, 255, 200),     // Green-tinted
+        bright_white: fg,                   // Bright green
+    };
+
+    Theme {
+        name: "matrix".to_string(),
+        terminal: TerminalTheme {
+            foreground: fg,
+            background: bg,
+            cursor: fg,
+            selection,
+            border: dark_green,
+            border_focused: fg,
+            palette: matrix_palette,
+        },
+        editor: EditorTheme {
+            foreground: fg,
+            background: bg,
+            line_numbers_fg: dim_green,
+            line_numbers_bg: bg,
+            current_line: Color::Rgb(0, 30, 0),
+            selection,
+            cursor: fg,
+            border: dark_green,
+            border_focused: fg,
+        },
+        statusbar: StatusBarTheme {
+            background: Color::Rgb(0, 40, 0),
+            foreground: fg,
+            mode_normal: fg,
+            mode_insert: bright_blue,
+            mode_visual: Color::Rgb(0, 255, 128),
+            mode_command: bright_red,
+        },
+        tabs: TabTheme {
+            active_bg: bg,
+            active_fg: fg,
+            inactive_bg: Color::Rgb(0, 20, 0),
+            inactive_fg: dim_green,
+        },
+        popup: PopupTheme {
+            background: bg,
+            foreground: fg,
+            border: dark_green,
+            selected_bg: selection,
+            selected_fg: fg,
+            input_bg: Color::Rgb(0, 20, 0),
+        },
+        file_browser: FileBrowserTheme {
+            background: bg,
+            foreground: fg,
+            directory: bright_blue,
+            file: fg,
+            selected_bg: selection,
+            selected_fg: fg,
+            border: dark_green,
+        },
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -376,6 +470,6 @@ mod tests {
     #[test]
     fn test_all_presets() {
         let presets = ThemePreset::all();
-        assert_eq!(presets.len(), 5);
+        assert_eq!(presets.len(), 6);
     }
 }

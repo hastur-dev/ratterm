@@ -51,6 +51,7 @@ toml = "0.8"
 # Extension system
 libloading = "0.8"
 wasmtime = "29"
+mlua = { version = "0.10", features = ["lua54", "vendored"] }
 reqwest = { version = "0.12", features = ["blocking", "json"] }
 zip = "2.2"
 flate2 = "1.0"

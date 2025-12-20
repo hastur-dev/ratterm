@@ -116,6 +116,35 @@ impl Color {
             Self::Rgb(r, g, b) => ratatui::style::Color::Rgb(r, g, b),
         }
     }
+
+    /// Converts to ratatui Color using a theme palette for ANSI colors.
+    #[must_use]
+    pub fn to_ratatui_with_palette(
+        self,
+        palette: &crate::theme::colors::AnsiPalette,
+    ) -> ratatui::style::Color {
+        match self {
+            Self::Default => ratatui::style::Color::Reset,
+            Self::Black => palette.black,
+            Self::Red => palette.red,
+            Self::Green => palette.green,
+            Self::Yellow => palette.yellow,
+            Self::Blue => palette.blue,
+            Self::Magenta => palette.magenta,
+            Self::Cyan => palette.cyan,
+            Self::White => palette.white,
+            Self::BrightBlack => palette.bright_black,
+            Self::BrightRed => palette.bright_red,
+            Self::BrightGreen => palette.bright_green,
+            Self::BrightYellow => palette.bright_yellow,
+            Self::BrightBlue => palette.bright_blue,
+            Self::BrightMagenta => palette.bright_magenta,
+            Self::BrightCyan => palette.bright_cyan,
+            Self::BrightWhite => palette.bright_white,
+            Self::Indexed(i) => ratatui::style::Color::Indexed(i),
+            Self::Rgb(r, g, b) => ratatui::style::Color::Rgb(r, g, b),
+        }
+    }
 }
 
 /// Text attributes.
@@ -265,6 +294,49 @@ impl Style {
             .unwrap_or(ratatui::style::Color::Reset);
         style = style.fg(fg_color).bg(bg_color);
 
+        self.apply_modifiers(style)
+    }
+
+    /// Converts to ratatui Style using a theme palette for ANSI colors.
+    /// Also takes default fg/bg colors to use when the cell has no explicit color.
+    #[must_use]
+    pub fn to_ratatui_with_palette(
+        self,
+        palette: &crate::theme::colors::AnsiPalette,
+    ) -> ratatui::style::Style {
+        self.to_ratatui_with_palette_and_defaults(palette, None, None)
+    }
+
+    /// Converts to ratatui Style using theme palette and default colors.
+    /// When fg/bg is Default/None, uses the provided default colors instead of Reset.
+    #[must_use]
+    pub fn to_ratatui_with_palette_and_defaults(
+        self,
+        palette: &crate::theme::colors::AnsiPalette,
+        default_fg: Option<ratatui::style::Color>,
+        default_bg: Option<ratatui::style::Color>,
+    ) -> ratatui::style::Style {
+        let mut style = ratatui::style::Style::default();
+
+        let fg_color = match self.fg {
+            Some(Color::Default) | None => {
+                default_fg.unwrap_or(ratatui::style::Color::Reset)
+            }
+            Some(c) => c.to_ratatui_with_palette(palette),
+        };
+        let bg_color = match self.bg {
+            Some(Color::Default) | None => {
+                default_bg.unwrap_or(ratatui::style::Color::Reset)
+            }
+            Some(c) => c.to_ratatui_with_palette(palette),
+        };
+        style = style.fg(fg_color).bg(bg_color);
+
+        self.apply_modifiers(style)
+    }
+
+    /// Applies text modifiers to a ratatui style.
+    fn apply_modifiers(self, mut style: ratatui::style::Style) -> ratatui::style::Style {
         if self.has_attr(Attr::Bold) {
             style = style.add_modifier(ratatui::style::Modifier::BOLD);
         }

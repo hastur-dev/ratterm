@@ -112,6 +112,35 @@ services:
     mem_limit: 2g
     memswap_limit: 2g
 
+  # Lua extension system tests (x86_64)
+  lua-test:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.lua-test
+    environment:
+      - CARGO_TERM_COLOR=always
+      - RUSTFLAGS=-D warnings
+    volumes:
+      - cargo-cache:/usr/local/cargo/registry
+      - target-cache:/app/target
+    mem_limit: 2g
+    memswap_limit: 2g
+
+  # Lua extension system tests (ARM64)
+  lua-test-arm:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.lua-test
+    platform: linux/arm64
+    environment:
+      - CARGO_TERM_COLOR=always
+      - RUSTFLAGS=-D warnings
+    volumes:
+      - cargo-cache-arm:/usr/local/cargo/registry
+      - target-cache-arm:/app/target
+    mem_limit: 8g
+    memswap_limit: 12g
+
   # ARM64 (aarch64) Linux tests using QEMU emulation
   # Requires: docker buildx create --use
   # Note: QEMU emulation is slow and memory-intensive; needs 8GB+ RAM

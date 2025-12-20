@@ -1443,6 +1443,7 @@ impl Widget for ThemeSelectorWidget<'_> {
                 "dracula" => "Dracula",
                 "gruvbox" => "Gruvbox",
                 "nord" => "Nord",
+                "matrix" => "Matrix",
                 _ => name,
             };
 
