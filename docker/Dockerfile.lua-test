@@ -1,0 +1,35 @@
+# Dockerfile for Lua extension system testing
+# Tests the mlua integration and Lua plugin functionality
+
+FROM rust:1.85-bookworm
+
+# Install additional tools
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Rust components
+RUN rustup component add rustfmt clippy
+
+# Set working directory
+WORKDIR /app
+
+# Copy the project
+COPY . .
+
+# Default command runs Lua-specific tests
+CMD ["sh", "-c", "\
+    echo '=== Lua Extension System Tests ===' && \
+    echo '' && \
+    echo '--- Running Lua unit tests ---' && \
+    cargo test lua_api --verbose && \
+    echo '' && \
+    echo '--- Running Lua integration tests ---' && \
+    cargo test --test lua_extension_tests --verbose -- --test-threads=1 && \
+    echo '' && \
+    echo '--- Running Lua plugin tests ---' && \
+    cargo test lua_plugin --verbose && \
+    echo '' && \
+    echo '=== All Lua tests passed ===' \
+"]

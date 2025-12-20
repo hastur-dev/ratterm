@@ -1,0 +1,8 @@
+[extension]
+name = "error-test"
+version = "1.0.0"
+type = "lua"
+description = "Tests error handling in Lua extensions"
+
+[lua]
+main = "init.lua"

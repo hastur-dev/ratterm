@@ -47,6 +47,8 @@ pub enum PluginType {
     Wasm,
     /// Native plugin.
     Native,
+    /// Lua plugin (scripted, full access).
+    Lua,
 }
 
 /// Plugin metadata.

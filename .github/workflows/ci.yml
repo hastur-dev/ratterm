@@ -206,3 +206,38 @@ jobs:
 
       - name: Check MSRV
         run: cargo check --all-features
+
+  # Lua extension system tests on multiple platforms
+  lua-extension:
+    name: Lua Extension (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm, windows-latest, macos-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-lua-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-lua-
+
+      - name: Run Lua API unit tests
+        run: cargo test lua_api --verbose
+
+      - name: Run Lua plugin tests
+        run: cargo test lua_plugin --verbose
+
+      - name: Run Lua integration tests
+        run: cargo test --test lua_extension_tests --verbose -- --test-threads=1

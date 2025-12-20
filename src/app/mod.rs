@@ -20,7 +20,9 @@ use crate::api::{ApiHandler, ApiServer, MAX_REQUESTS_PER_FRAME, RequestReceiver}
 use crate::clipboard::Clipboard;
 use crate::config::{Config, KeybindingMode, ShellType};
 use crate::editor::Editor;
-use crate::extension::ExtensionManager;
+use crate::extension::{
+    ExtensionManager, ExtensionType, LuaContext, LuaEventType, LuaPluginManager,
+};
 use crate::filebrowser::FileBrowser;
 use crate::terminal::{BackgroundManager, ProcessInfo, TerminalMultiplexer, pty::PtyError};
 use crate::theme::ThemePreset;
@@ -113,6 +115,8 @@ pub struct App {
     api_request_rx: Option<RequestReceiver>,
     /// Background process manager.
     background_manager: BackgroundManager,
+    /// Lua plugin manager.
+    lua_plugins: LuaPluginManager,
 }
 
 impl App {
@@ -187,6 +191,7 @@ impl App {
             api_server,
             api_request_rx,
             background_manager: BackgroundManager::new(),
+            lua_plugins: LuaPluginManager::new(),
         })
     }
 
@@ -1716,5 +1721,147 @@ impl App {
         self.set_status("Session restored".to_string());
 
         Ok(true)
+    }
+
+    // ========== Lua Plugin Methods ==========
+
+    /// Initializes and loads all Lua extensions.
+    pub fn init_lua_extensions(&mut self) {
+        let mut manager = ExtensionManager::new();
+        if let Err(e) = manager.init() {
+            warn!("Failed to initialize extension manager: {}", e);
+            return;
+        }
+
+        // Load all Lua extensions
+        for ext in manager.installed().values() {
+            if ext.ext_type == ExtensionType::Lua {
+                if let Err(e) = self.lua_plugins.load(&ext.manifest, &ext.path) {
+                    warn!("Failed to load Lua extension {}: {}", ext.name, e);
+                } else {
+                    info!("Loaded Lua extension: {} v{}", ext.name, ext.version);
+                }
+            }
+        }
+
+        // Process any initial notifications
+        self.process_lua_notifications();
+    }
+
+    /// Updates Lua plugin contexts with current application state.
+    pub fn update_lua_contexts(&mut self) {
+        if self.lua_plugins.is_empty() {
+            return;
+        }
+
+        let pos = self.editor.cursor_position();
+        let (terminal_cols, terminal_rows) = self
+            .active_terminal()
+            .map(|t| {
+                let grid = t.grid();
+                (grid.cols(), grid.rows())
+            })
+            .unwrap_or((80, 24));
+
+        let ctx = LuaContext {
+            editor_content: Some(self.editor.buffer_mut().text()),
+            cursor_pos: (pos.line, pos.col),
+            current_file: self.current_file_path().map(|p| p.display().to_string()),
+            terminal_lines: Vec::new(), // Terminal lines not easily accessible
+            terminal_size: (terminal_cols, terminal_rows),
+            theme_name: self.config.theme_manager.current().name().to_string(),
+            config: std::collections::HashMap::new(),
+        };
+
+        self.lua_plugins.update_all_contexts(ctx);
+    }
+
+    /// Dispatches an event to all Lua plugins.
+    pub fn dispatch_lua_event(&self, event_type: LuaEventType, arg: &str) {
+        self.lua_plugins.dispatch_event(event_type, arg);
+    }
+
+    /// Processes Lua plugin timers.
+    pub fn process_lua_timers(&mut self) {
+        self.lua_plugins.process_timers();
+        self.process_lua_operations();
+    }
+
+    /// Returns the timeout for the next Lua timer (for event loop).
+    #[must_use]
+    pub fn lua_timer_timeout(&self) -> Option<Duration> {
+        self.lua_plugins.next_timer_timeout()
+    }
+
+    /// Processes pending Lua plugin notifications.
+    fn process_lua_notifications(&mut self) {
+        let notifications = self.lua_plugins.take_all_notifications();
+        for notification in notifications {
+            self.set_status(notification);
+        }
+    }
+
+    /// Processes pending Lua plugin operations (editor, terminal).
+    fn process_lua_operations(&mut self) {
+        use crate::extension::EditorOp;
+
+        self.process_lua_notifications();
+
+        // Process editor operations
+        let editor_ops = self.lua_plugins.take_all_editor_ops();
+        for op in editor_ops {
+            match op {
+                EditorOp::Open(path) => {
+                    let _ = self.open_file(path);
+                }
+                EditorOp::Save => {
+                    if let Err(e) = self.editor.save() {
+                        self.set_status(format!("Save error: {}", e));
+                    }
+                }
+                EditorOp::SetContent(text) => {
+                    // Clear and insert new content
+                    self.editor.select_all();
+                    self.editor.delete_selection();
+                    self.editor.insert_str(&text);
+                }
+                EditorOp::InsertAt { line, col, text } => {
+                    let pos = crate::editor::edit::Position::new(line, col);
+                    self.editor.set_cursor_position(pos);
+                    self.editor.insert_str(&text);
+                }
+                EditorOp::SetCursor { line, col } => {
+                    let pos = crate::editor::edit::Position::new(line, col);
+                    self.editor.set_cursor_position(pos);
+                }
+            }
+        }
+
+        // Process terminal operations
+        let terminal_ops = self.lua_plugins.take_all_terminal_ops();
+        for op in terminal_ops {
+            match op {
+                crate::extension::TerminalOp::SendKeys(text) => {
+                    if let Some(ref mut terminals) = self.terminals {
+                        if let Some(terminal) = terminals.active_terminal_mut() {
+                            let _ = terminal.write(text.as_bytes());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Gets all commands registered by Lua plugins.
+    #[must_use]
+    pub fn lua_plugin_commands(&self) -> Vec<(String, String, String)> {
+        self.lua_plugins.get_all_commands()
+    }
+
+    /// Executes a Lua plugin command.
+    pub fn execute_lua_command(&self, id: &str, args: &[String]) -> Result<(), String> {
+        self.lua_plugins
+            .execute_command(id, args)
+            .map_err(|e| e.to_string())
     }
 }

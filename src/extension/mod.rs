@@ -4,11 +4,14 @@
 //! - Theme extensions (TOML-based color schemes)
 //! - WASM plugins (sandboxed, portable)
 //! - Native plugins (.dll/.so/.dylib for power users)
+//! - Lua plugins (scripted, full system access)
 //!
 //! Extensions can be installed from GitHub repositories.
 
 pub mod api;
 pub mod installer;
+pub mod lua;
+pub mod lua_api;
 pub mod manifest;
 pub mod native;
 pub mod registry;
@@ -21,7 +24,10 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 pub use api::{PluginCapability, PluginHost, PluginInfo, PluginType, RattermPlugin};
-pub use manifest::{ExtensionManifest, ExtensionType};
+pub use lua::{LuaPlugin, LuaPluginManager};
+pub use lua_api::{EditorOp, LuaContext, LuaState, TerminalOp};
+pub use lua_api::events::EventType as LuaEventType;
+pub use manifest::{ExtensionManifest, ExtensionType, LuaConfig};
 
 /// Errors that can occur in the extension system.
 #[derive(Debug)]

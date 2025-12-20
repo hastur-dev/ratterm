@@ -26,6 +26,10 @@
 //!   --update         Check and install updates
 //!   --no-update      Skip update check
 //!
+//! Subcommands:
+//!   uninstall        Uninstall ratterm from the system
+//!   ext              Extension manager
+//!
 //! Opens ratterm, optionally with a file loaded in the editor.
 
 use std::env;
@@ -104,6 +108,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Handle extension subcommand: rat ext <command>
     if args.get(1).map(|s| s.as_str()) == Some("ext") {
         return handle_extension_command(&args[2..]);
+    }
+
+    // Handle uninstall subcommand: rat uninstall
+    if args.get(1).map(|s| s.as_str()) == Some("uninstall") {
+        return handle_uninstall();
     }
 
     // Handle --test mode for automated testing
@@ -187,6 +196,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
+    // Initialize Lua extensions
+    app.init_lua_extensions();
+
     // Show update status in the app
     match update_result {
         StartupUpdateResult::DevModeUpdateAvailable { current, latest } => {
@@ -227,6 +239,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 crossterm::terminal::Clear(crossterm::terminal::ClearType::All)
             )?;
         }
+
+        // Process Lua extension timers
+        app.process_lua_timers();
+
+        // Update Lua plugin contexts periodically
+        app.update_lua_contexts();
 
         // Render
         terminal.draw(|frame| {
@@ -493,5 +511,117 @@ fn run_test_mode() -> Result<(), Box<dyn std::error::Error>> {
     execute!(io::stdout(), LeaveAlternateScreen, DisableMouseCapture)?;
 
     println!("Test complete. Check test_output.txt for results.");
+    Ok(())
+}
+
+/// Handles the uninstall subcommand: `rat uninstall`
+fn handle_uninstall() -> Result<(), Box<dyn std::error::Error>> {
+    use std::fs;
+
+    println!("Ratterm Uninstaller\n");
+
+    // Get the current executable path
+    let exe_path = env::current_exe()?;
+    let exe_dir = exe_path.parent().ok_or("Cannot determine executable directory")?;
+
+    println!("Executable location: {}", exe_path.display());
+
+    // Determine config directories
+    let home = dirs::home_dir().ok_or("Cannot determine home directory")?;
+    let ratrc_path = home.join(".ratrc");
+    let ratterm_dir = home.join(".ratterm");
+
+    // Show what will be removed
+    println!("\nThe following will be removed:");
+    println!("  - {}", exe_path.display());
+
+    if ratrc_path.exists() {
+        println!("  - {} (config file)", ratrc_path.display());
+    }
+    if ratterm_dir.exists() {
+        println!("  - {} (data directory)", ratterm_dir.display());
+    }
+
+    // Ask for confirmation
+    println!("\nAre you sure you want to uninstall ratterm? [y/N] ");
+
+    let mut input = String::new();
+    io::stdin().read_line(&mut input)?;
+
+    if !input.trim().eq_ignore_ascii_case("y") {
+        println!("Uninstall cancelled.");
+        return Ok(());
+    }
+
+    // Remove config files
+    if ratrc_path.exists() {
+        fs::remove_file(&ratrc_path)?;
+        println!("Removed {}", ratrc_path.display());
+    }
+
+    if ratterm_dir.exists() {
+        fs::remove_dir_all(&ratterm_dir)?;
+        println!("Removed {}", ratterm_dir.display());
+    }
+
+    // Platform-specific binary removal
+    #[cfg(not(windows))]
+    {
+        // On Unix, we can delete the running executable
+        fs::remove_file(&exe_path)?;
+        println!("Removed {}", exe_path.display());
+
+        // Try to remove from PATH by showing instructions
+        println!("\nratterm has been uninstalled.");
+        println!("\nTo complete the uninstallation, remove the following from your shell config:");
+        println!("  export PATH=\"{}:$PATH\"", exe_dir.display());
+        println!("\nOr run:");
+        println!("  sed -i '/ratterm/d' ~/.bashrc ~/.zshrc 2>/dev/null");
+    }
+
+    #[cfg(windows)]
+    {
+        // On Windows, we cannot delete the running executable
+        // Create a batch script that will run after we exit
+        let batch_path = env::temp_dir().join("ratterm_uninstall.bat");
+        let batch_content = format!(
+            r#"@echo off
+echo Completing ratterm uninstallation...
+:waitloop
+tasklist /FI "IMAGENAME eq rat.exe" 2>NUL | find /I /N "rat.exe">NUL
+if "%ERRORLEVEL%"=="0" (
+    timeout /t 1 /nobreak >NUL
+    goto waitloop
+)
+del /f /q "{exe_path}"
+rmdir /s /q "{exe_dir}" 2>NUL
+echo.
+echo ratterm has been uninstalled.
+echo.
+echo To complete the uninstallation, remove ratterm from your PATH:
+echo   1. Open System Properties ^> Environment Variables
+echo   2. Remove "{exe_dir}" from the PATH variable
+echo.
+pause
+del "%~f0"
+"#,
+            exe_path = exe_path.display(),
+            exe_dir = exe_dir.display(),
+        );
+
+        fs::write(&batch_path, batch_content)?;
+
+        println!("\nStarting uninstall script...");
+        println!("The uninstaller will complete after this process exits.");
+
+        // Start the batch script
+        std::process::Command::new("cmd")
+            .args(["/C", "start", "", "/MIN", batch_path.to_str().unwrap()])
+            .spawn()?;
+
+        println!("\nratterm will be uninstalled when this window closes.");
+        println!("Please manually remove ratterm from your PATH environment variable.");
+    }
+
     Ok(())
 }

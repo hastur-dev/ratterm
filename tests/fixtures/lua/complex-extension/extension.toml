@@ -1,0 +1,8 @@
+[extension]
+name = "complex-test"
+version = "2.0.0"
+type = "lua"
+description = "Complex test extension with events, timers, and fs operations"
+
+[lua]
+main = "init.lua"

@@ -26,6 +26,9 @@ pub struct ExtensionManifest {
     /// Native plugin configuration.
     #[serde(default)]
     pub native: Option<NativeConfig>,
+    /// Lua plugin configuration.
+    #[serde(default)]
+    pub lua: Option<LuaConfig>,
 }
 
 /// Extension metadata.
@@ -65,6 +68,8 @@ pub enum ExtensionType {
     Command,
     /// Native plugin (full access).
     Native,
+    /// Lua plugin (scripted, full access).
+    Lua,
 }
 
 impl std::fmt::Display for ExtensionType {
@@ -74,6 +79,7 @@ impl std::fmt::Display for ExtensionType {
             ExtensionType::Widget => write!(f, "widget"),
             ExtensionType::Command => write!(f, "command"),
             ExtensionType::Native => write!(f, "native"),
+            ExtensionType::Lua => write!(f, "lua"),
         }
     }
 }
@@ -143,6 +149,17 @@ impl NativeConfig {
     }
 }
 
+/// Lua plugin configuration.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct LuaConfig {
+    /// Main Lua entry file (e.g., "init.lua").
+    #[serde(default)]
+    pub main: String,
+    /// Optional list of Lua files to preload before main.
+    #[serde(default)]
+    pub preload: Vec<String>,
+}
+
 /// Loads an extension manifest from a file.
 pub fn load_manifest(path: &Path) -> Result<ExtensionManifest, ExtensionError> {
     let content = fs::read_to_string(path)
@@ -192,6 +209,19 @@ fn validate_manifest(manifest: &ExtensionManifest) -> Result<(), ExtensionError>
             if manifest.native.is_none() {
                 return Err(ExtensionError::Manifest(
                     "Native extensions require [native] section".to_string(),
+                ));
+            }
+        }
+        ExtensionType::Lua => {
+            if manifest.lua.is_none() {
+                return Err(ExtensionError::Manifest(
+                    "Lua extensions require [lua] section".to_string(),
+                ));
+            }
+            let lua_config = manifest.lua.as_ref().expect("checked above");
+            if lua_config.main.is_empty() {
+                return Err(ExtensionError::Manifest(
+                    "Lua extensions require 'main' field in [lua] section".to_string(),
                 ));
             }
         }
@@ -273,6 +303,69 @@ type = "theme"
 
 [theme]
 file = "theme.toml"
+"##;
+
+        let path = create_manifest(dir.path(), content);
+        let result = load_manifest(&path);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_lua_manifest() {
+        let dir = TempDir::new().expect("temp dir");
+        let content = r##"
+[extension]
+name = "my-lua-extension"
+version = "1.0.0"
+description = "A Lua extension"
+author = "test"
+license = "MIT"
+type = "lua"
+
+[lua]
+main = "init.lua"
+preload = ["lib/utils.lua", "lib/helpers.lua"]
+"##;
+
+        let path = create_manifest(dir.path(), content);
+        let manifest = load_manifest(&path).expect("parse manifest");
+
+        assert_eq!(manifest.extension.name, "my-lua-extension");
+        assert_eq!(manifest.extension.version, "1.0.0");
+        assert_eq!(manifest.extension.ext_type, ExtensionType::Lua);
+        assert!(manifest.lua.is_some());
+        let lua = manifest.lua.as_ref().expect("lua config");
+        assert_eq!(lua.main, "init.lua");
+        assert_eq!(lua.preload.len(), 2);
+        assert_eq!(lua.preload[0], "lib/utils.lua");
+    }
+
+    #[test]
+    fn test_invalid_lua_manifest_missing_main() {
+        let dir = TempDir::new().expect("temp dir");
+        let content = r##"
+[extension]
+name = "bad-lua"
+version = "1.0.0"
+type = "lua"
+
+[lua]
+preload = ["lib/utils.lua"]
+"##;
+
+        let path = create_manifest(dir.path(), content);
+        let result = load_manifest(&path);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_invalid_lua_manifest_missing_section() {
+        let dir = TempDir::new().expect("temp dir");
+        let content = r##"
+[extension]
+name = "bad-lua"
+version = "1.0.0"
+type = "lua"
 "##;
 
         let path = create_manifest(dir.path(), content);

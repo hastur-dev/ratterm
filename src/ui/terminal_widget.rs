@@ -149,7 +149,17 @@ impl<'a> TerminalWidget<'a> {
                     if x < area.x + area.width {
                         if let Some(ratatui_cell) = buf.cell_mut((x, y)) {
                             ratatui_cell.set_char(cell.character());
-                            ratatui_cell.set_style(cell.style().to_ratatui());
+                            // Use theme palette and default colors if available
+                            let style = if let Some(theme) = self.theme {
+                                cell.style().to_ratatui_with_palette_and_defaults(
+                                    &theme.palette,
+                                    Some(theme.foreground),
+                                    Some(theme.background),
+                                )
+                            } else {
+                                cell.style().to_ratatui()
+                            };
+                            ratatui_cell.set_style(style);
                         }
                     }
                 }
@@ -192,7 +202,17 @@ impl<'a> TerminalWidget<'a> {
                         if grid.is_cell_selected(col as u16, grid_row as u16) {
                             ratatui_cell.set_style(selection_style);
                         } else {
-                            ratatui_cell.set_style(cell.style().to_ratatui());
+                            // Use theme palette and default colors if available
+                            let style = if let Some(theme) = self.theme {
+                                cell.style().to_ratatui_with_palette_and_defaults(
+                                    &theme.palette,
+                                    Some(theme.foreground),
+                                    Some(theme.background),
+                                )
+                            } else {
+                                cell.style().to_ratatui()
+                            };
+                            ratatui_cell.set_style(style);
                         }
                     }
                 }

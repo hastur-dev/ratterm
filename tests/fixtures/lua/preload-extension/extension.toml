@@ -1,0 +1,9 @@
+[extension]
+name = "preload-test"
+version = "1.0.0"
+type = "lua"
+description = "Tests preload functionality"
+
+[lua]
+main = "init.lua"
+preload = ["lib/utils.lua", "lib/helpers.lua"]
