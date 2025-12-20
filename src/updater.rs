@@ -194,23 +194,10 @@ impl Updater {
             return Err("Downloaded file is empty".to_string());
         }
 
-        // Compare file sizes - if identical, likely same version
-        if let Ok(current_meta) = fs::metadata(&current_exe) {
-            if current_meta.len() == temp_meta.len() {
-                // Files are same size - compare contents to be sure
-                let current_bytes = fs::read(&current_exe).ok();
-                let temp_bytes = fs::read(&temp_path).ok();
-
-                if current_bytes == temp_bytes {
-                    let _ = fs::remove_file(&temp_path);
-                    eprintln!(
-                        "Already running the latest version (v{}).",
-                        self.current_version
-                    );
-                    return Ok(false);
-                }
-            }
-        }
+        // Note: We trust the version comparison done earlier in is_newer().
+        // We don't compare file bytes because different builds of the same
+        // version may have slightly different binaries, and we already verified
+        // the version is newer before downloading.
 
         // Make executable on Unix
         #[cfg(unix)]
