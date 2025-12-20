@@ -31,6 +31,8 @@ curl -fsSL https://raw.githubusercontent.com/hastur-dev/ratterm/main/install.sh 
 
 irm https://raw.githubusercontent.com/hastur-dev/ratterm/main/install.ps1 | iex -Uninstall
 
+rat uninstall
+
 ```
 
 ### From Source
