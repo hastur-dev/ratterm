@@ -31,7 +31,7 @@ pub enum EventType {
 impl EventType {
     /// Parse event type from string.
     #[must_use]
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "file_open" | "fileopen" => Some(EventType::FileOpen),
             "file_save" | "filesave" => Some(EventType::FileSave),
@@ -141,7 +141,7 @@ pub fn create_table(lua: &Lua, state: Arc<Mutex<LuaState>>) -> LuaResult<Table> 
     // ratterm.events.on(event_name, callback) -> subscription_id
     let state_clone = state.clone();
     let on = lua.create_function(move |lua, (event_name, callback): (String, Function)| {
-        let event_type = EventType::from_str(&event_name).ok_or_else(|| {
+        let event_type = EventType::parse(&event_name).ok_or_else(|| {
             mlua::Error::RuntimeError(format!("Unknown event type: {}", event_name))
         })?;
 
@@ -150,7 +150,9 @@ pub fn create_table(lua: &Lua, state: Arc<Mutex<LuaState>>) -> LuaResult<Table> 
         let id = if let Ok(mut s) = state_clone.lock() {
             s.events.subscribe(event_type, callback_key)
         } else {
-            return Err(mlua::Error::RuntimeError("Failed to lock state".to_string()));
+            return Err(mlua::Error::RuntimeError(
+                "Failed to lock state".to_string(),
+            ));
         };
 
         Ok(id)
@@ -202,15 +204,16 @@ pub fn dispatch_event(
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
 
     #[test]
     fn test_event_type_from_str() {
-        assert_eq!(EventType::from_str("file_open"), Some(EventType::FileOpen));
-        assert_eq!(EventType::from_str("FileSave"), Some(EventType::FileSave));
-        assert_eq!(EventType::from_str("KEY_PRESS"), Some(EventType::KeyPress));
-        assert_eq!(EventType::from_str("invalid"), None);
+        assert_eq!(EventType::parse("file_open"), Some(EventType::FileOpen));
+        assert_eq!(EventType::parse("FileSave"), Some(EventType::FileSave));
+        assert_eq!(EventType::parse("KEY_PRESS"), Some(EventType::KeyPress));
+        assert_eq!(EventType::parse("invalid"), None);
     }
 
     #[test]

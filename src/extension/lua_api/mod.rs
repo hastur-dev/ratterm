@@ -49,7 +49,11 @@ pub enum EditorOp {
     /// Set editor content.
     SetContent(String),
     /// Insert text at position.
-    InsertAt { line: usize, col: usize, text: String },
+    InsertAt {
+        line: usize,
+        col: usize,
+        text: String,
+    },
     /// Set cursor position.
     SetCursor { line: usize, col: usize },
 }
@@ -102,8 +106,14 @@ pub fn register_api(
     let ratterm = lua.create_table()?;
 
     // Register sub-modules
-    ratterm.set("editor", LuaEditor::create_table(lua, state.clone(), context.clone())?)?;
-    ratterm.set("terminal", LuaTerminal::create_table(lua, state.clone(), context.clone())?)?;
+    ratterm.set(
+        "editor",
+        LuaEditor::create_table(lua, state.clone(), context.clone())?,
+    )?;
+    ratterm.set(
+        "terminal",
+        LuaTerminal::create_table(lua, state.clone(), context.clone())?,
+    )?;
     ratterm.set("fs", LuaFs::create_table(lua)?)?;
     ratterm.set("commands", commands::create_table(lua, state.clone())?)?;
     ratterm.set("events", events::create_table(lua, state.clone())?)?;
@@ -159,6 +169,7 @@ fn register_toplevel_functions(
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
 

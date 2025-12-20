@@ -9,13 +9,11 @@ use std::sync::{Arc, Mutex};
 
 use mlua::{Function, Lua};
 
-use super::manifest::ExtensionManifest;
 use super::ExtensionError;
-use crate::extension::lua_api::{
-    self, EditorOp, LuaContext, LuaState, TerminalOp,
-};
-use crate::extension::lua_api::events::{dispatch_event, EventType};
+use super::manifest::ExtensionManifest;
+use crate::extension::lua_api::events::{EventType, dispatch_event};
 use crate::extension::lua_api::timers::process_timers;
+use crate::extension::lua_api::{self, EditorOp, LuaContext, LuaState, TerminalOp};
 
 /// A loaded Lua plugin.
 pub struct LuaPlugin {
@@ -243,7 +241,6 @@ impl LuaPluginManager {
     }
 
     /// Returns all loaded plugins.
-    #[must_use]
     pub fn all(&self) -> impl Iterator<Item = &LuaPlugin> {
         self.plugins.values()
     }
@@ -336,7 +333,10 @@ impl LuaPluginManager {
                 return plugin.execute_command(id, args);
             }
         }
-        Err(ExtensionError::NotFound(format!("Command not found: {}", id)))
+        Err(ExtensionError::NotFound(format!(
+            "Command not found: {}",
+            id
+        )))
     }
 
     /// Returns the number of loaded plugins.
@@ -353,6 +353,7 @@ impl LuaPluginManager {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
     use std::io::Write;

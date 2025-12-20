@@ -63,21 +63,19 @@ impl LuaEditor {
 
         // ratterm.editor.insert_at(line, col, text)
         let state_clone = state.clone();
-        let insert_at = lua.create_function(move |_, (line, col, text): (usize, usize, String)| {
-            if let Ok(mut s) = state_clone.lock() {
-                s.editor_ops.push(EditorOp::InsertAt { line, col, text });
-            }
-            Ok(())
-        })?;
+        let insert_at =
+            lua.create_function(move |_, (line, col, text): (usize, usize, String)| {
+                if let Ok(mut s) = state_clone.lock() {
+                    s.editor_ops.push(EditorOp::InsertAt { line, col, text });
+                }
+                Ok(())
+            })?;
         editor.set("insert_at", insert_at)?;
 
         // ratterm.editor.get_cursor() -> line, col
         let context_clone = context.clone();
         let get_cursor = lua.create_function(move |_lua, ()| {
-            let (line, col) = context_clone
-                .lock()
-                .map(|c| c.cursor_pos)
-                .unwrap_or((0, 0));
+            let (line, col) = context_clone.lock().map(|c| c.cursor_pos).unwrap_or((0, 0));
             Ok(MultiValue::from_vec(vec![
                 mlua::Value::Integer(line as i64),
                 mlua::Value::Integer(col as i64),
@@ -111,6 +109,7 @@ impl LuaEditor {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
 
@@ -168,10 +167,7 @@ mod tests {
         lua.globals().set("editor", editor).expect("set global");
 
         // Get cursor
-        let result: (i64, i64) = lua
-            .load("return editor.get_cursor()")
-            .eval()
-            .expect("eval");
+        let result: (i64, i64) = lua.load("return editor.get_cursor()").eval().expect("eval");
         assert_eq!(result, (10, 5));
 
         // Set cursor

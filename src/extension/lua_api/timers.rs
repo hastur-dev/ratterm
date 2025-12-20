@@ -153,7 +153,9 @@ pub fn create_table(lua: &Lua, state: Arc<Mutex<LuaState>>) -> LuaResult<Table> 
         let id = if let Ok(mut s) = state_clone.lock() {
             s.timers.after(ms, callback_key)
         } else {
-            return Err(mlua::Error::RuntimeError("Failed to lock state".to_string()));
+            return Err(mlua::Error::RuntimeError(
+                "Failed to lock state".to_string(),
+            ));
         };
 
         Ok(id)
@@ -168,7 +170,9 @@ pub fn create_table(lua: &Lua, state: Arc<Mutex<LuaState>>) -> LuaResult<Table> 
         let id = if let Ok(mut s) = state_clone.lock() {
             s.timers.every(ms, callback_key)
         } else {
-            return Err(mlua::Error::RuntimeError("Failed to lock state".to_string()));
+            return Err(mlua::Error::RuntimeError(
+                "Failed to lock state".to_string(),
+            ));
         };
 
         Ok(id)
@@ -209,9 +213,9 @@ pub fn process_timers(lua: &Lua, state: &Arc<Mutex<LuaState>>) -> LuaResult<()> 
                     ready.push((timer.id, func));
                 }
 
-                if timer.interval.is_some() {
+                if let Some(interval) = timer.interval {
                     // Reschedule repeating timer
-                    timer.next_fire = now + timer.interval.expect("checked above");
+                    timer.next_fire = now + interval;
                 } else {
                     // Mark one-shot timer as inactive
                     timer.active = false;
@@ -236,6 +240,7 @@ pub fn process_timers(lua: &Lua, state: &Arc<Mutex<LuaState>>) -> LuaResult<()> 
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
     use std::thread::sleep;

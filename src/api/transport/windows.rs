@@ -183,7 +183,10 @@ impl Connection for WindowsConnection {
             self.init()?;
         }
 
-        let reader = self.reader.as_mut().unwrap();
+        let reader = self
+            .reader
+            .as_mut()
+            .ok_or_else(|| ApiError::Internal("Reader not initialized".to_string()))?;
         let mut line = String::new();
 
         use std::io::BufRead;
@@ -207,7 +210,10 @@ impl Connection for WindowsConnection {
             self.init()?;
         }
 
-        let writer = self.writer.as_mut().unwrap();
+        let writer = self
+            .writer
+            .as_mut()
+            .ok_or_else(|| ApiError::Internal("Writer not initialized".to_string()))?;
         use std::io::Write;
         writeln!(writer, "{}", msg)?;
         writer.flush()?;

@@ -319,15 +319,11 @@ impl Style {
         let mut style = ratatui::style::Style::default();
 
         let fg_color = match self.fg {
-            Some(Color::Default) | None => {
-                default_fg.unwrap_or(ratatui::style::Color::Reset)
-            }
+            Some(Color::Default) | None => default_fg.unwrap_or(ratatui::style::Color::Reset),
             Some(c) => c.to_ratatui_with_palette(palette),
         };
         let bg_color = match self.bg {
-            Some(Color::Default) | None => {
-                default_bg.unwrap_or(ratatui::style::Color::Reset)
-            }
+            Some(Color::Default) | None => default_bg.unwrap_or(ratatui::style::Color::Reset),
             Some(c) => c.to_ratatui_with_palette(palette),
         };
         style = style.fg(fg_color).bg(bg_color);

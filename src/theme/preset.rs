@@ -370,21 +370,21 @@ fn create_matrix_theme() -> Theme {
     // Custom ANSI palette - all greens except red/blue for errors/info
     let matrix_palette = AnsiPalette {
         black: bg,
-        red: bright_red,                    // Keep red for errors
-        green: fg,                          // Bright green
-        yellow: Color::Rgb(0, 255, 128),    // Green-tinted yellow
-        blue: bright_blue,                  // Keep blue for info
-        magenta: Color::Rgb(0, 200, 100),   // Green-tinted magenta
-        cyan: Color::Rgb(0, 255, 180),      // Green-tinted cyan
-        white: fg,                          // Bright green instead of white
-        bright_black: dark_green,           // Dark green
-        bright_red: bright_red,             // Keep bright red
-        bright_green: fg,                   // Bright green
+        red: bright_red,                          // Keep red for errors
+        green: fg,                                // Bright green
+        yellow: Color::Rgb(0, 255, 128),          // Green-tinted yellow
+        blue: bright_blue,                        // Keep blue for info
+        magenta: Color::Rgb(0, 200, 100),         // Green-tinted magenta
+        cyan: Color::Rgb(0, 255, 180),            // Green-tinted cyan
+        white: fg,                                // Bright green instead of white
+        bright_black: dark_green,                 // Dark green
+        bright_red,                               // Keep bright red
+        bright_green: fg,                         // Bright green
         bright_yellow: Color::Rgb(100, 255, 100), // Light green
-        bright_blue: bright_blue,           // Keep bright blue
+        bright_blue,                              // Keep bright blue
         bright_magenta: Color::Rgb(50, 255, 150), // Green-tinted
         bright_cyan: Color::Rgb(0, 255, 200),     // Green-tinted
-        bright_white: fg,                   // Bright green
+        bright_white: fg,                         // Bright green
     };
 
     Theme {
