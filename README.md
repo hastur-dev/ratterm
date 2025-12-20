@@ -22,6 +22,16 @@ curl -fsSL https://raw.githubusercontent.com/hastur-dev/ratterm/main/install.sh 
 irm https://raw.githubusercontent.com/hastur-dev/ratterm/main/install.ps1 | iex
 ```
 
+### Quick Uninstall
+
+```bash
+# Uninstall Ratterm
+curl -fsSL https://raw.githubusercontent.com/hastur-dev/ratterm/main/install.sh | bash -s -- --uninstall
+
+irm https://raw.githubusercontent.com/hastur-dev/ratterm/main/install.ps1 | iex -Uninstall
+
+```
+
 ### From Source
 
 ```bash
