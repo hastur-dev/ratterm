@@ -522,7 +522,9 @@ fn handle_uninstall() -> Result<(), Box<dyn std::error::Error>> {
 
     // Get the current executable path
     let exe_path = env::current_exe()?;
-    let exe_dir = exe_path.parent().ok_or("Cannot determine executable directory")?;
+    let exe_dir = exe_path
+        .parent()
+        .ok_or("Cannot determine executable directory")?;
 
     println!("Executable location: {}", exe_path.display());
 
@@ -615,8 +617,11 @@ del "%~f0"
         println!("The uninstaller will complete after this process exits.");
 
         // Start the batch script
+        let batch_path_str = batch_path
+            .to_str()
+            .ok_or("Batch path contains invalid UTF-8")?;
         std::process::Command::new("cmd")
-            .args(["/C", "start", "", "/MIN", batch_path.to_str().unwrap()])
+            .args(["/C", "start", "", "/MIN", batch_path_str])
             .spawn()?;
 
         println!("\nratterm will be uninstalled when this window closes.");

@@ -3,13 +3,15 @@
 //! These tests verify the complete Lua plugin loading, API functionality,
 //! event handling, timers, and error recovery across different scenarios.
 
+#![allow(clippy::expect_used, clippy::unwrap_used)]
+
 use std::path::PathBuf;
 use std::thread;
 use std::time::Duration;
 
 use ratterm::extension::lua::{LuaPlugin, LuaPluginManager};
-use ratterm::extension::lua_api::events::EventType;
 use ratterm::extension::lua_api::LuaContext;
+use ratterm::extension::lua_api::events::EventType;
 use ratterm::extension::manifest::load_manifest;
 
 /// Returns the path to test fixtures.
@@ -54,7 +56,9 @@ mod basic_extension {
         // Check notification was sent
         let notifications = plugin.take_notifications();
         assert!(
-            notifications.iter().any(|n| n.contains("basic-test loaded")),
+            notifications
+                .iter()
+                .any(|n| n.contains("basic-test loaded")),
             "Expected load notification, got: {:?}",
             notifications
         );
@@ -77,7 +81,10 @@ mod basic_extension {
         assert!(commands.len() >= 2, "Expected at least 2 commands");
 
         let cmd_ids: Vec<_> = commands.iter().map(|(id, _, _)| id.as_str()).collect();
-        assert!(cmd_ids.contains(&"basic.hello"), "Missing basic.hello command");
+        assert!(
+            cmd_ids.contains(&"basic.hello"),
+            "Missing basic.hello command"
+        );
         assert!(
             cmd_ids.contains(&"basic.cursor"),
             "Missing basic.cursor command"
@@ -140,7 +147,9 @@ mod complex_extension {
         plugin.dispatch_event(EventType::FileClose, "/test/file1.rs");
 
         // Execute the event log command to see captured events
-        plugin.execute_command("complex.event_log", &[]).expect("cmd");
+        plugin
+            .execute_command("complex.event_log", &[])
+            .expect("cmd");
 
         let notifications = plugin.take_notifications();
         assert!(
@@ -160,7 +169,9 @@ mod complex_extension {
             plugin.dispatch_event(EventType::FileOpen, &format!("/file{}.rs", i));
         }
 
-        plugin.execute_command("complex.event_log", &[]).expect("cmd");
+        plugin
+            .execute_command("complex.event_log", &[])
+            .expect("cmd");
 
         let notifications = plugin.take_notifications();
         assert!(
@@ -185,12 +196,11 @@ mod preload_extension {
         let notifications = plugin.take_notifications();
 
         // Should not have any ERROR notifications
-        let errors: Vec<_> = notifications.iter().filter(|n| n.contains("ERROR")).collect();
-        assert!(
-            errors.is_empty(),
-            "Preload errors detected: {:?}",
-            errors
-        );
+        let errors: Vec<_> = notifications
+            .iter()
+            .filter(|n| n.contains("ERROR"))
+            .collect();
+        assert!(errors.is_empty(), "Preload errors detected: {:?}", errors);
 
         // Should have success notification
         assert!(
@@ -261,7 +271,9 @@ mod error_extension {
         plugin.take_notifications();
 
         // Test invalid API usage
-        plugin.execute_command("error.invalid_api", &[]).expect("cmd");
+        plugin
+            .execute_command("error.invalid_api", &[])
+            .expect("cmd");
 
         let notifications = plugin.take_notifications();
         assert!(
@@ -335,7 +347,10 @@ mod plugin_manager {
         }
 
         let notifications = manager.take_all_notifications();
-        assert!(!notifications.is_empty(), "Event should have triggered notification");
+        assert!(
+            !notifications.is_empty(),
+            "Event should have triggered notification"
+        );
     }
 
     #[test]
@@ -425,7 +440,9 @@ mod timer_tests {
         plugin.take_notifications();
 
         // Start the timer
-        plugin.execute_command("complex.start_timer", &[]).expect("start");
+        plugin
+            .execute_command("complex.start_timer", &[])
+            .expect("start");
 
         let notifications = plugin.take_notifications();
         assert!(
@@ -449,7 +466,9 @@ mod timer_tests {
         plugin.take_notifications();
 
         // Start timer
-        plugin.execute_command("complex.start_timer", &[]).expect("start");
+        plugin
+            .execute_command("complex.start_timer", &[])
+            .expect("start");
         plugin.take_notifications();
 
         // Wait for timer to be ready
@@ -465,7 +484,9 @@ mod timer_tests {
         );
 
         // Stop timer
-        plugin.execute_command("complex.stop_timer", &[]).expect("stop");
+        plugin
+            .execute_command("complex.stop_timer", &[])
+            .expect("stop");
     }
 
     #[test]
@@ -475,10 +496,14 @@ mod timer_tests {
         plugin.take_notifications();
 
         // Start and immediately stop
-        plugin.execute_command("complex.start_timer", &[]).expect("start");
+        plugin
+            .execute_command("complex.start_timer", &[])
+            .expect("start");
         plugin.take_notifications();
 
-        plugin.execute_command("complex.stop_timer", &[]).expect("stop");
+        plugin
+            .execute_command("complex.stop_timer", &[])
+            .expect("stop");
 
         let notifications = plugin.take_notifications();
         assert!(
@@ -488,7 +513,10 @@ mod timer_tests {
 
         // Should have no pending timeout
         let timeout = plugin.next_timer_timeout();
-        assert!(timeout.is_none(), "Should have no pending timer after cancel");
+        assert!(
+            timeout.is_none(),
+            "Should have no pending timer after cancel"
+        );
     }
 }
 
@@ -519,7 +547,9 @@ mod context_tests {
 
         // Execute cursor command to verify context is accessible
         plugin.take_notifications();
-        plugin.execute_command("basic.cursor", &[]).expect("cursor cmd");
+        plugin
+            .execute_command("basic.cursor", &[])
+            .expect("cursor cmd");
 
         let notifications = plugin.take_notifications();
         assert!(
@@ -566,7 +596,9 @@ mod stress_tests {
         }
 
         // Event log command should work
-        plugin.execute_command("complex.event_log", &[]).expect("cmd");
+        plugin
+            .execute_command("complex.event_log", &[])
+            .expect("cmd");
 
         let notifications = plugin.take_notifications();
         assert!(
@@ -623,7 +655,10 @@ mod cross_platform {
 
         // Execute fs test command with our temp path
         plugin
-            .execute_command("complex.fs_test", &[test_path.clone(), "Cross-platform test".to_string()])
+            .execute_command(
+                "complex.fs_test",
+                &[test_path.clone(), "Cross-platform test".to_string()],
+            )
             .expect("fs test");
 
         let notifications = plugin.take_notifications();
@@ -636,7 +671,9 @@ mod cross_platform {
 
         // Should have read back correctly
         assert!(
-            notifications.iter().any(|n| n.contains("Cross-platform test")),
+            notifications
+                .iter()
+                .any(|n| n.contains("Cross-platform test")),
             "Read should match written content"
         );
 
@@ -658,7 +695,10 @@ mod cross_platform {
             .filter_map(|e| e.ok())
             .collect();
 
-        assert!(entries.len() >= 4, "Should have at least 4 fixture extensions");
+        assert!(
+            entries.len() >= 4,
+            "Should have at least 4 fixture extensions"
+        );
     }
 
     #[test]

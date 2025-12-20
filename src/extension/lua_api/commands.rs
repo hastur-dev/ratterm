@@ -142,12 +142,13 @@ pub fn execute_command(
     args: &[String],
 ) -> LuaResult<()> {
     let callback_key = {
-        let s = state.lock().map_err(|e| {
-            mlua::Error::RuntimeError(format!("Failed to lock state: {}", e))
-        })?;
-        let cmd = s.commands.get(id).ok_or_else(|| {
-            mlua::Error::RuntimeError(format!("Command not found: {}", id))
-        })?;
+        let s = state
+            .lock()
+            .map_err(|e| mlua::Error::RuntimeError(format!("Failed to lock state: {}", e)))?;
+        let cmd = s
+            .commands
+            .get(id)
+            .ok_or_else(|| mlua::Error::RuntimeError(format!("Command not found: {}", id)))?;
         // We need to clone the key somehow - but RegistryKey isn't Clone
         // Instead, we'll get the function directly
         lua.registry_value::<Function>(&cmd.callback_key)?
@@ -164,6 +165,7 @@ pub fn execute_command(
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
 
@@ -239,8 +241,7 @@ mod tests {
         .expect("exec");
 
         // Execute the command
-        execute_command(&lua, &state, "test.setresult", &["Hello!".to_string()])
-            .expect("execute");
+        execute_command(&lua, &state, "test.setresult", &["Hello!".to_string()]).expect("execute");
 
         // Check result
         let result: String = lua.globals().get("result").expect("get result");

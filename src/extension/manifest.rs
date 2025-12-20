@@ -213,15 +213,15 @@ fn validate_manifest(manifest: &ExtensionManifest) -> Result<(), ExtensionError>
             }
         }
         ExtensionType::Lua => {
-            if manifest.lua.is_none() {
+            if let Some(lua_config) = &manifest.lua {
+                if lua_config.main.is_empty() {
+                    return Err(ExtensionError::Manifest(
+                        "Lua extensions require 'main' field in [lua] section".to_string(),
+                    ));
+                }
+            } else {
                 return Err(ExtensionError::Manifest(
                     "Lua extensions require [lua] section".to_string(),
-                ));
-            }
-            let lua_config = manifest.lua.as_ref().expect("checked above");
-            if lua_config.main.is_empty() {
-                return Err(ExtensionError::Manifest(
-                    "Lua extensions require 'main' field in [lua] section".to_string(),
                 ));
             }
         }

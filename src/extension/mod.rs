@@ -25,8 +25,8 @@ use std::path::{Path, PathBuf};
 
 pub use api::{PluginCapability, PluginHost, PluginInfo, PluginType, RattermPlugin};
 pub use lua::{LuaPlugin, LuaPluginManager};
-pub use lua_api::{EditorOp, LuaContext, LuaState, TerminalOp};
 pub use lua_api::events::EventType as LuaEventType;
+pub use lua_api::{EditorOp, LuaContext, LuaState, TerminalOp};
 pub use manifest::{ExtensionManifest, ExtensionType, LuaConfig};
 
 /// Errors that can occur in the extension system.

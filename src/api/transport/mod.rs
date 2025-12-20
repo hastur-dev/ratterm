@@ -103,6 +103,7 @@ impl<R: BufRead + Send, W: Write + Send> Connection for BufferedConnection<R, W>
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
     use std::io::{BufReader, Cursor};

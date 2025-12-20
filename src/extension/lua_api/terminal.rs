@@ -65,6 +65,7 @@ impl LuaTerminal {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
 
@@ -127,10 +128,7 @@ mod tests {
         let terminal = LuaTerminal::create_table(&lua, state, context).expect("create table");
         lua.globals().set("terminal", terminal).expect("set global");
 
-        let result: (i64, i64) = lua
-            .load("return terminal.get_size()")
-            .eval()
-            .expect("eval");
+        let result: (i64, i64) = lua.load("return terminal.get_size()").eval().expect("eval");
 
         assert_eq!(result, (120, 40));
     }

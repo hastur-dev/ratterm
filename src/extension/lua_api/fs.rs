@@ -17,21 +17,20 @@ impl LuaFs {
         let fs_table = lua.create_table()?;
 
         // ratterm.fs.read(path) -> string or nil
-        let read = lua.create_function(|_, path: String| {
-            match fs::read_to_string(&path) {
-                Ok(content) => Ok(Some(content)),
-                Err(_) => Ok(None),
-            }
+        let read = lua.create_function(|_, path: String| match fs::read_to_string(&path) {
+            Ok(content) => Ok(Some(content)),
+            Err(_) => Ok(None),
         })?;
         fs_table.set("read", read)?;
 
         // ratterm.fs.write(path, content) -> bool
-        let write = lua.create_function(|_, (path, content): (String, String)| {
-            match fs::write(&path, &content) {
-                Ok(()) => Ok(true),
-                Err(_) => Ok(false),
-            }
-        })?;
+        let write =
+            lua.create_function(|_, (path, content): (String, String)| {
+                match fs::write(&path, &content) {
+                    Ok(()) => Ok(true),
+                    Err(_) => Ok(false),
+                }
+            })?;
         fs_table.set("write", write)?;
 
         // ratterm.fs.exists(path) -> bool
@@ -47,30 +46,26 @@ impl LuaFs {
         fs_table.set("is_file", is_file)?;
 
         // ratterm.fs.list_dir(path) -> table of entries or nil
-        let list_dir = lua.create_function(|lua, path: String| {
-            match fs::read_dir(&path) {
-                Ok(entries) => {
-                    let table = lua.create_table()?;
-                    let mut idx = 1;
-                    for entry in entries.filter_map(Result::ok) {
-                        if let Some(name) = entry.file_name().to_str() {
-                            table.set(idx, name.to_string())?;
-                            idx += 1;
-                        }
+        let list_dir = lua.create_function(|lua, path: String| match fs::read_dir(&path) {
+            Ok(entries) => {
+                let table = lua.create_table()?;
+                let mut idx = 1;
+                for entry in entries.filter_map(Result::ok) {
+                    if let Some(name) = entry.file_name().to_str() {
+                        table.set(idx, name.to_string())?;
+                        idx += 1;
                     }
-                    Ok(Some(table))
                 }
-                Err(_) => Ok(None),
+                Ok(Some(table))
             }
+            Err(_) => Ok(None),
         })?;
         fs_table.set("list_dir", list_dir)?;
 
         // ratterm.fs.mkdir(path) -> bool
-        let mkdir = lua.create_function(|_, path: String| {
-            match fs::create_dir_all(&path) {
-                Ok(()) => Ok(true),
-                Err(_) => Ok(false),
-            }
+        let mkdir = lua.create_function(|_, path: String| match fs::create_dir_all(&path) {
+            Ok(()) => Ok(true),
+            Err(_) => Ok(false),
         })?;
         fs_table.set("mkdir", mkdir)?;
 
@@ -90,21 +85,23 @@ impl LuaFs {
         fs_table.set("remove", remove)?;
 
         // ratterm.fs.rename(from, to) -> bool
-        let rename = lua.create_function(|_, (from, to): (String, String)| {
-            match fs::rename(&from, &to) {
-                Ok(()) => Ok(true),
-                Err(_) => Ok(false),
-            }
-        })?;
+        let rename =
+            lua.create_function(
+                |_, (from, to): (String, String)| match fs::rename(&from, &to) {
+                    Ok(()) => Ok(true),
+                    Err(_) => Ok(false),
+                },
+            )?;
         fs_table.set("rename", rename)?;
 
         // ratterm.fs.copy(from, to) -> bool
-        let copy = lua.create_function(|_, (from, to): (String, String)| {
-            match fs::copy(&from, &to) {
-                Ok(_) => Ok(true),
-                Err(_) => Ok(false),
-            }
-        })?;
+        let copy =
+            lua.create_function(
+                |_, (from, to): (String, String)| match fs::copy(&from, &to) {
+                    Ok(_) => Ok(true),
+                    Err(_) => Ok(false),
+                },
+            )?;
         fs_table.set("copy", copy)?;
 
         // ratterm.fs.append(path, content) -> bool
@@ -130,6 +127,7 @@ impl LuaFs {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
     use tempfile::TempDir;
@@ -145,7 +143,10 @@ mod tests {
         let path_str = file_path.to_str().expect("path str");
 
         // Write file
-        let script = format!(r#"return fs.write("{}", "Hello, Lua!")"#, path_str.replace('\\', "\\\\"));
+        let script = format!(
+            r#"return fs.write("{}", "Hello, Lua!")"#,
+            path_str.replace('\\', "\\\\")
+        );
         let result: bool = lua.load(&script).eval().expect("eval write");
         assert!(result);
 
