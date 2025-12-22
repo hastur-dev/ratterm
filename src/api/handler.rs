@@ -493,11 +493,7 @@ impl ApiHandler {
     // Theme operations
     // ========================================================================
 
-    fn handle_theme_get(
-        &self,
-        _request: &ApiRequest,
-        app: &mut App,
-    ) -> Result<Value, ApiError> {
+    fn handle_theme_get(&self, _request: &ApiRequest, app: &mut App) -> Result<Value, ApiError> {
         let name = app.current_theme_name();
         let preset = app.current_theme_preset().map(|p| p.name().to_string());
 
@@ -507,11 +503,7 @@ impl ApiHandler {
         }))
     }
 
-    fn handle_theme_set(
-        &self,
-        request: &ApiRequest,
-        app: &mut App,
-    ) -> Result<Value, ApiError> {
+    fn handle_theme_set(&self, request: &ApiRequest, app: &mut App) -> Result<Value, ApiError> {
         let params: SetThemeParams = serde_json::from_value(request.params.clone())?;
 
         // Use the new set_theme_by_name method which supports both presets and custom themes
@@ -527,11 +519,7 @@ impl ApiHandler {
         }
     }
 
-    fn handle_theme_list(
-        &self,
-        _request: &ApiRequest,
-        app: &mut App,
-    ) -> Result<Value, ApiError> {
+    fn handle_theme_list(&self, _request: &ApiRequest, app: &mut App) -> Result<Value, ApiError> {
         let available = app.available_themes();
         let current = app.current_theme_name();
 

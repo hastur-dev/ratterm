@@ -3,9 +3,9 @@
 use std::sync::Arc;
 
 use axum::{
+    Json,
     extract::{Query, State},
     http::StatusCode,
-    Json,
 };
 
 use crate::extension::rest::{
@@ -279,13 +279,9 @@ pub async fn notify(
 }
 
 /// GET /extensions/list - List loaded extensions.
-pub async fn list_extensions(
-    State(_state): State<Arc<ApiState>>,
-) -> Json<ExtensionListResponse> {
+pub async fn list_extensions(State(_state): State<Arc<ApiState>>) -> Json<ExtensionListResponse> {
     // TODO: Get actual extension list from ExtensionProcessManager
-    Json(ExtensionListResponse {
-        extensions: vec![],
-    })
+    Json(ExtensionListResponse { extensions: vec![] })
 }
 
 /// GET /extensions/health - Health check endpoint.

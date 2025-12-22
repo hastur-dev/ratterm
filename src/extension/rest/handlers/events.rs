@@ -7,7 +7,7 @@ use axum::{
     extract::State,
     response::sse::{Event, KeepAlive, Sse},
 };
-use tokio_stream::{wrappers::BroadcastStream, StreamExt};
+use tokio_stream::{StreamExt, wrappers::BroadcastStream};
 
 use crate::extension::rest::{state::ApiState, types::ApiEvent};
 

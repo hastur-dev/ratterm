@@ -2,12 +2,12 @@
 
 use std::sync::Arc;
 
-use axum::{extract::State, http::StatusCode, Json};
+use axum::{Json, extract::State, http::StatusCode};
 
 use crate::extension::rest::{
     state::{ApiState, AppRequest, EditorRequest},
     types::{
-        ApiError, CursorPosition, CurrentFileResponse, EditorContentResponse, InsertTextRequest,
+        ApiError, CurrentFileResponse, CursorPosition, EditorContentResponse, InsertTextRequest,
         OpenFileRequest, SaveFileRequest, SaveFileResponse, SetContentRequest, SetCursorRequest,
     },
 };

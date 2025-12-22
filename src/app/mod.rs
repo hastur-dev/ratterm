@@ -30,10 +30,9 @@ use crate::ui::{
     file_picker::FilePickerWidget,
     layout::{FocusedPane, SplitLayout},
     popup::{
-        CommandPalette, ExtensionApprovalPrompt, ModeSwitcher,
-        ModeSwitcherWidget, Popup, PopupKind, PopupWidget, ShellInstallPrompt,
-        ShellInstallPromptWidget, ShellSelector, ShellSelectorWidget, ThemeSelector,
-        ThemeSelectorWidget,
+        CommandPalette, ExtensionApprovalPrompt, ModeSwitcher, ModeSwitcherWidget, Popup,
+        PopupKind, PopupWidget, ShellInstallPrompt, ShellInstallPromptWidget, ShellSelector,
+        ShellSelectorWidget, ThemeSelector, ThemeSelectorWidget,
     },
     statusbar::StatusBar,
     terminal_tabs::TerminalTabBar,

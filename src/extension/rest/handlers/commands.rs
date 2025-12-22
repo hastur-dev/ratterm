@@ -3,9 +3,9 @@
 use std::sync::Arc;
 
 use axum::{
+    Json,
     extract::{Query, State},
     http::StatusCode,
-    Json,
 };
 
 use crate::extension::rest::{
@@ -109,10 +109,7 @@ pub async fn execute(
                     Ok(Json(ExecuteCommandResponse {
                         success: false,
                         result: None,
-                        error: Some(format!(
-                            "Callback returned status: {}",
-                            response.status()
-                        )),
+                        error: Some(format!("Callback returned status: {}", response.status())),
                     }))
                 }
             }

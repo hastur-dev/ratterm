@@ -1388,8 +1388,7 @@ impl ThemeSelector {
     /// Returns the currently selected theme as a preset (if it is one).
     #[must_use]
     pub fn selected_theme(&self) -> ThemePreset {
-        ThemePreset::from_name(&self.theme_names[self.selected_index])
-            .unwrap_or(ThemePreset::Dark)
+        ThemePreset::from_name(&self.theme_names[self.selected_index]).unwrap_or(ThemePreset::Dark)
     }
 
     /// Returns the original theme name (for cancellation).

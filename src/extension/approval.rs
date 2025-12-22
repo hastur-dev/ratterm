@@ -104,8 +104,7 @@ impl ApprovalManager {
             std::fs::create_dir_all(parent)?;
         }
 
-        let content =
-            toml::to_string_pretty(&self.store).map_err(io::Error::other)?;
+        let content = toml::to_string_pretty(&self.store).map_err(io::Error::other)?;
 
         std::fs::write(&self.path, content)
     }

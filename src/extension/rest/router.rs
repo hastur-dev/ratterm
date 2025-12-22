@@ -3,8 +3,8 @@
 use std::sync::Arc;
 
 use axum::{
-    routing::{delete, get, post, put},
     Router,
+    routing::{delete, get, post, put},
 };
 
 use super::{handlers, state::ApiState};
@@ -26,9 +26,15 @@ pub fn create_router(state: Arc<ApiState>) -> Router {
             "/api/v1/terminal/send_keys",
             post(handlers::terminal::send_keys),
         )
-        .route("/api/v1/terminal/buffer", get(handlers::terminal::get_buffer))
+        .route(
+            "/api/v1/terminal/buffer",
+            get(handlers::terminal::get_buffer),
+        )
         .route("/api/v1/terminal/size", get(handlers::terminal::get_size))
-        .route("/api/v1/terminal/cursor", get(handlers::terminal::get_cursor))
+        .route(
+            "/api/v1/terminal/cursor",
+            get(handlers::terminal::get_cursor),
+        )
         .route("/api/v1/terminal/title", get(handlers::terminal::get_title))
         .route("/api/v1/terminal/clear", post(handlers::terminal::clear))
         .route(
@@ -52,19 +58,28 @@ pub fn create_router(state: Arc<ApiState>) -> Router {
         .route("/api/v1/fs/rename", post(handlers::fs::rename))
         .route("/api/v1/fs/copy", post(handlers::fs::copy))
         // Command endpoints
-        .route("/api/v1/commands/register", post(handlers::commands::register))
+        .route(
+            "/api/v1/commands/register",
+            post(handlers::commands::register),
+        )
         .route(
             "/api/v1/commands/unregister",
             delete(handlers::commands::unregister),
         )
         .route("/api/v1/commands/list", get(handlers::commands::list))
-        .route("/api/v1/commands/execute", post(handlers::commands::execute))
+        .route(
+            "/api/v1/commands/execute",
+            post(handlers::commands::execute),
+        )
         // Event endpoints
         .route("/api/v1/events/stream", get(handlers::events::stream))
         // Layout endpoints
         .route("/api/v1/layout/state", get(handlers::layout::get_state))
         .route("/api/v1/layout/focus", post(handlers::layout::set_focus))
-        .route("/api/v1/layout/toggle_ide", post(handlers::layout::toggle_ide))
+        .route(
+            "/api/v1/layout/toggle_ide",
+            post(handlers::layout::toggle_ide),
+        )
         .route("/api/v1/layout/split", put(handlers::layout::set_split))
         // Tab endpoints
         .route("/api/v1/tabs/terminal", get(handlers::tabs::list_terminal))
@@ -96,10 +111,7 @@ pub fn create_router(state: Arc<ApiState>) -> Router {
             "/api/v1/extensions/list",
             get(handlers::system::list_extensions),
         )
-        .route(
-            "/api/v1/extensions/health",
-            get(handlers::system::health),
-        )
+        .route("/api/v1/extensions/health", get(handlers::system::health))
         .route(
             "/api/v1/extensions/reload",
             post(handlers::system::reload_extension),
