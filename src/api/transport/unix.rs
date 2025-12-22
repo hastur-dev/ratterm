@@ -59,7 +59,7 @@ impl UnixServer {
         match self.listener.accept() {
             Ok((stream, addr)) => {
                 debug!("Client connected: {:?}", addr);
-                Ok(UnixConnection::new(stream))
+                UnixConnection::new(stream)
             }
             Err(e) => {
                 error!("Failed to accept connection: {}", e);
@@ -92,17 +92,20 @@ pub struct UnixConnection {
 
 impl UnixConnection {
     /// Creates a new Unix connection from a stream.
-    pub fn new(stream: UnixStream) -> Self {
+    ///
+    /// # Errors
+    /// Returns an error if the stream cannot be cloned.
+    pub fn new(stream: UnixStream) -> Result<Self, ApiError> {
         // Clone the stream for separate read/write handles
-        let read_stream = stream.try_clone().expect("Failed to clone stream");
+        let read_stream = stream.try_clone().map_err(ApiError::Transport)?;
         let write_stream = stream;
 
-        Self {
+        Ok(Self {
             inner: BufferedConnection::new(
                 BufReader::new(read_stream),
                 BufWriter::new(write_stream),
             ),
-        }
+        })
     }
 }
 
@@ -133,12 +136,16 @@ impl UnixClient {
     }
 
     /// Creates a buffered connection from this client.
-    pub fn into_connection(self) -> UnixConnection {
+    ///
+    /// # Errors
+    /// Returns an error if the connection cannot be created.
+    pub fn into_connection(self) -> Result<UnixConnection, ApiError> {
         UnixConnection::new(self.stream)
     }
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
     use std::thread;
@@ -160,7 +167,7 @@ mod tests {
             thread::sleep(Duration::from_millis(100));
 
             let client = UnixClient::connect(&client_path).unwrap();
-            let mut conn = client.into_connection();
+            let mut conn = client.into_connection().unwrap();
 
             conn.write_message(r#"{"id":"1","method":"test"}"#).unwrap();
 
