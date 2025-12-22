@@ -340,6 +340,17 @@ pub struct QuitParams {
 }
 
 // ============================================================================
+// Theme operation parameters
+// ============================================================================
+
+/// Parameters for theme.set.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SetThemeParams {
+    /// Theme name to apply.
+    pub name: String,
+}
+
+// ============================================================================
 // Background process operation parameters
 // ============================================================================
 
