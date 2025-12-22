@@ -3,9 +3,9 @@
 use std::sync::Arc;
 
 use axum::{
+    Json,
     extract::{Query, State},
     http::StatusCode,
-    Json,
 };
 
 use crate::extension::rest::{
@@ -84,7 +84,9 @@ pub async fn get_buffer(
 
     Ok(Json(TerminalBufferResponse {
         lines: result.lines,
-        cursor: result.cursor.map(|(line, col)| CursorPosition { line, col }),
+        cursor: result
+            .cursor
+            .map(|(line, col)| CursorPosition { line, col }),
         size: TerminalSize {
             cols: result.cols,
             rows: result.rows,

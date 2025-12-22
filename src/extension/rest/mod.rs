@@ -36,6 +36,6 @@ pub mod server;
 pub mod state;
 pub mod types;
 
-pub use server::{RestApiServer, DEFAULT_PORT};
+pub use server::{DEFAULT_PORT, RestApiServer};
 pub use state::{ApiState, AppRequest};
 pub use types::ApiEvent;

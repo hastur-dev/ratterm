@@ -299,8 +299,7 @@ fn handle_extension_command(args: &[String]) -> Result<(), Box<dyn std::error::E
                 Ok(manifest) => {
                     println!(
                         "Installed {} v{}",
-                        manifest.extension.name,
-                        manifest.extension.version
+                        manifest.extension.name, manifest.extension.version
                     );
                     println!("Restart ratterm to load the extension.");
                 }

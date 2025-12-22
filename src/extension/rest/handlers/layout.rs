@@ -2,13 +2,11 @@
 
 use std::sync::Arc;
 
-use axum::{extract::State, http::StatusCode, Json};
+use axum::{Json, extract::State, http::StatusCode};
 
 use crate::extension::rest::{
     state::{ApiState, AppRequest, LayoutRequest},
-    types::{
-        ApiError, FocusPaneRequest, LayoutStateResponse, SetSplitRequest, ToggleIdeResponse,
-    },
+    types::{ApiError, FocusPaneRequest, LayoutStateResponse, SetSplitRequest, ToggleIdeResponse},
 };
 
 /// GET /layout/state - Get layout state.

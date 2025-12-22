@@ -7,9 +7,9 @@ use std::path::Path;
 use std::sync::Arc;
 
 use axum::{
+    Json,
     extract::{Query, State},
     http::StatusCode,
-    Json,
 };
 
 use crate::extension::rest::{

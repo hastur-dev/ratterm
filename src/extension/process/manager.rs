@@ -227,8 +227,12 @@ impl ApiExtensionManager {
         }
 
         // Create process entry
-        let mut process =
-            ExtensionProcess::new(name.clone(), version, ext_dir.to_path_buf(), process_config.clone());
+        let mut process = ExtensionProcess::new(
+            name.clone(),
+            version,
+            ext_dir.to_path_buf(),
+            process_config.clone(),
+        );
 
         // Start the process
         process.start(&self.api_url, &self.api_token)?;
