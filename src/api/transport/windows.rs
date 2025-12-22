@@ -145,6 +145,7 @@ impl WindowsServer {
             handle: PipeHandle(handle),
             reader: None,
             writer: None,
+            open: true,
         })
     }
 }
@@ -154,6 +155,8 @@ pub struct WindowsConnection {
     handle: PipeHandle,
     reader: Option<BufReader<PipeReader>>,
     writer: Option<BufWriter<PipeWriter>>,
+    /// Tracks if the connection is still open (client hasn't disconnected).
+    open: bool,
 }
 
 impl WindowsConnection {
@@ -179,6 +182,10 @@ impl WindowsConnection {
 
 impl Connection for WindowsConnection {
     fn read_message(&mut self) -> Result<Option<String>, ApiError> {
+        if !self.open {
+            return Ok(None);
+        }
+
         if self.reader.is_none() {
             self.init()?;
         }
@@ -191,7 +198,11 @@ impl Connection for WindowsConnection {
 
         use std::io::BufRead;
         match reader.read_line(&mut line) {
-            Ok(0) => Ok(None),
+            Ok(0) => {
+                // EOF - client disconnected
+                self.open = false;
+                Ok(None)
+            }
             Ok(_) => {
                 let trimmed = line.trim_end();
                 if trimmed.is_empty() {
@@ -201,7 +212,10 @@ impl Connection for WindowsConnection {
                 }
             }
             Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => Ok(None),
-            Err(e) => Err(ApiError::Transport(e)),
+            Err(e) => {
+                self.open = false;
+                Err(ApiError::Transport(e))
+            }
         }
     }
 
@@ -221,7 +235,7 @@ impl Connection for WindowsConnection {
     }
 
     fn is_open(&self) -> bool {
-        self.handle.is_valid()
+        self.open && self.handle.is_valid()
     }
 }
 

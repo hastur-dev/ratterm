@@ -196,8 +196,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    // Initialize Lua extensions
-    app.init_lua_extensions();
+    // Initialize extensions
+    app.init_extensions();
 
     // Show update status in the app
     match update_result {
@@ -239,12 +239,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 crossterm::terminal::Clear(crossterm::terminal::ClearType::All)
             )?;
         }
-
-        // Process Lua extension timers
-        app.process_lua_timers();
-
-        // Update Lua plugin contexts periodically
-        app.update_lua_contexts();
 
         // Render
         terminal.draw(|frame| {
@@ -304,10 +298,9 @@ fn handle_extension_command(args: &[String]) -> Result<(), Box<dyn std::error::E
             match installer.install_from_github(repo) {
                 Ok(manifest) => {
                     println!(
-                        "Installed {} v{} ({})",
+                        "Installed {} v{}",
                         manifest.extension.name,
-                        manifest.extension.version,
-                        manifest.extension.ext_type
+                        manifest.extension.version
                     );
                     println!("Restart ratterm to load the extension.");
                 }
@@ -342,7 +335,7 @@ fn handle_extension_command(args: &[String]) -> Result<(), Box<dyn std::error::E
             } else {
                 println!("Installed extensions:\n");
                 for ext in extensions.values() {
-                    println!("  {} v{} ({})", ext.name, ext.version, ext.ext_type);
+                    println!("  {} v{}", ext.name, ext.version);
                     let desc = &ext.manifest.extension.description;
                     if !desc.is_empty() {
                         println!("    {}", desc);

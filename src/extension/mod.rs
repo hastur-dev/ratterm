@@ -1,22 +1,18 @@
 //! Extension system for Ratterm.
 //!
-//! Provides a plugin architecture supporting:
-//! - Theme extensions (TOML-based color schemes)
-//! - WASM plugins (sandboxed, portable)
-//! - Native plugins (.dll/.so/.dylib for power users)
-//! - Lua plugins (scripted, full system access)
+//! Provides a plugin architecture based on REST API communication.
+//! Extensions run as external processes and communicate with Ratterm
+//! via HTTP REST API, allowing any programming language to be used.
 //!
 //! Extensions can be installed from GitHub repositories.
 
 pub mod api;
+pub mod approval;
 pub mod installer;
-pub mod lua;
-pub mod lua_api;
 pub mod manifest;
-pub mod native;
+pub mod process;
 pub mod registry;
-pub mod theme_ext;
-pub mod wasm;
+pub mod rest;
 
 use std::collections::HashMap;
 use std::fs;
@@ -24,10 +20,10 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 pub use api::{PluginCapability, PluginHost, PluginInfo, PluginType, RattermPlugin};
-pub use lua::{LuaPlugin, LuaPluginManager};
-pub use lua_api::events::EventType as LuaEventType;
-pub use lua_api::{EditorOp, LuaContext, LuaState, TerminalOp};
-pub use manifest::{ExtensionManifest, ExtensionType, LuaConfig};
+pub use approval::{ApprovalEntry, ApprovalManager};
+pub use manifest::{ExtensionManifest, ProcessConfig};
+pub use process::{ApiExtensionManager, ProcessStatus};
+pub use rest::{ApiEvent, ApiState, AppRequest, RestApiServer};
 
 /// Errors that can occur in the extension system.
 #[derive(Debug)]
@@ -44,6 +40,8 @@ pub enum ExtensionError {
     PluginLoad(String),
     /// Registry/download error.
     Registry(String),
+    /// Approval error.
+    Approval(String),
 }
 
 impl std::fmt::Display for ExtensionError {
@@ -55,6 +53,7 @@ impl std::fmt::Display for ExtensionError {
             ExtensionError::AlreadyInstalled(n) => write!(f, "Already installed: {}", n),
             ExtensionError::PluginLoad(e) => write!(f, "Plugin load error: {}", e),
             ExtensionError::Registry(e) => write!(f, "Registry error: {}", e),
+            ExtensionError::Approval(e) => write!(f, "Approval error: {}", e),
         }
     }
 }
@@ -103,22 +102,38 @@ pub struct InstalledExtension {
     pub name: String,
     /// Extension version.
     pub version: String,
-    /// Extension type.
-    pub ext_type: ExtensionType,
     /// Path to extension directory.
     pub path: PathBuf,
     /// Manifest data.
     pub manifest: ExtensionManifest,
 }
 
+impl InstalledExtension {
+    /// Returns the command that this extension runs.
+    #[must_use]
+    pub fn command(&self) -> Option<&str> {
+        self.manifest.command()
+    }
+
+    /// Returns the extension author.
+    #[must_use]
+    pub fn author(&self) -> Option<&str> {
+        self.manifest.author()
+    }
+
+    /// Returns the extension description.
+    #[must_use]
+    pub fn description(&self) -> Option<&str> {
+        self.manifest.description()
+    }
+}
+
 /// Extension manager that handles loading and managing extensions.
 pub struct ExtensionManager {
     /// Installed extensions by name.
     installed: HashMap<String, InstalledExtension>,
-    /// Loaded plugins (native and WASM).
-    /// Currently unused but reserved for future plugin lifecycle management.
-    #[allow(dead_code)]
-    plugins: Vec<Box<dyn RattermPlugin>>,
+    /// Approval manager for user consent.
+    approval_manager: ApprovalManager,
 }
 
 impl Default for ExtensionManager {
@@ -133,7 +148,7 @@ impl ExtensionManager {
     pub fn new() -> Self {
         Self {
             installed: HashMap::new(),
-            plugins: Vec::new(),
+            approval_manager: ApprovalManager::new(),
         }
     }
 
@@ -183,7 +198,6 @@ impl ExtensionManager {
         let ext = InstalledExtension {
             name: manifest.extension.name.clone(),
             version: manifest.extension.version.clone(),
-            ext_type: manifest.extension.ext_type,
             path: path.to_path_buf(),
             manifest: manifest.clone(),
         };
@@ -223,6 +237,9 @@ impl ExtensionManager {
             .remove(name)
             .ok_or_else(|| ExtensionError::NotFound(name.to_string()))?;
 
+        // Also revoke approval when removing
+        let _ = self.approval_manager.revoke(name);
+
         // Remove the directory
         fs::remove_dir_all(&ext.path)?;
 
@@ -235,12 +252,54 @@ impl ExtensionManager {
         self.installed.len()
     }
 
-    /// Returns installed theme extensions.
+    /// Returns a reference to the approval manager.
     #[must_use]
-    pub fn theme_extensions(&self) -> Vec<&InstalledExtension> {
+    pub fn approval_manager(&self) -> &ApprovalManager {
+        &self.approval_manager
+    }
+
+    /// Returns a mutable reference to the approval manager.
+    pub fn approval_manager_mut(&mut self) -> &mut ApprovalManager {
+        &mut self.approval_manager
+    }
+
+    /// Checks if an extension is approved for its current version.
+    #[must_use]
+    pub fn is_approved(&self, name: &str) -> bool {
+        if let Some(ext) = self.installed.get(name) {
+            self.approval_manager.is_approved(name, &ext.version)
+        } else {
+            false
+        }
+    }
+
+    /// Approves an extension for its current installed version.
+    pub fn approve(&mut self, name: &str) -> Result<(), ExtensionError> {
+        let ext = self
+            .installed
+            .get(name)
+            .ok_or_else(|| ExtensionError::NotFound(name.to_string()))?;
+
+        self.approval_manager
+            .approve(name, &ext.version)
+            .map_err(|e| ExtensionError::Approval(e.to_string()))
+    }
+
+    /// Returns extensions that need approval (not approved for current version).
+    #[must_use]
+    pub fn pending_approval(&self) -> Vec<&InstalledExtension> {
         self.installed
             .values()
-            .filter(|e| e.ext_type == ExtensionType::Theme)
+            .filter(|ext| !self.approval_manager.is_approved(&ext.name, &ext.version))
+            .collect()
+    }
+
+    /// Returns extensions that are approved and ready to run.
+    #[must_use]
+    pub fn approved_extensions(&self) -> Vec<&InstalledExtension> {
+        self.installed
+            .values()
+            .filter(|ext| self.approval_manager.is_approved(&ext.name, &ext.version))
             .collect()
     }
 }
@@ -269,5 +328,12 @@ mod tests {
         if let Some(d) = dir {
             assert!(d.ends_with("extensions"));
         }
+    }
+
+    #[test]
+    fn test_pending_approval_empty() {
+        let manager = ExtensionManager::new();
+        assert!(manager.pending_approval().is_empty());
+        assert!(manager.approved_extensions().is_empty());
     }
 }

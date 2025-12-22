@@ -1,7 +1,10 @@
 //! Extension manifest parsing.
 //!
 //! Parses `extension.toml` files that define extension metadata and configuration.
+//! All extensions are now API-based, running as external processes that communicate
+//! via REST API.
 
+use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
@@ -17,18 +20,9 @@ pub struct ExtensionManifest {
     /// Compatibility requirements.
     #[serde(default)]
     pub compatibility: CompatibilityInfo,
-    /// Theme configuration (for theme extensions).
-    #[serde(default)]
-    pub theme: Option<ThemeConfig>,
-    /// WASM plugin configuration.
-    #[serde(default)]
-    pub wasm: Option<WasmConfig>,
-    /// Native plugin configuration.
-    #[serde(default)]
-    pub native: Option<NativeConfig>,
-    /// Lua plugin configuration.
-    #[serde(default)]
-    pub lua: Option<LuaConfig>,
+    /// Process configuration (how to run the extension).
+    #[serde(alias = "api")]
+    pub process: Option<ProcessConfig>,
 }
 
 /// Extension metadata.
@@ -50,38 +44,6 @@ pub struct ExtensionMetadata {
     /// Homepage URL.
     #[serde(default)]
     pub homepage: String,
-    /// Extension type.
-    #[serde(rename = "type")]
-    pub ext_type: ExtensionType,
-}
-
-/// Extension type.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum ExtensionType {
-    /// Theme extension (colors only).
-    #[default]
-    Theme,
-    /// Widget extension (WASM or native).
-    Widget,
-    /// Command extension (adds commands).
-    Command,
-    /// Native plugin (full access).
-    Native,
-    /// Lua plugin (scripted, full access).
-    Lua,
-}
-
-impl std::fmt::Display for ExtensionType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ExtensionType::Theme => write!(f, "theme"),
-            ExtensionType::Widget => write!(f, "widget"),
-            ExtensionType::Command => write!(f, "command"),
-            ExtensionType::Native => write!(f, "native"),
-            ExtensionType::Lua => write!(f, "lua"),
-        }
-    }
 }
 
 /// Compatibility requirements.
@@ -92,72 +54,104 @@ pub struct CompatibilityInfo {
     pub ratterm: String,
 }
 
-/// Theme extension configuration.
+/// Process configuration for API extensions.
+///
+/// Defines how to run the extension as an external process that communicates
+/// with ratterm via REST API.
 #[derive(Debug, Clone, Deserialize)]
-pub struct ThemeConfig {
-    /// Path to theme definition file.
-    pub file: String,
-}
-
-/// WASM plugin configuration.
-#[derive(Debug, Clone, Deserialize)]
-pub struct WasmConfig {
-    /// Path to WASM file.
-    pub file: String,
-    /// Plugin capabilities.
+pub struct ProcessConfig {
+    /// Command to execute (e.g., "python", "node", "{ext_dir}/myext").
+    pub command: String,
+    /// Command arguments.
+    #[serde(default)]
+    pub args: Vec<String>,
+    /// Working directory (default: extension directory).
+    /// Supports {ext_dir} placeholder.
+    #[serde(default)]
+    pub cwd: Option<String>,
+    /// Environment variables to pass to the process.
+    /// Values support {ext_dir} placeholder.
+    #[serde(default)]
+    pub env: HashMap<String, String>,
+    /// Required capabilities (for documentation/filtering).
     #[serde(default)]
     pub capabilities: Vec<String>,
+    /// Whether to restart on crash.
+    #[serde(default = "default_restart_on_crash")]
+    pub restart_on_crash: bool,
+    /// Maximum number of restarts before giving up.
+    #[serde(default = "default_max_restarts")]
+    pub max_restarts: u32,
+    /// Delay between restarts in milliseconds.
+    #[serde(default = "default_restart_delay_ms")]
+    pub restart_delay_ms: u64,
 }
 
-/// Native plugin configuration.
-#[derive(Debug, Clone, Default, Deserialize)]
-pub struct NativeConfig {
-    /// Windows DLL path.
-    #[serde(default)]
-    pub windows: Option<String>,
-    /// Linux SO path.
-    #[serde(default)]
-    pub linux: Option<String>,
-    /// macOS dylib path.
-    #[serde(default)]
-    pub macos: Option<String>,
-    /// Whether the plugin is trusted (requires user confirmation if false).
-    #[serde(default)]
-    pub trusted: bool,
+fn default_restart_on_crash() -> bool {
+    true
 }
 
-impl NativeConfig {
-    /// Returns the plugin path for the current platform.
-    #[must_use]
-    pub fn current_platform_path(&self) -> Option<&str> {
-        #[cfg(target_os = "windows")]
-        {
-            self.windows.as_deref()
-        }
-        #[cfg(target_os = "linux")]
-        {
-            self.linux.as_deref()
-        }
-        #[cfg(target_os = "macos")]
-        {
-            self.macos.as_deref()
-        }
-        #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
-        {
-            None
+fn default_max_restarts() -> u32 {
+    3
+}
+
+fn default_restart_delay_ms() -> u64 {
+    1000
+}
+
+impl Default for ProcessConfig {
+    fn default() -> Self {
+        Self {
+            command: String::new(),
+            args: Vec::new(),
+            cwd: None,
+            env: HashMap::new(),
+            capabilities: Vec::new(),
+            restart_on_crash: default_restart_on_crash(),
+            max_restarts: default_max_restarts(),
+            restart_delay_ms: default_restart_delay_ms(),
         }
     }
 }
 
-/// Lua plugin configuration.
-#[derive(Debug, Clone, Default, Deserialize)]
-pub struct LuaConfig {
-    /// Main Lua entry file (e.g., "init.lua").
-    #[serde(default)]
-    pub main: String,
-    /// Optional list of Lua files to preload before main.
-    #[serde(default)]
-    pub preload: Vec<String>,
+impl ExtensionManifest {
+    /// Returns the extension name.
+    #[must_use]
+    pub fn name(&self) -> &str {
+        &self.extension.name
+    }
+
+    /// Returns the extension version.
+    #[must_use]
+    pub fn version(&self) -> &str {
+        &self.extension.version
+    }
+
+    /// Returns the extension author.
+    #[must_use]
+    pub fn author(&self) -> Option<&str> {
+        if self.extension.author.is_empty() {
+            None
+        } else {
+            Some(&self.extension.author)
+        }
+    }
+
+    /// Returns the extension description.
+    #[must_use]
+    pub fn description(&self) -> Option<&str> {
+        if self.extension.description.is_empty() {
+            None
+        } else {
+            Some(&self.extension.description)
+        }
+    }
+
+    /// Returns the process command to run.
+    #[must_use]
+    pub fn command(&self) -> Option<&str> {
+        self.process.as_ref().map(|p| p.command.as_str())
+    }
 }
 
 /// Loads an extension manifest from a file.
@@ -189,41 +183,19 @@ fn validate_manifest(manifest: &ExtensionManifest) -> Result<(), ExtensionError>
         ));
     }
 
-    // Type-specific validation
-    match manifest.extension.ext_type {
-        ExtensionType::Theme => {
-            if manifest.theme.is_none() {
+    // Process config is required and must have a command
+    match &manifest.process {
+        Some(process_config) => {
+            if process_config.command.is_empty() {
                 return Err(ExtensionError::Manifest(
-                    "Theme extensions require [theme] section".to_string(),
+                    "Extensions require 'command' field in [process] section".to_string(),
                 ));
             }
         }
-        ExtensionType::Widget | ExtensionType::Command => {
-            if manifest.wasm.is_none() && manifest.native.is_none() {
-                return Err(ExtensionError::Manifest(
-                    "Widget/Command extensions require [wasm] or [native] section".to_string(),
-                ));
-            }
-        }
-        ExtensionType::Native => {
-            if manifest.native.is_none() {
-                return Err(ExtensionError::Manifest(
-                    "Native extensions require [native] section".to_string(),
-                ));
-            }
-        }
-        ExtensionType::Lua => {
-            if let Some(lua_config) = &manifest.lua {
-                if lua_config.main.is_empty() {
-                    return Err(ExtensionError::Manifest(
-                        "Lua extensions require 'main' field in [lua] section".to_string(),
-                    ));
-                }
-            } else {
-                return Err(ExtensionError::Manifest(
-                    "Lua extensions require [lua] section".to_string(),
-                ));
-            }
+        None => {
+            return Err(ExtensionError::Manifest(
+                "Extensions require [process] section with command to run".to_string(),
+            ));
         }
     }
 
@@ -245,51 +217,98 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_theme_manifest() {
+    fn test_parse_process_manifest() {
         let dir = TempDir::new().expect("temp dir");
         let content = r##"
 [extension]
-name = "my-theme"
+name = "my-extension"
 version = "1.0.0"
-description = "A nice theme"
+description = "A nice extension"
 author = "test"
 license = "MIT"
-type = "theme"
 
-[theme]
-file = "theme.toml"
+[process]
+command = "python"
+args = ["{ext_dir}/main.py"]
 "##;
 
         let path = create_manifest(dir.path(), content);
         let manifest = load_manifest(&path).expect("parse manifest");
 
-        assert_eq!(manifest.extension.name, "my-theme");
+        assert_eq!(manifest.extension.name, "my-extension");
         assert_eq!(manifest.extension.version, "1.0.0");
-        assert_eq!(manifest.extension.ext_type, ExtensionType::Theme);
-        assert!(manifest.theme.is_some());
+        assert!(manifest.process.is_some());
+        let process = manifest.process.as_ref().expect("process config");
+        assert_eq!(process.command, "python");
+        assert_eq!(process.args.len(), 1);
     }
 
     #[test]
-    fn test_parse_wasm_manifest() {
+    fn test_parse_api_alias() {
+        // Test that [api] section works as alias for [process]
         let dir = TempDir::new().expect("temp dir");
         let content = r##"
 [extension]
-name = "git-widget"
-version = "0.1.0"
-type = "widget"
+name = "my-extension"
+version = "1.0.0"
 
-[wasm]
-file = "plugin.wasm"
-capabilities = ["status_widget"]
+[api]
+command = "node"
+args = ["index.js"]
 "##;
 
         let path = create_manifest(dir.path(), content);
         let manifest = load_manifest(&path).expect("parse manifest");
 
-        assert_eq!(manifest.extension.ext_type, ExtensionType::Widget);
-        assert!(manifest.wasm.is_some());
-        let wasm = manifest.wasm.as_ref().expect("wasm config");
-        assert_eq!(wasm.file, "plugin.wasm");
+        assert!(manifest.process.is_some());
+        let process = manifest.process.as_ref().expect("process config");
+        assert_eq!(process.command, "node");
+    }
+
+    #[test]
+    fn test_full_process_config() {
+        let dir = TempDir::new().expect("temp dir");
+        let content = r##"
+[extension]
+name = "full-config"
+version = "2.0.0"
+description = "Extension with full config"
+author = "developer"
+license = "GPL-3.0"
+homepage = "https://github.com/dev/ext"
+
+[compatibility]
+ratterm = ">=1.0.0"
+
+[process]
+command = "{ext_dir}/bin/myext"
+args = ["--config", "{ext_dir}/config.yaml"]
+cwd = "{ext_dir}"
+restart_on_crash = true
+max_restarts = 5
+restart_delay_ms = 2000
+capabilities = ["commands", "formatting"]
+
+[process.env]
+MY_VAR = "value"
+EXT_DIR = "{ext_dir}"
+"##;
+
+        let path = create_manifest(dir.path(), content);
+        let manifest = load_manifest(&path).expect("parse manifest");
+
+        assert_eq!(manifest.extension.name, "full-config");
+        assert_eq!(manifest.compatibility.ratterm, ">=1.0.0");
+
+        let process = manifest.process.as_ref().expect("process config");
+        assert_eq!(process.command, "{ext_dir}/bin/myext");
+        assert_eq!(process.args.len(), 2);
+        assert_eq!(process.cwd, Some("{ext_dir}".to_string()));
+        assert!(process.restart_on_crash);
+        assert_eq!(process.max_restarts, 5);
+        assert_eq!(process.restart_delay_ms, 2000);
+        assert_eq!(process.capabilities.len(), 2);
+        assert_eq!(process.env.get("MY_VAR"), Some(&"value".to_string()));
     }
 
     #[test]
@@ -299,10 +318,9 @@ capabilities = ["status_widget"]
 [extension]
 name = ""
 version = "1.0.0"
-type = "theme"
 
-[theme]
-file = "theme.toml"
+[process]
+command = "python"
 "##;
 
         let path = create_manifest(dir.path(), content);
@@ -311,65 +329,117 @@ file = "theme.toml"
     }
 
     #[test]
-    fn test_parse_lua_manifest() {
+    fn test_invalid_manifest_missing_version() {
         let dir = TempDir::new().expect("temp dir");
         let content = r##"
 [extension]
-name = "my-lua-extension"
-version = "1.0.0"
-description = "A Lua extension"
-author = "test"
-license = "MIT"
-type = "lua"
+name = "test"
+version = ""
 
-[lua]
-main = "init.lua"
-preload = ["lib/utils.lua", "lib/helpers.lua"]
+[process]
+command = "python"
+"##;
+
+        let path = create_manifest(dir.path(), content);
+        let result = load_manifest(&path);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_invalid_manifest_missing_process() {
+        let dir = TempDir::new().expect("temp dir");
+        let content = r##"
+[extension]
+name = "no-process"
+version = "1.0.0"
+"##;
+
+        let path = create_manifest(dir.path(), content);
+        let result = load_manifest(&path);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_invalid_manifest_empty_command() {
+        let dir = TempDir::new().expect("temp dir");
+        let content = r##"
+[extension]
+name = "empty-command"
+version = "1.0.0"
+
+[process]
+command = ""
+"##;
+
+        let path = create_manifest(dir.path(), content);
+        let result = load_manifest(&path);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_default_process_config_values() {
+        let dir = TempDir::new().expect("temp dir");
+        let content = r##"
+[extension]
+name = "minimal"
+version = "1.0.0"
+
+[process]
+command = "myext"
 "##;
 
         let path = create_manifest(dir.path(), content);
         let manifest = load_manifest(&path).expect("parse manifest");
 
-        assert_eq!(manifest.extension.name, "my-lua-extension");
-        assert_eq!(manifest.extension.version, "1.0.0");
-        assert_eq!(manifest.extension.ext_type, ExtensionType::Lua);
-        assert!(manifest.lua.is_some());
-        let lua = manifest.lua.as_ref().expect("lua config");
-        assert_eq!(lua.main, "init.lua");
-        assert_eq!(lua.preload.len(), 2);
-        assert_eq!(lua.preload[0], "lib/utils.lua");
+        let process = manifest.process.as_ref().expect("process config");
+        assert!(process.restart_on_crash);
+        assert_eq!(process.max_restarts, 3);
+        assert_eq!(process.restart_delay_ms, 1000);
+        assert!(process.args.is_empty());
+        assert!(process.env.is_empty());
+        assert!(process.cwd.is_none());
     }
 
     #[test]
-    fn test_invalid_lua_manifest_missing_main() {
+    fn test_manifest_helper_methods() {
         let dir = TempDir::new().expect("temp dir");
         let content = r##"
 [extension]
-name = "bad-lua"
-version = "1.0.0"
-type = "lua"
+name = "helpers-test"
+version = "1.2.3"
+description = "Test description"
+author = "Test Author"
 
-[lua]
-preload = ["lib/utils.lua"]
+[process]
+command = "test-cmd"
 "##;
 
         let path = create_manifest(dir.path(), content);
-        let result = load_manifest(&path);
-        assert!(result.is_err());
+        let manifest = load_manifest(&path).expect("parse manifest");
+
+        assert_eq!(manifest.name(), "helpers-test");
+        assert_eq!(manifest.version(), "1.2.3");
+        assert_eq!(manifest.author(), Some("Test Author"));
+        assert_eq!(manifest.description(), Some("Test description"));
+        assert_eq!(manifest.command(), Some("test-cmd"));
     }
 
     #[test]
-    fn test_invalid_lua_manifest_missing_section() {
+    fn test_manifest_empty_optional_fields() {
         let dir = TempDir::new().expect("temp dir");
         let content = r##"
 [extension]
-name = "bad-lua"
+name = "minimal"
 version = "1.0.0"
-type = "lua"
+
+[process]
+command = "cmd"
 "##;
 
         let path = create_manifest(dir.path(), content);
-        let result = load_manifest(&path);
-        assert!(result.is_err());
+        let manifest = load_manifest(&path).expect("parse manifest");
+
+        assert_eq!(manifest.author(), None);
+        assert_eq!(manifest.description(), None);
     }
 }

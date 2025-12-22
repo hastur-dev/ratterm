@@ -49,13 +49,16 @@ serde_yaml = "0.9"
 toml = "0.8"
 
 # Extension system
-libloading = "0.8"
-wasmtime = "29"
-mlua = { version = "0.10", features = ["lua54", "vendored"] }
 reqwest = { version = "0.12", features = ["blocking", "json"] }
 zip = "2.2"
 flate2 = "1.0"
 tar = "0.4"
+
+# REST API for extensions
+axum = "0.8"
+tower-http = { version = "0.6", features = ["cors", "trace"] }
+tokio-stream = { version = "0.1", features = ["sync"] }
+uuid = { version = "1.0", features = ["v4"] }
 
 # Utilities
 atty = "0.2"

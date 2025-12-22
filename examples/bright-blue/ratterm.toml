@@ -1,0 +1,12 @@
+[extension]
+name = "bright-blue"
+version = "1.0.0"
+description = "Makes everything in Ratterm bright blue"
+author = "Ratterm Examples"
+
+[process]
+command = "python"
+args = ["{ext_dir}/main.py"]
+cwd = "{ext_dir}"
+restart_on_crash = false
+max_restarts = 0

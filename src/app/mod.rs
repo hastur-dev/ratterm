@@ -20,9 +20,7 @@ use crate::api::{ApiHandler, ApiServer, MAX_REQUESTS_PER_FRAME, RequestReceiver}
 use crate::clipboard::Clipboard;
 use crate::config::{Config, KeybindingMode, ShellType};
 use crate::editor::Editor;
-use crate::extension::{
-    ExtensionManager, ExtensionType, LuaContext, LuaEventType, LuaPluginManager,
-};
+use crate::extension::ExtensionManager;
 use crate::filebrowser::FileBrowser;
 use crate::terminal::{BackgroundManager, ProcessInfo, TerminalMultiplexer, pty::PtyError};
 use crate::theme::ThemePreset;
@@ -32,9 +30,10 @@ use crate::ui::{
     file_picker::FilePickerWidget,
     layout::{FocusedPane, SplitLayout},
     popup::{
-        CommandPalette, ModeSwitcher, ModeSwitcherWidget, Popup, PopupKind, PopupWidget,
-        ShellInstallPrompt, ShellInstallPromptWidget, ShellSelector, ShellSelectorWidget,
-        ThemeSelector, ThemeSelectorWidget,
+        CommandPalette, ExtensionApprovalPrompt, ModeSwitcher,
+        ModeSwitcherWidget, Popup, PopupKind, PopupWidget, ShellInstallPrompt,
+        ShellInstallPromptWidget, ShellSelector, ShellSelectorWidget, ThemeSelector,
+        ThemeSelectorWidget,
     },
     statusbar::StatusBar,
     terminal_tabs::TerminalTabBar,
@@ -115,8 +114,10 @@ pub struct App {
     api_request_rx: Option<RequestReceiver>,
     /// Background process manager.
     background_manager: BackgroundManager,
-    /// Lua plugin manager.
-    lua_plugins: LuaPluginManager,
+    /// Extension manager for handling installed extensions.
+    extension_manager: ExtensionManager,
+    /// Extension approval prompt (shown when extension needs user consent).
+    extension_approval_prompt: Option<ExtensionApprovalPrompt>,
     /// Last known screen size for layout-triggered resizes.
     last_screen_size: (u16, u16),
 }
@@ -193,7 +194,8 @@ impl App {
             api_server,
             api_request_rx,
             background_manager: BackgroundManager::new(),
-            lua_plugins: LuaPluginManager::new(),
+            extension_manager: ExtensionManager::new(),
+            extension_approval_prompt: None,
             last_screen_size: (80, 24), // Default, will be updated on first resize
         })
     }
@@ -795,8 +797,9 @@ impl App {
 
     /// Shows the theme selector popup.
     pub fn show_theme_selector(&mut self) {
-        let current_preset = self.config.theme_manager.current_preset();
-        self.theme_selector = Some(ThemeSelector::new(current_preset));
+        let current_name = self.current_theme_name();
+        let all_themes = self.available_themes();
+        self.theme_selector = Some(ThemeSelector::new_with_themes(&current_name, all_themes));
         self.popup.set_kind(PopupKind::ThemeSelector);
         self.popup.show();
         self.mode = AppMode::Popup;
@@ -805,15 +808,13 @@ impl App {
     /// Applies the selected theme.
     pub fn apply_theme_selection(&mut self) {
         if let Some(ref selector) = self.theme_selector {
-            let selected_theme = selector.selected_theme();
-            self.config.theme_manager.set_preset(selected_theme);
+            let selected_name = selector.selected_theme_name().to_string();
 
-            // Save to config file
-            if let Err(e) = self.config.save_theme() {
-                self.set_status(format!("Failed to save theme: {}", e));
-            } else {
-                self.set_status(format!("Theme changed to: {}", selected_theme.name()));
+            // Use set_theme_by_name which supports both presets and custom themes
+            if let Err(e) = self.set_theme_by_name(&selected_name) {
+                self.set_status(format!("Failed to set theme: {}", e));
             }
+            // set_theme_by_name already sets the status on success
         }
         self.theme_selector = None;
         self.hide_popup();
@@ -853,6 +854,24 @@ impl App {
         self.theme_selector.is_some() && self.popup.kind().is_theme_selector()
     }
 
+    /// Returns the current theme name.
+    #[must_use]
+    pub fn current_theme_name(&self) -> String {
+        self.config.theme_manager.current().name().to_string()
+    }
+
+    /// Returns the current theme preset, if using one.
+    #[must_use]
+    pub fn current_theme_preset(&self) -> Option<ThemePreset> {
+        self.config.theme_manager.current_preset()
+    }
+
+    /// Returns all available theme names.
+    #[must_use]
+    pub fn available_themes(&self) -> Vec<String> {
+        self.config.theme_manager.all_available_themes()
+    }
+
     /// Sets the theme to a specific preset.
     pub fn set_theme(&mut self, preset: ThemePreset) {
         self.config.theme_manager.set_preset(preset);
@@ -861,6 +880,34 @@ impl App {
         } else {
             self.set_status(format!("Theme changed to: {}", preset.name()));
         }
+    }
+
+    /// Sets the theme by name, supporting both presets and custom themes.
+    /// Returns Ok(()) on success, Err(error_message) on failure.
+    pub fn set_theme_by_name(&mut self, name: &str) -> Result<(), String> {
+        // First try preset themes
+        if let Some(preset) = ThemePreset::from_name(name) {
+            self.set_theme(preset);
+            return Ok(());
+        }
+
+        // Try custom themes
+        let custom_themes = crate::theme::list_custom_theme_info();
+        for info in custom_themes {
+            if info.name == name {
+                match self.config.theme_manager.load_custom_theme(&info.path) {
+                    Ok(()) => {
+                        self.set_status(format!("Theme changed to: {}", name));
+                        return Ok(());
+                    }
+                    Err(e) => {
+                        return Err(format!("Failed to load custom theme: {}", e));
+                    }
+                }
+            }
+        }
+
+        Err(format!("Unknown theme: {}", name))
     }
 
     /// Switches to the next open file.
@@ -1270,6 +1317,11 @@ impl App {
             PopupKind::ThemeSelector => {
                 // Theme selector is handled by apply_theme_selection
                 self.apply_theme_selection();
+            }
+            PopupKind::ExtensionApproval => {
+                // Extension approval is handled by handle_extension_approval
+                // Enter key approves, this is called on Enter
+                self.handle_extension_approval(true);
             }
         }
     }
@@ -1751,145 +1803,101 @@ impl App {
         Ok(true)
     }
 
-    // ========== Lua Plugin Methods ==========
+    // ========== Extension Methods ==========
 
-    /// Initializes and loads all Lua extensions.
-    pub fn init_lua_extensions(&mut self) {
-        let mut manager = ExtensionManager::new();
-        if let Err(e) = manager.init() {
+    /// Initializes extensions and discovers installed ones.
+    ///
+    /// Extensions that are approved will be noted for startup.
+    /// Extensions that need approval will queue an approval popup.
+    pub fn init_extensions(&mut self) {
+        if let Err(e) = self.extension_manager.init() {
             warn!("Failed to initialize extension manager: {}", e);
             return;
         }
 
-        // Load all Lua extensions
-        for ext in manager.installed().values() {
-            if ext.ext_type == ExtensionType::Lua {
-                if let Err(e) = self.lua_plugins.load(&ext.manifest, &ext.path) {
-                    warn!("Failed to load Lua extension {}: {}", ext.name, e);
-                } else {
-                    info!("Loaded Lua extension: {} v{}", ext.name, ext.version);
-                }
-            }
+        let pending = self.extension_manager.pending_approval();
+        let approved = self.extension_manager.approved_extensions();
+
+        info!(
+            "Extensions: {} installed, {} approved, {} pending approval",
+            self.extension_manager.count(),
+            approved.len(),
+            pending.len()
+        );
+
+        // Show approval popup for first pending extension
+        self.show_next_extension_approval();
+    }
+
+    /// Shows the approval popup for the next pending extension.
+    fn show_next_extension_approval(&mut self) {
+        let pending = self.extension_manager.pending_approval();
+
+        if let Some(ext) = pending.first() {
+            let prompt = ExtensionApprovalPrompt::new(
+                ext.name.clone(),
+                ext.version.clone(),
+                ext.author().map(String::from),
+                ext.description().map(String::from),
+                ext.command().unwrap_or("unknown").to_string(),
+            );
+
+            self.extension_approval_prompt = Some(prompt);
+            self.popup.set_kind(PopupKind::ExtensionApproval);
+            self.popup.show();
+            self.mode = AppMode::Popup;
         }
-
-        // Process any initial notifications
-        self.process_lua_notifications();
     }
 
-    /// Updates Lua plugin contexts with current application state.
-    pub fn update_lua_contexts(&mut self) {
-        if self.lua_plugins.is_empty() {
-            return;
-        }
-
-        let pos = self.editor.cursor_position();
-        let (terminal_cols, terminal_rows) = self
-            .active_terminal()
-            .map(|t| {
-                let grid = t.grid();
-                (grid.cols(), grid.rows())
-            })
-            .unwrap_or((80, 24));
-
-        let ctx = LuaContext {
-            editor_content: Some(self.editor.buffer_mut().text()),
-            cursor_pos: (pos.line, pos.col),
-            current_file: self.current_file_path().map(|p| p.display().to_string()),
-            terminal_lines: Vec::new(), // Terminal lines not easily accessible
-            terminal_size: (terminal_cols, terminal_rows),
-            theme_name: self.config.theme_manager.current().name().to_string(),
-            config: std::collections::HashMap::new(),
-        };
-
-        self.lua_plugins.update_all_contexts(ctx);
-    }
-
-    /// Dispatches an event to all Lua plugins.
-    pub fn dispatch_lua_event(&self, event_type: LuaEventType, arg: &str) {
-        self.lua_plugins.dispatch_event(event_type, arg);
-    }
-
-    /// Processes Lua plugin timers.
-    pub fn process_lua_timers(&mut self) {
-        self.lua_plugins.process_timers();
-        self.process_lua_operations();
-    }
-
-    /// Returns the timeout for the next Lua timer (for event loop).
+    /// Returns the current extension approval prompt if any.
     #[must_use]
-    pub fn lua_timer_timeout(&self) -> Option<Duration> {
-        self.lua_plugins.next_timer_timeout()
+    pub fn extension_approval_prompt(&self) -> Option<&ExtensionApprovalPrompt> {
+        self.extension_approval_prompt.as_ref()
     }
 
-    /// Processes pending Lua plugin notifications.
-    fn process_lua_notifications(&mut self) {
-        let notifications = self.lua_plugins.take_all_notifications();
-        for notification in notifications {
-            self.set_status(notification);
-        }
-    }
+    /// Handles extension approval response from the user.
+    ///
+    /// If approved, the extension is marked as approved and can run.
+    /// If denied, the extension is skipped.
+    /// Then shows the next pending approval if any.
+    pub fn handle_extension_approval(&mut self, approved: bool) {
+        if let Some(ref prompt) = self.extension_approval_prompt {
+            let name = prompt.name().to_string();
 
-    /// Processes pending Lua plugin operations (editor, terminal).
-    fn process_lua_operations(&mut self) {
-        use crate::extension::EditorOp;
-
-        self.process_lua_notifications();
-
-        // Process editor operations
-        let editor_ops = self.lua_plugins.take_all_editor_ops();
-        for op in editor_ops {
-            match op {
-                EditorOp::Open(path) => {
-                    let _ = self.open_file(path);
-                }
-                EditorOp::Save => {
-                    if let Err(e) = self.editor.save() {
-                        self.set_status(format!("Save error: {}", e));
+            if approved {
+                match self.extension_manager.approve(&name) {
+                    Ok(()) => {
+                        info!("Extension approved: {}", name);
+                        self.set_status(format!("Extension '{}' approved", name));
+                    }
+                    Err(e) => {
+                        warn!("Failed to approve extension {}: {}", name, e);
+                        self.set_status(format!("Failed to approve '{}': {}", name, e));
                     }
                 }
-                EditorOp::SetContent(text) => {
-                    // Clear and insert new content
-                    self.editor.select_all();
-                    self.editor.delete_selection();
-                    self.editor.insert_str(&text);
-                }
-                EditorOp::InsertAt { line, col, text } => {
-                    let pos = crate::editor::edit::Position::new(line, col);
-                    self.editor.set_cursor_position(pos);
-                    self.editor.insert_str(&text);
-                }
-                EditorOp::SetCursor { line, col } => {
-                    let pos = crate::editor::edit::Position::new(line, col);
-                    self.editor.set_cursor_position(pos);
-                }
+            } else {
+                info!("Extension denied: {}", name);
+                self.set_status(format!("Extension '{}' denied", name));
             }
         }
 
-        // Process terminal operations
-        let terminal_ops = self.lua_plugins.take_all_terminal_ops();
-        for op in terminal_ops {
-            match op {
-                crate::extension::TerminalOp::SendKeys(text) => {
-                    if let Some(ref mut terminals) = self.terminals {
-                        if let Some(terminal) = terminals.active_terminal_mut() {
-                            let _ = terminal.write(text.as_bytes());
-                        }
-                    }
-                }
-            }
-        }
+        // Clear current prompt
+        self.extension_approval_prompt = None;
+        self.popup.hide();
+        self.mode = AppMode::Normal;
+
+        // Show next pending approval if any
+        self.show_next_extension_approval();
     }
 
-    /// Gets all commands registered by Lua plugins.
+    /// Returns the extension manager.
     #[must_use]
-    pub fn lua_plugin_commands(&self) -> Vec<(String, String, String)> {
-        self.lua_plugins.get_all_commands()
+    pub fn extension_manager(&self) -> &ExtensionManager {
+        &self.extension_manager
     }
 
-    /// Executes a Lua plugin command.
-    pub fn execute_lua_command(&self, id: &str, args: &[String]) -> Result<(), String> {
-        self.lua_plugins
-            .execute_command(id, args)
-            .map_err(|e| e.to_string())
+    /// Returns a mutable reference to the extension manager.
+    pub fn extension_manager_mut(&mut self) -> &mut ExtensionManager {
+        &mut self.extension_manager
     }
 }

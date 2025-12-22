@@ -52,7 +52,7 @@ pub use app::App;
 pub use clipboard::Clipboard;
 pub use config::Config;
 pub use editor::Editor;
-pub use extension::ExtensionManager;
+pub use extension::{ApprovalManager, ExtensionManager};
 pub use filebrowser::FileBrowser;
 pub use terminal::Terminal;
 pub use theme::{Theme, ThemeManager, ThemePreset};

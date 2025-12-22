@@ -60,6 +60,11 @@ impl ApiHandler {
             "system.get_version" => self.handle_system_get_version(&request, app),
             "system.quit" => self.handle_system_quit(&request, app),
 
+            // Theme operations
+            "theme.get" => self.handle_theme_get(&request, app),
+            "theme.set" => self.handle_theme_set(&request, app),
+            "theme.list" => self.handle_theme_list(&request, app),
+
             // Background process operations
             "background.start" => self.handle_background_start(&request, app),
             "background.list" => self.handle_background_list(&request, app),
@@ -482,6 +487,58 @@ impl ApiHandler {
         }
 
         Ok(json!({}))
+    }
+
+    // ========================================================================
+    // Theme operations
+    // ========================================================================
+
+    fn handle_theme_get(
+        &self,
+        _request: &ApiRequest,
+        app: &mut App,
+    ) -> Result<Value, ApiError> {
+        let name = app.current_theme_name();
+        let preset = app.current_theme_preset().map(|p| p.name().to_string());
+
+        Ok(json!({
+            "name": name,
+            "preset": preset
+        }))
+    }
+
+    fn handle_theme_set(
+        &self,
+        request: &ApiRequest,
+        app: &mut App,
+    ) -> Result<Value, ApiError> {
+        let params: SetThemeParams = serde_json::from_value(request.params.clone())?;
+
+        // Use the new set_theme_by_name method which supports both presets and custom themes
+        match app.set_theme_by_name(&params.name) {
+            Ok(()) => Ok(json!({ "success": true, "name": params.name })),
+            Err(e) => {
+                let available = app.available_themes().join(", ");
+                Err(ApiError::InvalidParams(format!(
+                    "{}. Available themes: {}",
+                    e, available
+                )))
+            }
+        }
+    }
+
+    fn handle_theme_list(
+        &self,
+        _request: &ApiRequest,
+        app: &mut App,
+    ) -> Result<Value, ApiError> {
+        let available = app.available_themes();
+        let current = app.current_theme_name();
+
+        Ok(json!({
+            "themes": available,
+            "current": current
+        }))
     }
 
     // ========================================================================
