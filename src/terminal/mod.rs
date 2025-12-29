@@ -53,6 +53,10 @@ pub struct Terminal {
     cwd: Option<PathBuf>,
     /// Initial working directory (set at creation).
     initial_cwd: PathBuf,
+    /// Pending password for SSH auto-login.
+    pending_password: Option<String>,
+    /// Buffer to detect password prompt.
+    output_buffer: String,
 }
 
 impl Terminal {
@@ -96,6 +100,72 @@ impl Terminal {
         Self::with_config(config)
     }
 
+    /// Creates a new terminal running an SSH session.
+    ///
+    /// # Arguments
+    /// * `cols` - Number of columns
+    /// * `rows` - Number of rows
+    /// * `user` - SSH username
+    /// * `host` - SSH hostname or IP
+    /// * `port` - SSH port (22 is default)
+    ///
+    /// # Errors
+    /// Returns error if PTY creation fails.
+    pub fn with_ssh(
+        cols: u16,
+        rows: u16,
+        user: &str,
+        host: &str,
+        port: u16,
+    ) -> Result<Self, PtyError> {
+        // Find SSH executable
+        let ssh_path = Self::find_ssh_path();
+
+        let mut config = PtyConfig::default().size(cols, rows);
+        config.shell = Some(ssh_path.to_string_lossy().to_string());
+
+        // Build SSH arguments
+        let mut args = Vec::new();
+        if port != 22 {
+            args.push("-p".to_string());
+            args.push(port.to_string());
+        }
+        args.push(format!("{}@{}", user, host));
+        config.args = args;
+
+        Self::with_config(config)
+    }
+
+    /// Finds the SSH executable path.
+    fn find_ssh_path() -> PathBuf {
+        #[cfg(windows)]
+        {
+            // Try Windows OpenSSH first, then Git Bash
+            let openssh = PathBuf::from("C:\\Windows\\System32\\OpenSSH\\ssh.exe");
+            if openssh.exists() {
+                return openssh;
+            }
+
+            let git_ssh = PathBuf::from("C:\\Program Files\\Git\\usr\\bin\\ssh.exe");
+            if git_ssh.exists() {
+                return git_ssh;
+            }
+
+            // Fall back to hoping it's in PATH
+            PathBuf::from("ssh")
+        }
+
+        #[cfg(not(windows))]
+        {
+            // On Unix, ssh is typically in /usr/bin
+            let standard = PathBuf::from("/usr/bin/ssh");
+            if standard.exists() {
+                return standard;
+            }
+            PathBuf::from("ssh")
+        }
+    }
+
     /// Creates a new terminal with custom configuration.
     ///
     /// # Errors
@@ -125,7 +195,16 @@ impl Terminal {
             input_buffer: String::new(),
             cwd: None,
             initial_cwd,
+            pending_password: None,
+            output_buffer: String::new(),
         })
+    }
+
+    /// Sets a pending password for SSH auto-login.
+    /// The password will be sent when a password prompt is detected.
+    pub fn set_pending_password(&mut self, password: String) {
+        self.pending_password = Some(password);
+        self.output_buffer.clear();
     }
 
     /// Returns the terminal grid.
@@ -210,6 +289,31 @@ impl Terminal {
 
         if data.is_empty() {
             return Ok(());
+        }
+
+        // Check for password prompt if we have a pending password
+        if self.pending_password.is_some() {
+            // Append printable characters to output buffer for prompt detection
+            for &byte in &data {
+                if byte.is_ascii_graphic() || byte == b' ' || byte == b':' {
+                    self.output_buffer.push(byte as char);
+                    // Keep buffer from growing too large
+                    if self.output_buffer.len() > 200 {
+                        self.output_buffer.drain(..100);
+                    }
+                }
+            }
+
+            // Check for password prompt patterns
+            let lower = self.output_buffer.to_lowercase();
+            if lower.contains("password:") || lower.contains("password for") {
+                if let Some(password) = self.pending_password.take() {
+                    // Send password followed by Enter
+                    let _ = self.pty.write(password.as_bytes());
+                    let _ = self.pty.write(b"\r");
+                    self.output_buffer.clear();
+                }
+            }
         }
 
         let actions = self.parser.parse(&data);

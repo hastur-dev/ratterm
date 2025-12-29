@@ -334,3 +334,88 @@ Opened via Command Palette > "Theme: Select Theme"
 | `Theme: Dracula` | Apply Dracula theme |
 | `Theme: Gruvbox` | Apply Gruvbox theme |
 | `Theme: Nord` | Apply Nord theme |
+
+---
+
+## SSH Manager
+
+The SSH Manager provides a convenient way to manage SSH connections.
+
+### Opening SSH Manager
+
+| Hotkey | Action |
+|--------|--------|
+| `Ctrl+Shift+U` | Open SSH Manager |
+
+### SSH Manager Navigation
+
+When the SSH Manager is open:
+
+| Hotkey | Action |
+|--------|--------|
+| `Esc` | Close SSH Manager |
+| `Up` / `k` | Previous host |
+| `Down` / `j` | Next host |
+| `Home` | First host |
+| `End` | Last host |
+| `Enter` | Connect to selected host |
+| `S` | Scan network for SSH hosts (auto-detect subnet) |
+| `C` | Credential scan (scan with username/password to auto-save) |
+| `A` | Add host manually (with display name, credentials) |
+| `E` | Edit display name of selected host |
+| `D` / `Delete` | Delete selected host |
+
+### Add Host Form
+
+When adding a host manually (`A`), fill in these fields:
+
+| Field | Description |
+|-------|-------------|
+| Hostname/IP | The SSH server address (required) |
+| Port | SSH port (default: 22) |
+| Display Name | Friendly name shown in list (optional, uses hostname if blank) |
+| Username | SSH username (optional, prompted on connect if not saved) |
+| Password | SSH password (optional, auto-entered on connect if saved) |
+
+**Navigation:** Use `Tab` to move between fields, `Enter` to submit, `Esc` to cancel.
+
+### Edit Display Name
+
+Press `E` on a selected host to edit its display name. This lets you give hosts friendly names without re-adding them.
+
+### SSH Credential Entry
+
+When entering credentials:
+
+| Hotkey | Action |
+|--------|--------|
+| `Tab` | Next field |
+| `Shift+Tab` | Previous field |
+| `Enter` | Submit and connect |
+| `Esc` | Cancel |
+
+### SSH Quick Connect
+
+Connect directly to saved hosts using number hotkeys:
+
+| Hotkey | Action |
+|--------|--------|
+| `Ctrl+1` | Connect to host #1 |
+| `Ctrl+2` | Connect to host #2 |
+| ... | ... |
+| `Ctrl+9` | Connect to host #9 |
+
+**Note:** Quick connect hotkeys can be customized via `set_ssh_tab` in `.ratrc`.
+
+### SSH Commands in Command Palette
+
+Press `Ctrl+P` and type "ssh" to access these commands:
+
+| Command | Description |
+|---------|-------------|
+| `SSH: Open SSH Manager` | Open the SSH Manager popup |
+| `SSH: Scan Network` | Scan local network for SSH hosts |
+| `SSH: Add Host` | Manually add a new SSH host |
+| `SSH: Quick Connect #1` | Connect to saved host #1 |
+| `SSH: Quick Connect #2` | Connect to saved host #2 |
+| `SSH: Quick Connect #3` | Connect to saved host #3 |

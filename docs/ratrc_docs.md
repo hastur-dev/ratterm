@@ -402,6 +402,108 @@ Combine modifiers with `+`: `ctrl+shift+p`
 
 ---
 
+---
+
+### SSH Manager Configuration
+
+Ratterm includes an SSH Manager for managing SSH connections.
+
+#### Storage Mode
+
+```
+ssh_storage_mode = <mode>
+```
+
+Sets how SSH credentials are stored.
+
+| Value | Description |
+|-------|-------------|
+| `plaintext` | Store credentials in plain text (default) |
+| `masterpass` | Encrypt credentials with a master password |
+| `external` | Use external password manager (future) |
+
+**Example:**
+```
+ssh_storage_mode = masterpass
+```
+
+---
+
+#### SSH Quick Connect Hotkeys
+
+```
+set_ssh_tab = <modifier>
+```
+
+Sets the modifier key prefix for SSH quick connect (1-9).
+
+| Value | Description |
+|-------|-------------|
+| `ctrl` | Use Ctrl+1-9 for quick connect (default) |
+| `alt` | Use Alt+1-9 for quick connect |
+| `ctrl+shift` | Use Ctrl+Shift+1-9 for quick connect |
+
+**Example:**
+```
+set_ssh_tab = ctrl
+```
+
+---
+
+```
+ssh_number_setting = <true|false>
+```
+
+Enables or disables SSH quick connect number hotkeys.
+
+| Value | Description |
+|-------|-------------|
+| `true` / `yes` / `1` / `on` | Enable quick connect (default) |
+| `false` / `no` / `0` / `off` | Disable quick connect |
+
+**Example:**
+```
+ssh_number_setting = true
+```
+
+---
+
+#### SSH Storage Location
+
+SSH hosts and credentials are stored in:
+- **All platforms:** `~/.ratterm/ssh_hosts.toml`
+
+---
+
+#### Auto-Password Feature
+
+When you save credentials for an SSH host, Ratterm will automatically enter the password when connecting. The terminal detects the SSH password prompt and sends the saved password, so you don't need to type it manually.
+
+**How it works:**
+1. Save credentials when adding a host or after a successful connection
+2. Connect to the host via SSH Manager or quick connect
+3. Ratterm detects the "password:" prompt and auto-enters your saved password
+
+**Security notes:**
+- Credentials are stored based on your `ssh_storage_mode` setting
+- Use `masterpass` mode for encrypted storage with a master password
+- The master password is required once per session to unlock credentials
+
+---
+
+#### Credential Scan
+
+The credential scan feature (`C` in SSH Manager) lets you scan a network and automatically save hosts that accept your credentials:
+
+1. Enter username and password to test
+2. Optionally specify a subnet (e.g., `192.168.1.0/24`) or leave blank for auto-detect
+3. Ratterm scans for SSH hosts and tests authentication
+4. Only hosts that successfully authenticate are saved with credentials
+
+This is useful for quickly setting up access to multiple hosts with the same credentials.
+
+---
+
 ## Example Configuration
 
 ```
@@ -439,6 +541,11 @@ tab_themes = dracula, nord, gruvbox
 quit = ctrl+shift+q
 copy = ctrl+c
 paste = ctrl+v
+
+# SSH Manager settings
+ssh_storage_mode = plaintext
+set_ssh_tab = ctrl
+ssh_number_setting = true
 ```
 
 ---
