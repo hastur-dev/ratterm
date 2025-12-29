@@ -2,7 +2,8 @@
 
 #
 
-A split-terminal TUI application with a PTY-based terminal emulator and code editor.
+A split-terminal TUI application with a PTY-based terminal emulator and code editor. 
+Made with Ratatui and Crossterm
 
 ```
   ╦═╗╔═╗╔╦╗╔╦╗╔═╗╦═╗╔╦╗
@@ -29,6 +30,8 @@ irm https://raw.githubusercontent.com/hastur-dev/ratterm/main/install.ps1 | iex
 curl -fsSL https://raw.githubusercontent.com/hastur-dev/ratterm/main/install.sh | bash -s -- --uninstall
 
 irm https://raw.githubusercontent.com/hastur-dev/ratterm/main/install.ps1 | iex -Uninstall
+
+rat uninstall
 
 ```
 

@@ -5,7 +5,7 @@
 
 set -e
 
-VERSION="0.1.2"
+VERSION="0.1.5"
 REPO="hastur-dev/ratterm"
 BINARY_NAME="rat"
 INSTALL_DIR="${RATTERM_INSTALL_DIR:-$HOME/.local/bin}"
@@ -163,7 +163,7 @@ get_latest_version() {
     debug "Parsed version: '$LATEST'"
 
     if [ -n "$LATEST" ] && [ "$LATEST" != "" ]; then
-        VERSION="$LATEST"
+        VERSION="0.1.5"
         info "Latest version: v$VERSION"
     else
         warn "Could not parse latest version, using default: v$VERSION"
