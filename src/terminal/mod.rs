@@ -33,6 +33,76 @@ pub use self::cell::CursorShape;
 /// Maximum processing iterations per update.
 const MAX_PROCESS_ITERATIONS: usize = 10_000;
 
+/// SSH connection context for terminal inheritance.
+///
+/// Stores metadata about an SSH connection so that split terminals
+/// can inherit the connection and connect to the same remote host.
+#[derive(Debug, Clone)]
+pub struct SSHContext {
+    /// SSH username.
+    pub username: String,
+    /// SSH hostname or IP address.
+    pub hostname: String,
+    /// SSH port (default 22).
+    pub port: u16,
+    /// Password for auto-login (stored temporarily for split inheritance).
+    pub password: Option<String>,
+    /// Path to SSH private key file (alternative to password).
+    pub key_path: Option<String>,
+    /// Host ID from SSHHostList (for credential lookup).
+    pub host_id: Option<u32>,
+}
+
+impl SSHContext {
+    /// Creates a new SSH context from connection parameters.
+    #[must_use]
+    pub fn new(username: String, hostname: String, port: u16) -> Self {
+        assert!(!username.is_empty(), "username must not be empty");
+        assert!(!hostname.is_empty(), "hostname must not be empty");
+        assert!(port > 0, "port must be positive");
+
+        Self {
+            username,
+            hostname,
+            port,
+            password: None,
+            key_path: None,
+            host_id: None,
+        }
+    }
+
+    /// Sets the password for this context.
+    #[must_use]
+    pub fn with_password(mut self, password: String) -> Self {
+        self.password = Some(password);
+        self
+    }
+
+    /// Sets the key path for this context.
+    #[must_use]
+    pub fn with_key(mut self, key_path: String) -> Self {
+        self.key_path = Some(key_path);
+        self
+    }
+
+    /// Sets the host ID for credential lookup.
+    #[must_use]
+    pub fn with_host_id(mut self, host_id: u32) -> Self {
+        self.host_id = Some(host_id);
+        self
+    }
+
+    /// Returns connection string for display (user@host or user@host:port).
+    #[must_use]
+    pub fn display_string(&self) -> String {
+        if self.port == 22 {
+            format!("{}@{}", self.username, self.hostname)
+        } else {
+            format!("{}@{}:{}", self.username, self.hostname, self.port)
+        }
+    }
+}
+
 /// Terminal emulator combining PTY and grid.
 pub struct Terminal {
     /// The PTY instance.
@@ -57,6 +127,8 @@ pub struct Terminal {
     pending_password: Option<String>,
     /// Buffer to detect password prompt.
     output_buffer: String,
+    /// SSH connection context (None for local terminals).
+    ssh_context: Option<SSHContext>,
 }
 
 impl Terminal {
@@ -133,7 +205,12 @@ impl Terminal {
         args.push(format!("{}@{}", user, host));
         config.args = args;
 
-        Self::with_config(config)
+        let mut terminal = Self::with_config(config)?;
+
+        // Store SSH context for split inheritance
+        terminal.ssh_context = Some(SSHContext::new(user.to_string(), host.to_string(), port));
+
+        Ok(terminal)
     }
 
     /// Finds the SSH executable path.
@@ -197,6 +274,7 @@ impl Terminal {
             initial_cwd,
             pending_password: None,
             output_buffer: String::new(),
+            ssh_context: None,
         })
     }
 
@@ -205,6 +283,28 @@ impl Terminal {
     pub fn set_pending_password(&mut self, password: String) {
         self.pending_password = Some(password);
         self.output_buffer.clear();
+    }
+
+    /// Sets the SSH context password (for split inheritance).
+    ///
+    /// This stores the password in the SSH context so that when the terminal
+    /// is split, the new pane can inherit the password for auto-login.
+    pub fn set_ssh_password(&mut self, password: String) {
+        if let Some(ref mut ctx) = self.ssh_context {
+            ctx.password = Some(password);
+        }
+    }
+
+    /// Returns the SSH context if this is an SSH terminal.
+    #[must_use]
+    pub fn ssh_context(&self) -> Option<&SSHContext> {
+        self.ssh_context.as_ref()
+    }
+
+    /// Returns true if this is an SSH terminal.
+    #[must_use]
+    pub fn is_ssh(&self) -> bool {
+        self.ssh_context.is_some()
     }
 
     /// Returns the terminal grid.
@@ -561,6 +661,22 @@ impl Terminal {
     fn check_command_intercept(&self) -> Option<String> {
         let trimmed = self.input_buffer.trim();
 
+        // Debug: show buffer contents
+        if trimmed == "debug buffer" {
+            let escaped: String = self
+                .input_buffer
+                .chars()
+                .map(|c| {
+                    if c.is_ascii_control() {
+                        format!("\\x{:02x}", c as u8)
+                    } else {
+                        c.to_string()
+                    }
+                })
+                .collect();
+            return Some(format!("debug buffer:{}", escaped));
+        }
+
         // Check for "open" command
         if trimmed == "open" {
             return Some("open".to_string());
@@ -577,6 +693,16 @@ impl Terminal {
         // Check for "update" command
         if trimmed == "update" {
             return Some("update".to_string());
+        }
+
+        // Check for "debug ssh" command
+        if trimmed == "debug ssh" {
+            return Some("debug ssh".to_string());
+        }
+
+        // Check for "debug tabs" command
+        if trimmed == "debug tabs" {
+            return Some("debug tabs".to_string());
         }
 
         None
