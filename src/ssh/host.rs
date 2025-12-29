@@ -346,7 +346,8 @@ impl SSHHostList {
         }
 
         if credentials.save {
-            self.credentials.insert(Self::id_to_key(host_id), credentials);
+            self.credentials
+                .insert(Self::id_to_key(host_id), credentials);
         }
         true
     }

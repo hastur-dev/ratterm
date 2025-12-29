@@ -731,7 +731,9 @@ impl SSHManagerSelector {
     /// Starts editing the name of the selected host.
     pub fn start_edit_name(&mut self) {
         // Extract values first to avoid borrow conflict
-        let host_info = self.selected_host().map(|h| (h.host.id, h.host.display().to_string()));
+        let host_info = self
+            .selected_host()
+            .map(|h| (h.host.id, h.host.display().to_string()));
 
         if let Some((id, display_name)) = host_info {
             self.edit_name_target = Some(id);
@@ -1129,7 +1131,9 @@ impl<'a> SSHManagerWidget<'a> {
 
         // Hostname label
         let hostname_label_style = if current_field == AddHostField::Hostname {
-            Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD)
         } else {
             Style::default().fg(Color::White)
         };
@@ -1153,7 +1157,9 @@ impl<'a> SSHManagerWidget<'a> {
 
         // Port label
         let port_label_style = if current_field == AddHostField::Port {
-            Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD)
         } else {
             Style::default().fg(Color::White)
         };
@@ -1177,11 +1183,14 @@ impl<'a> SSHManagerWidget<'a> {
 
         // Display name label
         let display_name_label_style = if current_field == AddHostField::DisplayName {
-            Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD)
         } else {
             Style::default().fg(Color::White)
         };
-        let display_name_label = Paragraph::new("Display Name (optional):").style(display_name_label_style);
+        let display_name_label =
+            Paragraph::new("Display Name (optional):").style(display_name_label_style);
         display_name_label.render(chunks[7], buf);
 
         // Display name input
@@ -1201,7 +1210,9 @@ impl<'a> SSHManagerWidget<'a> {
 
         // Username label
         let username_label_style = if current_field == AddHostField::Username {
-            Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD)
         } else {
             Style::default().fg(Color::White)
         };
@@ -1225,7 +1236,9 @@ impl<'a> SSHManagerWidget<'a> {
 
         // Password label
         let password_label_style = if current_field == AddHostField::Password {
-            Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD)
         } else {
             Style::default().fg(Color::White)
         };
