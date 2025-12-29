@@ -70,6 +70,9 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 unicode-width = "0.2"
 unicode-segmentation = "1.12"
 
+# SSH authentication testing
+ssh2 = "0.9"
+
 [dev-dependencies]
 proptest = "1.6"
 tempfile = "3.15"

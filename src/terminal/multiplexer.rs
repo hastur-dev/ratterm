@@ -107,6 +107,32 @@ impl TerminalGrid {
         })
     }
 
+    /// Creates a new grid with an SSH terminal.
+    ///
+    /// # Errors
+    /// Returns error if terminal creation fails.
+    pub fn new_ssh(
+        cols: u16,
+        rows: u16,
+        user: &str,
+        host: &str,
+        port: u16,
+    ) -> Result<Self, PtyError> {
+        assert!(cols > 0, "Columns must be positive");
+        assert!(rows > 0, "Rows must be positive");
+
+        let terminal = Terminal::with_ssh(cols, rows, user, host, port)?;
+
+        Ok(Self {
+            terminals: [Some(terminal), None, None, None],
+            focus: 0,
+            cols: 1,
+            rows: 1,
+            width: cols,
+            height: rows,
+        })
+    }
+
     /// Returns the number of active terminals in the grid.
     #[must_use]
     pub fn terminal_count(&self) -> usize {
@@ -640,6 +666,65 @@ impl TerminalMultiplexer {
         let grid = TerminalGrid::new(self.cols, self.rows, shell_path)?;
         let index = self.tabs.len();
         let tab = TerminalTab::new(grid, format!("Terminal {}", index + 1), index);
+
+        self.tabs.push(tab);
+        self.active_tab = index;
+        Ok(index)
+    }
+
+    /// Adds a new terminal tab with an SSH connection.
+    ///
+    /// # Arguments
+    /// * `user` - SSH username
+    /// * `host` - SSH hostname or IP address
+    /// * `port` - SSH port (typically 22)
+    ///
+    /// # Errors
+    /// Returns error if maximum tabs reached or SSH session creation fails.
+    pub fn add_ssh_tab(&mut self, user: &str, host: &str, port: u16) -> Result<usize, PtyError> {
+        self.add_ssh_tab_with_password(user, host, port, None)
+    }
+
+    /// Adds a new SSH terminal tab with optional password for auto-login.
+    ///
+    /// # Arguments
+    /// * `user` - SSH username
+    /// * `host` - SSH host (IP or hostname)
+    /// * `port` - SSH port (typically 22)
+    /// * `password` - Optional password for auto-login
+    ///
+    /// # Errors
+    /// Returns error if maximum tabs reached or SSH session creation fails.
+    pub fn add_ssh_tab_with_password(
+        &mut self,
+        user: &str,
+        host: &str,
+        port: u16,
+        password: Option<&str>,
+    ) -> Result<usize, PtyError> {
+        if self.tabs.len() >= MAX_TABS {
+            return Err(PtyError::MaxTabsReached);
+        }
+
+        let mut grid = TerminalGrid::new_ssh(self.cols, self.rows, user, host, port)?;
+
+        // If password provided, set up auto-password for the terminal
+        if let Some(pwd) = password {
+            if let Some(terminal) = grid.focused_mut() {
+                terminal.set_pending_password(pwd.to_string());
+            }
+        }
+
+        let index = self.tabs.len();
+
+        // Create tab name showing SSH connection
+        let tab_name = if port == 22 {
+            format!("SSH: {}@{}", user, host)
+        } else {
+            format!("SSH: {}@{}:{}", user, host, port)
+        };
+
+        let tab = TerminalTab::new(grid, tab_name, index);
 
         self.tabs.push(tab);
         self.active_tab = index;

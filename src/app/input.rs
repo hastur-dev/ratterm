@@ -152,6 +152,21 @@ impl App {
                 self.prev_file();
                 true
             }
+            // Ctrl+Shift+U: SSH Manager
+            (m, KeyCode::Char('u') | KeyCode::Char('U'))
+                if m == KeyModifiers::CONTROL | KeyModifiers::SHIFT =>
+            {
+                self.show_ssh_manager();
+                true
+            }
+            // SSH Quick Connect (Ctrl+1-9 by default, configurable via set_ssh_tab)
+            (KeyModifiers::CONTROL, KeyCode::Char(c @ '1'..='9'))
+                if self.config.ssh_number_setting =>
+            {
+                let idx = (c as u8 - b'1') as usize;
+                self.ssh_connect_by_index(idx);
+                true
+            }
             _ => false,
         }
     }
@@ -323,6 +338,30 @@ impl App {
         // Handle theme selector specially
         if self.popup.kind().is_theme_selector() {
             self.handle_theme_selector_key(key);
+            return;
+        }
+
+        // Handle SSH Manager specially
+        if self.popup.kind().is_ssh_manager() {
+            self.handle_ssh_manager_key(key);
+            return;
+        }
+
+        // Handle SSH Credential Prompt specially
+        if self.popup.kind().is_ssh_credential_prompt() {
+            self.handle_ssh_credential_key(key);
+            return;
+        }
+
+        // Handle SSH Subnet Entry specially
+        if self.popup.kind().is_ssh_subnet_entry() {
+            self.handle_ssh_subnet_key(key);
+            return;
+        }
+
+        // Handle SSH Master Password specially
+        if self.popup.kind().is_ssh_master_password() {
+            self.handle_ssh_master_password_key(key);
             return;
         }
 
@@ -1429,6 +1468,310 @@ impl App {
             if let Some(terminal) = terminals.active_terminal_mut() {
                 terminal.finalize_selection();
             }
+        }
+    }
+
+    /// Handles keys for the SSH Manager popup.
+    fn handle_ssh_manager_key(&mut self, key: KeyEvent) {
+        use crate::ui::ssh_manager::SSHManagerMode;
+
+        let Some(ref mut manager) = self.ssh_manager else {
+            return;
+        };
+
+        match manager.mode() {
+            SSHManagerMode::List => {
+                match (key.modifiers, key.code) {
+                    // Escape - Close SSH Manager
+                    (KeyModifiers::NONE, KeyCode::Esc) => {
+                        self.hide_ssh_manager();
+                    }
+                    // Navigation
+                    (KeyModifiers::NONE, KeyCode::Down)
+                    | (KeyModifiers::NONE, KeyCode::Char('j')) => {
+                        manager.select_next();
+                    }
+                    (KeyModifiers::NONE, KeyCode::Up)
+                    | (KeyModifiers::NONE, KeyCode::Char('k')) => {
+                        manager.select_prev();
+                    }
+                    (KeyModifiers::NONE, KeyCode::Home) => {
+                        manager.select_first();
+                    }
+                    (KeyModifiers::NONE, KeyCode::End) => {
+                        manager.select_last();
+                    }
+                    // Actions
+                    (KeyModifiers::NONE, KeyCode::Enter) => {
+                        // Connect to selected host
+                        self.ssh_connect_selected();
+                    }
+                    (KeyModifiers::NONE, KeyCode::Char('s')) => {
+                        // Start auto network scan
+                        self.start_ssh_scan();
+                    }
+                    (KeyModifiers::SHIFT, KeyCode::Char('S')) => {
+                        // Show subnet entry for manual scan
+                        self.show_ssh_subnet_prompt();
+                    }
+                    (KeyModifiers::NONE, KeyCode::Char('a'))
+                    | (KeyModifiers::SHIFT, KeyCode::Char('A')) => {
+                        // Add new host manually
+                        self.show_ssh_add_host();
+                    }
+                    (KeyModifiers::NONE, KeyCode::Char('d'))
+                    | (KeyModifiers::SHIFT, KeyCode::Char('D'))
+                    | (KeyModifiers::NONE, KeyCode::Delete) => {
+                        // Delete selected host
+                        self.delete_selected_ssh_host();
+                    }
+                    (KeyModifiers::NONE, KeyCode::Char('c')) => {
+                        // Start credential scan (scan + authenticate)
+                        self.show_scan_credential_entry();
+                    }
+                    (KeyModifiers::NONE, KeyCode::Char('e')) => {
+                        // Edit selected host name
+                        if let Some(ref mut m) = self.ssh_manager {
+                            m.start_edit_name();
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            SSHManagerMode::Scanning | SSHManagerMode::AuthenticatedScanning => {
+                // Escape - Cancel scan
+                if let (KeyModifiers::NONE, KeyCode::Esc) = (key.modifiers, key.code) {
+                    self.cancel_ssh_scan();
+                }
+            }
+            SSHManagerMode::CredentialEntry => {
+                self.handle_ssh_credential_input(key);
+            }
+            SSHManagerMode::Connecting => {
+                // Can't interrupt connection attempt
+            }
+            SSHManagerMode::AddHost => {
+                self.handle_ssh_add_host_input(key);
+            }
+            SSHManagerMode::ScanCredentialEntry => {
+                self.handle_scan_credential_input(key);
+            }
+            SSHManagerMode::EditName => {
+                self.handle_edit_name_input(key);
+            }
+        }
+    }
+
+    /// Handles keys for the SSH Credential Prompt popup.
+    fn handle_ssh_credential_key(&mut self, key: KeyEvent) {
+        self.handle_ssh_credential_input(key);
+    }
+
+    /// Handles credential input within the SSH manager.
+    fn handle_ssh_credential_input(&mut self, key: KeyEvent) {
+        let Some(ref mut manager) = self.ssh_manager else {
+            return;
+        };
+
+        match (key.modifiers, key.code) {
+            // Escape - Cancel credential entry
+            (KeyModifiers::NONE, KeyCode::Esc) => {
+                manager.cancel_credential_entry();
+            }
+            // Tab - Switch between username and password fields
+            (KeyModifiers::NONE, KeyCode::Tab) => {
+                manager.next_credential_field();
+            }
+            (KeyModifiers::SHIFT, KeyCode::Tab) | (KeyModifiers::SHIFT, KeyCode::BackTab) => {
+                manager.prev_credential_field();
+            }
+            // Enter - Submit credentials
+            (KeyModifiers::NONE, KeyCode::Enter) => {
+                self.submit_ssh_credentials();
+            }
+            // Backspace
+            (KeyModifiers::NONE, KeyCode::Backspace) => {
+                manager.credential_backspace();
+            }
+            // Character input (space toggles save checkbox when not in a text field)
+            (KeyModifiers::NONE, KeyCode::Char(c)) | (KeyModifiers::SHIFT, KeyCode::Char(c)) => {
+                manager.credential_insert(c);
+            }
+            _ => {}
+        }
+    }
+
+    /// Handles add host input within the SSH manager.
+    fn handle_ssh_add_host_input(&mut self, key: KeyEvent) {
+        let Some(ref mut manager) = self.ssh_manager else {
+            return;
+        };
+
+        match (key.modifiers, key.code) {
+            // Escape - Cancel add host
+            (KeyModifiers::NONE, KeyCode::Esc) => {
+                manager.cancel_add_host();
+            }
+            // Tab - Switch between fields
+            (KeyModifiers::NONE, KeyCode::Tab) => {
+                manager.next_add_host_field();
+            }
+            (KeyModifiers::SHIFT, KeyCode::Tab) | (KeyModifiers::SHIFT, KeyCode::BackTab) => {
+                manager.prev_add_host_field();
+            }
+            // Enter - Submit new host
+            (KeyModifiers::NONE, KeyCode::Enter) => {
+                self.submit_add_ssh_host();
+            }
+            // Backspace
+            (KeyModifiers::NONE, KeyCode::Backspace) => {
+                manager.add_host_backspace();
+            }
+            // Character input
+            (KeyModifiers::NONE, KeyCode::Char(c)) | (KeyModifiers::SHIFT, KeyCode::Char(c)) => {
+                manager.add_host_insert(c);
+            }
+            _ => {}
+        }
+    }
+
+    /// Handles keys for the SSH Subnet Entry popup.
+    fn handle_ssh_subnet_key(&mut self, key: KeyEvent) {
+        match (key.modifiers, key.code) {
+            // Escape - Cancel
+            (KeyModifiers::NONE, KeyCode::Esc) => {
+                self.hide_popup();
+            }
+            // Enter - Start scan with entered subnet (or auto-detect if empty)
+            (KeyModifiers::NONE, KeyCode::Enter) => {
+                let subnet = self.popup.input().to_string();
+                self.hide_popup();
+                if subnet.is_empty() {
+                    self.start_ssh_scan();
+                } else {
+                    self.start_ssh_scan_subnet(&subnet);
+                }
+            }
+            // Backspace
+            (KeyModifiers::NONE, KeyCode::Backspace) => {
+                self.popup.backspace();
+            }
+            // Character input
+            (KeyModifiers::NONE, KeyCode::Char(c)) | (KeyModifiers::SHIFT, KeyCode::Char(c)) => {
+                self.popup.insert_char(c);
+            }
+            _ => {}
+        }
+    }
+
+    /// Handles keys for the SSH Master Password popup.
+    fn handle_ssh_master_password_key(&mut self, key: KeyEvent) {
+        match (key.modifiers, key.code) {
+            // Escape - Cancel
+            (KeyModifiers::NONE, KeyCode::Esc) => {
+                self.hide_popup();
+            }
+            // Enter - Submit master password
+            (KeyModifiers::NONE, KeyCode::Enter) => {
+                let password = self.popup.input().to_string();
+                self.hide_popup();
+                self.unlock_ssh_storage(&password);
+            }
+            // Backspace
+            (KeyModifiers::NONE, KeyCode::Backspace) => {
+                self.popup.backspace();
+            }
+            // Character input
+            (KeyModifiers::NONE, KeyCode::Char(c)) | (KeyModifiers::SHIFT, KeyCode::Char(c)) => {
+                self.popup.insert_char(c);
+            }
+            _ => {}
+        }
+    }
+
+    /// Shows the SSH subnet entry prompt.
+    pub(super) fn show_ssh_subnet_prompt(&mut self) {
+        self.show_popup(PopupKind::SSHSubnetEntry);
+    }
+
+    /// Shows the add SSH host form.
+    pub(super) fn show_ssh_add_host(&mut self) {
+        if let Some(ref mut manager) = self.ssh_manager {
+            manager.start_add_host();
+        }
+    }
+
+    /// Connects to the currently selected SSH host.
+    fn ssh_connect_selected(&mut self) {
+        self.show_ssh_credential_prompt();
+    }
+
+    /// Shows the scan credential entry form.
+    pub(super) fn show_scan_credential_entry(&mut self) {
+        if let Some(ref mut manager) = self.ssh_manager {
+            manager.start_scan_credential_entry();
+        }
+    }
+
+    /// Handles input in the scan credential entry form.
+    fn handle_scan_credential_input(&mut self, key: KeyEvent) {
+        let Some(ref mut manager) = self.ssh_manager else {
+            return;
+        };
+
+        match (key.modifiers, key.code) {
+            // Escape - Cancel
+            (KeyModifiers::NONE, KeyCode::Esc) => {
+                manager.cancel_scan_credential_entry();
+            }
+            // Tab - Next field
+            (KeyModifiers::NONE, KeyCode::Tab) => {
+                manager.next_scan_credential_field();
+            }
+            // Shift+Tab - Previous field
+            (KeyModifiers::SHIFT, KeyCode::Tab) | (KeyModifiers::SHIFT, KeyCode::BackTab) => {
+                manager.prev_scan_credential_field();
+            }
+            // Enter - Start authenticated scan
+            (KeyModifiers::NONE, KeyCode::Enter) => {
+                self.start_authenticated_ssh_scan();
+            }
+            // Backspace
+            (KeyModifiers::NONE, KeyCode::Backspace) => {
+                manager.scan_credential_backspace();
+            }
+            // Character input
+            (KeyModifiers::NONE, KeyCode::Char(c)) | (KeyModifiers::SHIFT, KeyCode::Char(c)) => {
+                manager.scan_credential_insert(c);
+            }
+            _ => {}
+        }
+    }
+
+    /// Handles input in the edit name form.
+    fn handle_edit_name_input(&mut self, key: KeyEvent) {
+        let Some(ref mut manager) = self.ssh_manager else {
+            return;
+        };
+
+        match (key.modifiers, key.code) {
+            // Escape - Cancel
+            (KeyModifiers::NONE, KeyCode::Esc) => {
+                manager.cancel_edit_name();
+            }
+            // Enter - Save the name
+            (KeyModifiers::NONE, KeyCode::Enter) => {
+                self.save_host_name();
+            }
+            // Backspace
+            (KeyModifiers::NONE, KeyCode::Backspace) => {
+                manager.edit_name_backspace();
+            }
+            // Character input
+            (KeyModifiers::NONE, KeyCode::Char(c)) | (KeyModifiers::SHIFT, KeyCode::Char(c)) => {
+                manager.edit_name_insert(c);
+            }
+            _ => {}
         }
     }
 }

@@ -45,6 +45,16 @@ pub enum PopupKind {
     ThemeSelector,
     /// Extension approval prompt for first-time extension load.
     ExtensionApproval,
+    /// SSH Manager for managing SSH connections.
+    SSHManager,
+    /// SSH credential entry dialog.
+    SSHCredentialPrompt,
+    /// SSH storage mode selection (first-time setup).
+    SSHStorageSetup,
+    /// SSH master password entry.
+    SSHMasterPassword,
+    /// SSH network scan subnet entry.
+    SSHSubnetEntry,
 }
 
 impl PopupKind {
@@ -65,6 +75,11 @@ impl PopupKind {
             Self::ShellInstallPrompt => "Shell Not Available",
             Self::ThemeSelector => "Select Theme",
             Self::ExtensionApproval => "Extension Approval Required",
+            Self::SSHManager => "SSH Manager",
+            Self::SSHCredentialPrompt => "SSH Credentials",
+            Self::SSHStorageSetup => "SSH Storage Setup",
+            Self::SSHMasterPassword => "Master Password",
+            Self::SSHSubnetEntry => "Network Scan",
         }
     }
 
@@ -85,6 +100,11 @@ impl PopupKind {
             Self::ShellInstallPrompt => "",
             Self::ThemeSelector => "",
             Self::ExtensionApproval => "",
+            Self::SSHManager => "",
+            Self::SSHCredentialPrompt => "Username: ",
+            Self::SSHStorageSetup => "",
+            Self::SSHMasterPassword => "Password: ",
+            Self::SSHSubnetEntry => "Subnet (e.g., 192.168.1.0/24): ",
         }
     }
 
@@ -128,6 +148,49 @@ impl PopupKind {
     #[must_use]
     pub fn is_extension_approval(&self) -> bool {
         matches!(self, Self::ExtensionApproval)
+    }
+
+    /// Returns true if this popup is the SSH manager.
+    #[must_use]
+    pub fn is_ssh_manager(&self) -> bool {
+        matches!(self, Self::SSHManager)
+    }
+
+    /// Returns true if this popup is an SSH credential prompt.
+    #[must_use]
+    pub fn is_ssh_credential_prompt(&self) -> bool {
+        matches!(self, Self::SSHCredentialPrompt)
+    }
+
+    /// Returns true if this popup is the SSH storage setup.
+    #[must_use]
+    pub fn is_ssh_storage_setup(&self) -> bool {
+        matches!(self, Self::SSHStorageSetup)
+    }
+
+    /// Returns true if this popup is the SSH master password entry.
+    #[must_use]
+    pub fn is_ssh_master_password(&self) -> bool {
+        matches!(self, Self::SSHMasterPassword)
+    }
+
+    /// Returns true if this popup is the SSH subnet entry.
+    #[must_use]
+    pub fn is_ssh_subnet_entry(&self) -> bool {
+        matches!(self, Self::SSHSubnetEntry)
+    }
+
+    /// Returns true if this is any SSH-related popup.
+    #[must_use]
+    pub fn is_ssh_popup(&self) -> bool {
+        matches!(
+            self,
+            Self::SSHManager
+                | Self::SSHCredentialPrompt
+                | Self::SSHStorageSetup
+                | Self::SSHMasterPassword
+                | Self::SSHSubnetEntry
+        )
     }
 }
 
@@ -653,6 +716,18 @@ impl CommandPalette {
                 Some("Ctrl+Left"),
             ),
             Command::new("terminal.selectShell", "Select Shell", "Terminal", None),
+            // SSH commands
+            Command::new(
+                "ssh.manager",
+                "Open SSH Manager",
+                "SSH",
+                Some("Ctrl+Shift+U"),
+            ),
+            Command::new("ssh.scan", "Scan Network", "SSH", None),
+            Command::new("ssh.addHost", "Add Host", "SSH", None),
+            Command::new("ssh.connect1", "Quick Connect #1", "SSH", Some("Ctrl+1")),
+            Command::new("ssh.connect2", "Quick Connect #2", "SSH", Some("Ctrl+2")),
+            Command::new("ssh.connect3", "Quick Connect #3", "SSH", Some("Ctrl+3")),
             // Theme commands
             Command::new("theme.select", "Select Theme", "Theme", None),
             Command::new("theme.dark", "Dark Theme", "Theme", None),
