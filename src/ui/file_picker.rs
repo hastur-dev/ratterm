@@ -11,6 +11,7 @@ use ratatui::{
 };
 
 use crate::filebrowser::{EntryKind, FileBrowser};
+use crate::remote::RemoteFileBrowser;
 
 /// File picker widget.
 pub struct FilePickerWidget<'a> {
@@ -208,6 +209,221 @@ impl Widget for FileInfoBar<'_> {
         let info = format!("{} items ({} files, {} dirs)", total, files, dirs);
 
         // Explicit background to prevent Windows rendering artifacts
+        let bg_color = Color::Rgb(30, 30, 30);
+        let style = Style::default().fg(Color::DarkGray).bg(bg_color);
+        let para = Paragraph::new(info).style(style);
+        para.render(area, buf);
+    }
+}
+
+/// Remote file picker widget for SSH/SFTP browsing.
+pub struct RemoteFilePickerWidget<'a> {
+    browser: &'a RemoteFileBrowser,
+    focused: bool,
+}
+
+impl<'a> RemoteFilePickerWidget<'a> {
+    /// Creates a new remote file picker widget.
+    #[must_use]
+    pub fn new(browser: &'a RemoteFileBrowser) -> Self {
+        Self {
+            browser,
+            focused: false,
+        }
+    }
+
+    /// Sets whether the widget is focused.
+    #[must_use]
+    pub fn focused(mut self, focused: bool) -> Self {
+        self.focused = focused;
+        self
+    }
+}
+
+impl Widget for RemoteFilePickerWidget<'_> {
+    fn render(self, area: Rect, buf: &mut Buffer) {
+        let bg_color = Color::Rgb(30, 30, 30);
+        let border_style = if self.focused {
+            Style::default().fg(Color::Magenta).bg(bg_color)
+        } else {
+            Style::default().fg(Color::DarkGray).bg(bg_color)
+        };
+
+        // Show SSH context in title
+        let ctx = self.browser.ssh_context();
+        let title = format!(
+            " [SSH] {}@{}: {} ",
+            ctx.username,
+            ctx.hostname,
+            self.browser.current_dir()
+        );
+
+        let block = Block::default()
+            .title(title)
+            .borders(Borders::ALL)
+            .border_style(border_style);
+
+        let inner = block.inner(area);
+        block.render(area, buf);
+
+        if inner.width < 2 || inner.height < 1 {
+            return;
+        }
+
+        // Get entries to display
+        let entries = self.browser.filtered_entries();
+        let selected = self.browser.selected();
+        let scroll_offset = self.browser.scroll_offset();
+
+        // Filter hint if filtering
+        let filter = self.browser.filter();
+        let header_height = if filter.is_empty() { 0 } else { 1 };
+
+        // Draw filter line if active
+        if !filter.is_empty() && inner.height > 0 {
+            let filter_line = Line::from(vec![
+                Span::styled("Filter: ", Style::default().fg(Color::Yellow)),
+                Span::styled(filter, Style::default().fg(Color::White)),
+            ]);
+            let filter_para = Paragraph::new(filter_line);
+            filter_para.render(Rect::new(inner.x, inner.y, inner.width, 1), buf);
+        }
+
+        // Calculate visible area for entries
+        let entries_area = Rect::new(
+            inner.x,
+            inner.y + header_height,
+            inner.width,
+            inner.height.saturating_sub(header_height),
+        );
+
+        // Draw entries
+        let visible_count = entries_area.height as usize;
+
+        for (i, entry) in entries
+            .iter()
+            .skip(scroll_offset)
+            .take(visible_count)
+            .enumerate()
+        {
+            let y = entries_area.y + i as u16;
+            if y >= entries_area.bottom() {
+                break;
+            }
+
+            let is_selected = scroll_offset + i == selected;
+
+            // Determine style - use magenta for remote directories
+            let (icon_style, name_style) = if is_selected {
+                (
+                    Style::default()
+                        .bg(Color::Magenta)
+                        .fg(Color::White)
+                        .add_modifier(Modifier::BOLD),
+                    Style::default().bg(Color::Magenta).fg(Color::White),
+                )
+            } else {
+                let fg = if entry.is_parent {
+                    Color::Cyan
+                } else if entry.is_directory {
+                    Color::Rgb(180, 100, 200) // Purple for remote directories
+                } else {
+                    Color::White
+                };
+                (
+                    Style::default()
+                        .fg(fg)
+                        .bg(bg_color)
+                        .add_modifier(Modifier::BOLD),
+                    Style::default().fg(fg).bg(bg_color),
+                )
+            };
+
+            // Build the line with icon
+            let icon = if entry.is_parent {
+                ".."
+            } else if entry.is_directory {
+                "📁"
+            } else {
+                "📄"
+            };
+            let name = &entry.name;
+
+            // Calculate available space
+            let icon_len = icon.chars().count();
+            let max_name_len = (entries_area.width as usize).saturating_sub(icon_len + 2);
+            let display_name: String = if name.len() > max_name_len {
+                format!("{}...", &name[..max_name_len.saturating_sub(3)])
+            } else {
+                name.to_string()
+            };
+
+            let line = Line::from(vec![
+                Span::styled(icon, icon_style),
+                Span::raw(" "),
+                Span::styled(display_name, name_style),
+            ]);
+
+            // Fill background for selected item
+            if is_selected {
+                for x in entries_area.x..entries_area.right() {
+                    if let Some(cell) = buf.cell_mut((x, y)) {
+                        cell.set_bg(Color::Magenta);
+                    }
+                }
+            }
+
+            // Render the line
+            let line_para = Paragraph::new(line);
+            line_para.render(Rect::new(entries_area.x, y, entries_area.width, 1), buf);
+        }
+
+        // Draw scrollbar if needed
+        if entries.len() > visible_count {
+            let scrollbar_height = entries_area.height.max(1);
+            let scroll_ratio =
+                scroll_offset as f32 / entries.len().saturating_sub(visible_count).max(1) as f32;
+            let thumb_pos = (scroll_ratio * (scrollbar_height - 1) as f32) as u16;
+
+            let scrollbar_x = entries_area.right().saturating_sub(1);
+            for y in 0..scrollbar_height {
+                let char = if y == thumb_pos { '█' } else { '░' };
+                let style = Style::default().fg(Color::DarkGray).bg(bg_color);
+                if let Some(cell) = buf.cell_mut((scrollbar_x, entries_area.y + y)) {
+                    cell.set_char(char);
+                    cell.set_style(style);
+                }
+            }
+        }
+    }
+}
+
+/// Remote file info bar showing current path and file count.
+pub struct RemoteFileInfoBar<'a> {
+    browser: &'a RemoteFileBrowser,
+}
+
+impl<'a> RemoteFileInfoBar<'a> {
+    /// Creates a new remote file info bar.
+    #[must_use]
+    pub fn new(browser: &'a RemoteFileBrowser) -> Self {
+        Self { browser }
+    }
+}
+
+impl Widget for RemoteFileInfoBar<'_> {
+    fn render(self, area: Rect, buf: &mut Buffer) {
+        if area.height < 1 {
+            return;
+        }
+
+        let entries = self.browser.filtered_entries();
+        let total = entries.len();
+        let files = entries.iter().filter(|e| !e.is_directory).count();
+        let dirs = entries.iter().filter(|e| e.is_directory).count();
+
+        let info = format!("{} items ({} files, {} dirs)", total, files, dirs);
+
         let bg_color = Color::Rgb(30, 30, 30);
         let style = Style::default().fg(Color::DarkGray).bg(bg_color);
         let para = Paragraph::new(info).style(style);

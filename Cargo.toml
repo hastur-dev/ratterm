@@ -1,6 +1,6 @@
 [package]
 name = "ratterm"
-version = "0.1.5"
+version = "0.1.7"
 edition = "2024"
 rust-version = "1.85"
 description = "A split-terminal TUI with PTY terminal and code editor"
@@ -58,7 +58,7 @@ tar = "0.4"
 axum = "0.8"
 tower-http = { version = "0.6", features = ["cors", "trace"] }
 tokio-stream = { version = "0.1", features = ["sync"] }
-uuid = { version = "1.0", features = ["v4"] }
+uuid = { version = "1.11", features = ["v4"] }
 
 # Utilities
 atty = "0.2"
