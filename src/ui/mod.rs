@@ -7,6 +7,7 @@ pub mod editor_widget;
 pub mod file_picker;
 pub mod layout;
 pub mod popup;
+pub mod ssh_manager;
 pub mod statusbar;
 pub mod terminal_tabs;
 pub mod terminal_widget;
@@ -16,3 +17,4 @@ pub use popup::{
     Command, CommandPalette, ModeSwitcher, ModeSwitcherWidget, Popup, PopupKind, PopupWidget,
     ShellInstallPrompt, ShellInstallPromptWidget, ShellSelector, ShellSelectorWidget,
 };
+pub use ssh_manager::{SSHManagerMode, SSHManagerSelector, SSHManagerWidget};

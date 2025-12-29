@@ -13,6 +13,7 @@ use std::path::PathBuf;
 pub use keybindings::{KeyAction, KeyBinding, KeybindingMode, Keybindings};
 pub use shell::{ShellDetector, ShellInfo, ShellInstallInfo, ShellInstaller, ShellType};
 
+use crate::ssh::StorageMode;
 use crate::theme::{ThemeManager, ThemeSettings};
 
 /// Default .ratrc file content with all commands documented.
@@ -128,6 +129,12 @@ pub struct Config {
     pub theme_manager: ThemeManager,
     /// Whether to always show the IDE pane (false = terminal-first mode).
     pub ide_always: bool,
+    /// SSH credential storage mode.
+    pub ssh_storage_mode: StorageMode,
+    /// SSH quick connect hotkey prefix (e.g., "ctrl", "ctrl+shift").
+    pub set_ssh_tab: String,
+    /// Enable SSH quick connect with numbers (set_ssh_tab + 1-9).
+    pub ssh_number_setting: bool,
 }
 
 impl Default for Config {
@@ -140,6 +147,9 @@ impl Default for Config {
             auto_close_tabs_on_shell_change: false,
             theme_manager: ThemeManager::default(),
             ide_always: false, // Terminal-first by default
+            ssh_storage_mode: StorageMode::Plaintext,
+            set_ssh_tab: "ctrl".to_string(),
+            ssh_number_setting: true,
         }
     }
 }
@@ -279,6 +289,17 @@ impl Config {
             }
             "ide_always" | "ide-always" => {
                 self.ide_always =
+                    matches!(value.to_lowercase().as_str(), "true" | "yes" | "1" | "on");
+            }
+            "ssh_storage_mode" => {
+                self.ssh_storage_mode = StorageMode::parse(value);
+            }
+            "set_ssh_tab" => {
+                // Store the prefix for SSH quick connect (e.g., "ctrl", "ctrl+shift")
+                self.set_ssh_tab = value.to_lowercase();
+            }
+            "ssh_number_setting" => {
+                self.ssh_number_setting =
                     matches!(value.to_lowercase().as_str(), "true" | "yes" | "1" | "on");
             }
             _ => {

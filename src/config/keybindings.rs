@@ -74,6 +74,18 @@ pub enum KeyAction {
     EditorUndo,
     EditorRedo,
     EditorSave,
+
+    // SSH Manager
+    SSHManager,
+    SSHQuickConnect1,
+    SSHQuickConnect2,
+    SSHQuickConnect3,
+    SSHQuickConnect4,
+    SSHQuickConnect5,
+    SSHQuickConnect6,
+    SSHQuickConnect7,
+    SSHQuickConnect8,
+    SSHQuickConnect9,
 }
 
 impl KeyAction {
@@ -124,6 +136,16 @@ impl KeyAction {
             "editor_undo" => Some(Self::EditorUndo),
             "editor_redo" => Some(Self::EditorRedo),
             "editor_save" => Some(Self::EditorSave),
+            "ssh_manager" => Some(Self::SSHManager),
+            "ssh_quick_connect_1" => Some(Self::SSHQuickConnect1),
+            "ssh_quick_connect_2" => Some(Self::SSHQuickConnect2),
+            "ssh_quick_connect_3" => Some(Self::SSHQuickConnect3),
+            "ssh_quick_connect_4" => Some(Self::SSHQuickConnect4),
+            "ssh_quick_connect_5" => Some(Self::SSHQuickConnect5),
+            "ssh_quick_connect_6" => Some(Self::SSHQuickConnect6),
+            "ssh_quick_connect_7" => Some(Self::SSHQuickConnect7),
+            "ssh_quick_connect_8" => Some(Self::SSHQuickConnect8),
+            "ssh_quick_connect_9" => Some(Self::SSHQuickConnect9),
             _ => None,
         }
     }
@@ -398,6 +420,50 @@ impl Keybindings {
         self.set(
             EditorSave,
             KeyBinding::new(KeyModifiers::CONTROL, Char('s')),
+        );
+
+        // SSH Manager (Ctrl+Shift+U)
+        self.set(
+            SSHManager,
+            KeyBinding::new(KeyModifiers::CONTROL | KeyModifiers::SHIFT, Char('u')),
+        );
+
+        // SSH Quick Connect (Ctrl+1-9 by default, configurable)
+        self.set(
+            SSHQuickConnect1,
+            KeyBinding::new(KeyModifiers::CONTROL, Char('1')),
+        );
+        self.set(
+            SSHQuickConnect2,
+            KeyBinding::new(KeyModifiers::CONTROL, Char('2')),
+        );
+        self.set(
+            SSHQuickConnect3,
+            KeyBinding::new(KeyModifiers::CONTROL, Char('3')),
+        );
+        self.set(
+            SSHQuickConnect4,
+            KeyBinding::new(KeyModifiers::CONTROL, Char('4')),
+        );
+        self.set(
+            SSHQuickConnect5,
+            KeyBinding::new(KeyModifiers::CONTROL, Char('5')),
+        );
+        self.set(
+            SSHQuickConnect6,
+            KeyBinding::new(KeyModifiers::CONTROL, Char('6')),
+        );
+        self.set(
+            SSHQuickConnect7,
+            KeyBinding::new(KeyModifiers::CONTROL, Char('7')),
+        );
+        self.set(
+            SSHQuickConnect8,
+            KeyBinding::new(KeyModifiers::CONTROL, Char('8')),
+        );
+        self.set(
+            SSHQuickConnect9,
+            KeyBinding::new(KeyModifiers::CONTROL, Char('9')),
         );
     }
 

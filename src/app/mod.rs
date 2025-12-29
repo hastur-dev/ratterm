@@ -22,6 +22,7 @@ use crate::config::{Config, KeybindingMode, ShellType};
 use crate::editor::Editor;
 use crate::extension::ExtensionManager;
 use crate::filebrowser::FileBrowser;
+use crate::ssh::{NetworkScanner, SSHCredentials, SSHHostList, SSHStorage, ScanResult};
 use crate::terminal::{BackgroundManager, ProcessInfo, TerminalMultiplexer, pty::PtyError};
 use crate::theme::ThemePreset;
 use crate::ui::{
@@ -34,6 +35,7 @@ use crate::ui::{
         PopupKind, PopupWidget, ShellInstallPrompt, ShellInstallPromptWidget, ShellSelector,
         ShellSelectorWidget, ThemeSelector, ThemeSelectorWidget,
     },
+    ssh_manager::{SSHManagerMode, SSHManagerSelector, SSHManagerWidget},
     statusbar::StatusBar,
     terminal_tabs::TerminalTabBar,
     terminal_widget::TerminalWidget,
@@ -119,6 +121,14 @@ pub struct App {
     extension_approval_prompt: Option<ExtensionApprovalPrompt>,
     /// Last known screen size for layout-triggered resizes.
     last_screen_size: (u16, u16),
+    /// SSH manager selector state.
+    ssh_manager: Option<SSHManagerSelector>,
+    /// SSH host storage.
+    ssh_storage: SSHStorage,
+    /// SSH host list (loaded from storage).
+    ssh_hosts: SSHHostList,
+    /// Network scanner for SSH host discovery.
+    ssh_scanner: Option<NetworkScanner>,
 }
 
 impl App {
@@ -196,6 +206,10 @@ impl App {
             extension_manager: ExtensionManager::new(),
             extension_approval_prompt: None,
             last_screen_size: (80, 24), // Default, will be updated on first resize
+            ssh_manager: None,
+            ssh_storage: SSHStorage::new(),
+            ssh_hosts: SSHHostList::new(),
+            ssh_scanner: None,
         })
     }
 
@@ -1131,6 +1145,9 @@ impl App {
         // Update background process counts
         self.background_manager.update_counts();
 
+        // Poll SSH network scanner for results
+        self.poll_ssh_scanner();
+
         // Only process PTY output when file browser is NOT visible
         // This prevents the terminal grid from being corrupted by PTY output
         // while the user is interacting with the file browser
@@ -1322,6 +1339,15 @@ impl App {
                 // Enter key approves, this is called on Enter
                 self.handle_extension_approval(true);
             }
+            PopupKind::SSHManager
+            | PopupKind::SSHCredentialPrompt
+            | PopupKind::SSHStorageSetup
+            | PopupKind::SSHMasterPassword
+            | PopupKind::SSHSubnetEntry => {
+                // SSH popups are handled by dedicated SSH manager methods
+                // For now, just hide the popup
+                self.hide_popup();
+            }
         }
     }
 
@@ -1392,6 +1418,20 @@ impl App {
                 }
             }
             "terminal.selectShell" => self.show_shell_selector(),
+
+            // SSH commands
+            "ssh.manager" => self.show_ssh_manager(),
+            "ssh.scan" => {
+                self.show_ssh_manager();
+                self.show_ssh_subnet_prompt();
+            }
+            "ssh.addHost" => {
+                self.show_ssh_manager();
+                self.show_ssh_add_host();
+            }
+            "ssh.connect1" => self.ssh_connect_by_index(0),
+            "ssh.connect2" => self.ssh_connect_by_index(1),
+            "ssh.connect3" => self.ssh_connect_by_index(2),
 
             // Theme commands
             "theme.select" => self.show_theme_selector(),
@@ -1614,6 +1654,10 @@ impl App {
             } else if let Some(ref selector) = self.theme_selector {
                 // Use special widget for theme selector
                 let widget = ThemeSelectorWidget::new(selector);
+                frame.render_widget(widget, area);
+            } else if let Some(ref manager) = self.ssh_manager {
+                // Use special widget for SSH manager
+                let widget = SSHManagerWidget::new(manager);
                 frame.render_widget(widget, area);
             } else {
                 let popup_widget = PopupWidget::new(&self.popup);
@@ -1898,5 +1942,806 @@ impl App {
     /// Returns a mutable reference to the extension manager.
     pub fn extension_manager_mut(&mut self) -> &mut ExtensionManager {
         &mut self.extension_manager
+    }
+
+    // =========================================================================
+    // SSH Manager Methods
+    // =========================================================================
+
+    /// Shows the SSH manager popup.
+    pub fn show_ssh_manager(&mut self) {
+        // Always reload SSH hosts from storage to ensure we have fresh data
+        // This is important because credentials may have been saved but we need
+        // to make sure we have the latest from disk
+        self.load_ssh_hosts();
+
+        // Count credentials for debug
+        let creds_count = self
+            .ssh_hosts
+            .hosts()
+            .filter(|h| self.ssh_hosts.get_credentials(h.id).is_some())
+            .count();
+
+        // Create or update the SSH manager selector
+        let mut selector = self.ssh_manager.take().unwrap_or_default();
+        selector.update_from_list(&self.ssh_hosts);
+        selector.set_mode(SSHManagerMode::List);
+        selector.clear_error();
+        self.ssh_manager = Some(selector);
+
+        // Show the popup
+        self.popup.set_kind(PopupKind::SSHManager);
+        self.popup.show();
+        self.mode = AppMode::Popup;
+        // Include credential count in status for debugging
+        self.set_status(format!(
+            "SSH Manager - {} hosts, {} with creds | S=scan A=add Enter=connect",
+            self.ssh_hosts.len(),
+            creds_count
+        ));
+    }
+
+    /// Hides the SSH manager popup.
+    pub fn hide_ssh_manager(&mut self) {
+        self.ssh_manager = None;
+        self.ssh_scanner = None;
+        self.hide_popup();
+    }
+
+    /// Loads SSH hosts from storage.
+    fn load_ssh_hosts(&mut self) {
+        match self.ssh_storage.load() {
+            Ok(hosts) => {
+                // Count credentials
+                let creds_count = hosts
+                    .hosts()
+                    .filter(|h| hosts.get_credentials(h.id).is_some())
+                    .count();
+                info!(
+                    "Loaded {} SSH hosts with {} credentials from storage",
+                    hosts.len(),
+                    creds_count
+                );
+                // DEBUG: show in status
+                self.set_status(format!(
+                    "Loaded {} hosts, {} with credentials",
+                    hosts.len(),
+                    creds_count
+                ));
+                // Log credentials status for each host
+                for host in hosts.hosts() {
+                    let has_creds = hosts.get_credentials(host.id).is_some();
+                    info!(
+                        "  - Loaded host {}: {} (has_creds={})",
+                        host.id, host.hostname, has_creds
+                    );
+                }
+                self.ssh_hosts = hosts;
+            }
+            Err(e) => {
+                warn!("Failed to load SSH hosts: {}", e);
+                self.set_status(format!("Failed to load SSH hosts: {}", e));
+                self.ssh_hosts = SSHHostList::new();
+            }
+        }
+    }
+
+    /// Saves SSH hosts to storage.
+    fn save_ssh_hosts(&mut self) {
+        // Log what we're about to save
+        info!(
+            "Saving SSH hosts: {} hosts, {} credentials",
+            self.ssh_hosts.len(),
+            self.ssh_hosts
+                .hosts()
+                .filter(|h| self.ssh_hosts.get_credentials(h.id).is_some())
+                .count()
+        );
+        for host in self.ssh_hosts.hosts() {
+            let has_creds = self.ssh_hosts.get_credentials(host.id).is_some();
+            info!(
+                "  - Host {}: {} (has_creds={})",
+                host.id, host.hostname, has_creds
+            );
+        }
+
+        if let Err(e) = self.ssh_storage.save(&self.ssh_hosts) {
+            warn!("Failed to save SSH hosts: {}", e);
+            self.set_status(format!("Failed to save SSH hosts: {}", e));
+        } else {
+            debug!("Saved {} SSH hosts", self.ssh_hosts.len());
+        }
+    }
+
+    /// Starts a network scan for SSH hosts.
+    pub fn start_ssh_scan(&mut self) {
+        info!("Starting SSH network scan (auto-detect subnet)");
+
+        // Get or create scanner
+        let mut scanner = self.ssh_scanner.take().unwrap_or_default();
+
+        // Try auto-detect subnet
+        match scanner.start_auto_scan() {
+            Ok(()) => {
+                // Get the detected subnet for display
+                let subnet = scanner
+                    .current_subnet()
+                    .map(String::from)
+                    .unwrap_or_else(|| "unknown".to_string());
+
+                info!("SSH scan started on subnet: {}", subnet);
+
+                if let Some(ref mut manager) = self.ssh_manager {
+                    manager.set_mode(SSHManagerMode::Scanning);
+                    manager.set_scan_progress(0, 254);
+                    manager.set_scanning_subnet(subnet.clone());
+                    manager.clear_error();
+                }
+                self.set_status(format!("Scanning {} for SSH hosts...", subnet));
+                self.ssh_scanner = Some(scanner);
+            }
+            Err(e) => {
+                warn!("SSH scan failed to start: {}", e);
+                if let Some(ref mut manager) = self.ssh_manager {
+                    manager.set_error(format!("Scan failed: {}", e));
+                }
+                self.set_status(format!("Network scan failed: {}", e));
+            }
+        }
+    }
+
+    /// Starts a network scan with a specific subnet.
+    pub fn start_ssh_scan_subnet(&mut self, subnet: &str) {
+        let mut scanner = self.ssh_scanner.take().unwrap_or_default();
+
+        match scanner.start_scan(subnet) {
+            Ok(()) => {
+                if let Some(ref mut manager) = self.ssh_manager {
+                    manager.set_mode(SSHManagerMode::Scanning);
+                    manager.set_scan_progress(0, 254);
+                    manager.set_scanning_subnet(subnet.to_string());
+                    manager.clear_error();
+                }
+                self.ssh_scanner = Some(scanner);
+                self.set_status(format!("Scanning {} for SSH hosts...", subnet));
+            }
+            Err(e) => {
+                if let Some(ref mut manager) = self.ssh_manager {
+                    manager.set_error(format!("Scan failed: {}", e));
+                }
+                self.set_status(format!("Network scan failed: {}", e));
+            }
+        }
+    }
+
+    /// Polls the network scanner for results.
+    pub fn poll_ssh_scanner(&mut self) {
+        // Collect results first to avoid borrow issues
+        let results: Vec<ScanResult> = {
+            let Some(ref mut scanner) = self.ssh_scanner else {
+                return;
+            };
+            let mut collected = Vec::new();
+            while let Some(result) = scanner.poll() {
+                collected.push(result);
+            }
+            collected
+        };
+
+        // Now process results without holding the scanner borrow
+        let mut should_clear_scanner = false;
+        let mut status_message: Option<String> = None;
+
+        for result in results {
+            match result {
+                ScanResult::Progress(scanned, total) => {
+                    if let Some(ref mut manager) = self.ssh_manager {
+                        manager.set_scan_progress(scanned, total);
+                    }
+                }
+                ScanResult::HostFound(ip, _port) => {
+                    // Add host if not already in list
+                    if !self.ssh_hosts.contains_hostname(&ip) {
+                        if let Some(id) = self.ssh_hosts.add_host(ip.clone(), 22) {
+                            debug!("Found SSH host: {} (id={})", ip, id);
+                            // Update manager immediately for real-time feedback
+                            if let Some(ref mut manager) = self.ssh_manager {
+                                manager.update_from_list(&self.ssh_hosts);
+                            }
+                            self.set_status(format!("Found SSH host: {}", ip));
+                        }
+                    }
+                }
+                ScanResult::Complete(hosts) => {
+                    // Update manager with new hosts
+                    if let Some(ref mut manager) = self.ssh_manager {
+                        manager.update_from_list(&self.ssh_hosts);
+                        manager.set_mode(SSHManagerMode::List);
+                        manager.clear_scan_progress();
+                    }
+                    // Save discovered hosts
+                    self.save_ssh_hosts();
+                    status_message = Some(format!("Scan complete. Found {} hosts.", hosts.len()));
+                    should_clear_scanner = true;
+                }
+                ScanResult::Error(e) => {
+                    if let Some(ref mut manager) = self.ssh_manager {
+                        manager.set_error(e.clone());
+                        manager.set_mode(SSHManagerMode::List);
+                        manager.clear_scan_progress();
+                    }
+                    status_message = Some(format!("Scan error: {}", e));
+                    should_clear_scanner = true;
+                }
+                ScanResult::Cancelled => {
+                    if let Some(ref mut manager) = self.ssh_manager {
+                        manager.set_mode(SSHManagerMode::List);
+                        manager.clear_scan_progress();
+                    }
+                    status_message = Some("Scan cancelled".to_string());
+                    should_clear_scanner = true;
+                }
+                ScanResult::AuthProgress(scanned, total, success, fail) => {
+                    if let Some(ref mut manager) = self.ssh_manager {
+                        manager.set_scan_progress(scanned, total);
+                        manager.update_auth_counts(success, fail);
+                    }
+                }
+                ScanResult::AuthSuccess(ip, _port) => {
+                    info!("AuthSuccess received for ip: {}", ip);
+                    // Add host that authenticated successfully
+                    if !self.ssh_hosts.contains_hostname(&ip) {
+                        // Get credentials first (before mutable borrow)
+                        let (username, password) = if let Some(ref manager) = self.ssh_manager {
+                            (
+                                manager.scan_username().to_string(),
+                                manager.scan_password().to_string(),
+                            )
+                        } else {
+                            info!("WARNING: ssh_manager is None in AuthSuccess, skipping host");
+                            continue;
+                        };
+
+                        if let Some(id) = self.ssh_hosts.add_host(ip.clone(), 22) {
+                            info!("Added SSH host: {} with id={}", ip, id);
+                            // Save credentials for this host
+                            let creds = SSHCredentials::new(username, Some(password));
+                            self.ssh_hosts.set_credentials(id, creds);
+                            self.set_status(format!("Authenticated: {}", ip));
+                        } else {
+                            info!("WARNING: add_host returned None for ip: {}", ip);
+                        }
+                    } else {
+                        info!("Host {} already exists in ssh_hosts, skipping", ip);
+                    }
+                }
+                ScanResult::AuthComplete(hosts) => {
+                    // Log ssh_hosts state before update
+                    info!(
+                        "AuthComplete received: {} hosts in scan result, {} hosts in ssh_hosts before update",
+                        hosts.len(),
+                        self.ssh_hosts.len()
+                    );
+
+                    // Log the actual hosts we have
+                    for host in self.ssh_hosts.hosts() {
+                        info!(
+                            "  - Host in ssh_hosts: id={}, hostname={}",
+                            host.id, host.hostname
+                        );
+                    }
+
+                    // Final update - ensure manager has the latest host list
+                    let manager_count = if let Some(ref mut manager) = self.ssh_manager {
+                        // Force refresh the host list from ssh_hosts
+                        manager.update_from_list(&self.ssh_hosts);
+                        manager.set_mode(SSHManagerMode::List);
+                        manager.clear_scan_progress();
+                        let count = manager.host_count();
+                        info!(
+                            "Manager updated: {} hosts in manager after update_from_list",
+                            count
+                        );
+                        count
+                    } else {
+                        info!("WARNING: ssh_manager is None at AuthComplete!");
+                        0
+                    };
+
+                    // Save discovered and authenticated hosts to disk
+                    self.save_ssh_hosts();
+
+                    // Show detailed status with counts
+                    status_message = Some(format!(
+                        "Scan complete: {} authenticated, {} in list, {} in storage",
+                        hosts.len(),
+                        manager_count,
+                        self.ssh_hosts.len()
+                    ));
+                    should_clear_scanner = true;
+                }
+            }
+        }
+
+        if should_clear_scanner {
+            self.ssh_scanner = None;
+        }
+        if let Some(msg) = status_message {
+            self.set_status(msg);
+        }
+    }
+
+    /// Cancels the ongoing SSH scan.
+    pub fn cancel_ssh_scan(&mut self) {
+        if let Some(ref mut scanner) = self.ssh_scanner {
+            scanner.cancel();
+        }
+        self.ssh_scanner = None;
+
+        if let Some(ref mut manager) = self.ssh_manager {
+            manager.set_mode(SSHManagerMode::List);
+            manager.clear_scan_progress();
+        }
+        self.set_status("Scan cancelled".to_string());
+    }
+
+    /// Starts an authenticated SSH scan with the entered credentials.
+    pub fn start_authenticated_ssh_scan(&mut self) {
+        let Some(ref manager) = self.ssh_manager else {
+            return;
+        };
+
+        // Get credentials from the form
+        let username = manager.scan_username().to_string();
+        let password = manager.scan_password().to_string();
+        let subnet = manager.scan_subnet().to_string();
+
+        // Validate username
+        if username.is_empty() {
+            if let Some(ref mut m) = self.ssh_manager {
+                m.set_error("Username is required".to_string());
+            }
+            return;
+        }
+
+        // Determine subnet (auto-detect if empty)
+        let subnet = if subnet.is_empty() {
+            match NetworkScanner::detect_primary_subnet_static() {
+                Ok(s) => s,
+                Err(e) => {
+                    if let Some(ref mut m) = self.ssh_manager {
+                        m.set_error(format!("Failed to detect network: {}", e));
+                    }
+                    return;
+                }
+            }
+        } else {
+            subnet
+        };
+
+        // Create scanner and start authenticated scan
+        let mut scanner = NetworkScanner::new();
+        match scanner.start_authenticated_scan(&subnet, username, password) {
+            Ok(()) => {
+                // Update manager to show scanning mode
+                if let Some(ref mut m) = self.ssh_manager {
+                    m.start_authenticated_scanning(subnet.clone());
+                    m.set_scanning_subnet(subnet);
+                }
+                self.ssh_scanner = Some(scanner);
+                self.set_status("Starting authenticated scan...".to_string());
+            }
+            Err(e) => {
+                if let Some(ref mut m) = self.ssh_manager {
+                    m.set_error(format!("Failed to start scan: {}", e));
+                    m.set_mode(SSHManagerMode::List);
+                }
+                self.set_status(format!("Scan failed: {}", e));
+            }
+        }
+    }
+
+    /// Shows the credential entry dialog for the selected host.
+    pub fn show_ssh_credential_prompt(&mut self) {
+        // First, get the host_id from manager (separate borrow scope)
+        let host_id = {
+            let Some(ref manager) = self.ssh_manager else {
+                return;
+            };
+            match manager.selected_host_id() {
+                Some(id) => id,
+                None => {
+                    // Need to set error on manager, but can't do it here
+                    // Just return for now
+                    return;
+                }
+            }
+        };
+
+        // Debug: collect all host IDs and which have credentials
+        let all_host_ids: Vec<u32> = self.ssh_hosts.hosts().map(|h| h.id).collect();
+        let ids_with_creds: Vec<u32> = self
+            .ssh_hosts
+            .hosts()
+            .filter(|h| self.ssh_hosts.get_credentials(h.id).is_some())
+            .map(|h| h.id)
+            .collect();
+
+        // Check if we have saved credentials - clone to avoid borrow issues
+        let maybe_creds = self.ssh_hosts.get_credentials(host_id).cloned();
+
+        if let Some(creds) = maybe_creds {
+            // DEBUG: Show we found credentials
+            self.set_status(format!(
+                "FOUND creds for id={} (user={}) | Connecting...",
+                host_id, creds.username
+            ));
+            // Connect directly with saved credentials
+            self.connect_ssh_with_credentials(host_id, creds);
+        } else {
+            // DEBUG: Show in status bar what we're looking for
+            self.set_status(format!(
+                "NO creds for id={} | All IDs: {:?} | With creds: {:?}",
+                host_id, all_host_ids, ids_with_creds
+            ));
+            // Show credential prompt
+            // IMPORTANT: clear_credentials MUST be called BEFORE set_credential_target
+            // because clear_credentials resets credential_target to None
+            if let Some(ref mut manager) = self.ssh_manager {
+                manager.clear_credentials();
+                manager.set_credential_target(host_id);
+                manager.set_mode(SSHManagerMode::CredentialEntry);
+            }
+            self.popup.set_kind(PopupKind::SSHCredentialPrompt);
+        }
+    }
+
+    /// Submits the SSH credentials and attempts connection.
+    pub fn submit_ssh_credentials(&mut self) {
+        let Some(ref manager) = self.ssh_manager else {
+            self.set_status("SSH Manager not available".to_string());
+            return;
+        };
+
+        let Some(host_id) = manager.credential_target() else {
+            // This can happen if credential_target was cleared unexpectedly
+            if let Some(ref mut m) = self.ssh_manager {
+                m.set_error("No host selected for connection".to_string());
+            }
+            self.set_status("No host selected".to_string());
+            return;
+        };
+
+        let username = manager.username().to_string();
+        let password = manager.password().to_string();
+        let save = manager.save_credentials();
+
+        if username.is_empty() {
+            if let Some(ref mut m) = self.ssh_manager {
+                m.set_error("Username is required".to_string());
+            }
+            return;
+        }
+
+        // Create credentials
+        let creds = SSHCredentials::new(
+            username,
+            if password.is_empty() {
+                None
+            } else {
+                Some(password)
+            },
+        );
+
+        // Verify host still exists before connecting
+        if self.ssh_hosts.get_by_id(host_id).is_none() {
+            if let Some(ref mut m) = self.ssh_manager {
+                m.set_error("Host no longer exists".to_string());
+                m.set_mode(SSHManagerMode::List);
+                m.update_from_list(&self.ssh_hosts);
+            }
+            return;
+        }
+
+        // Save credentials if requested
+        if save {
+            let mut creds_to_save = creds.clone();
+            creds_to_save.save = true;
+            if self.ssh_hosts.set_credentials(host_id, creds_to_save) {
+                self.save_ssh_hosts();
+            }
+        }
+
+        // Connect
+        self.connect_ssh_with_credentials(host_id, creds);
+    }
+
+    /// Connects to an SSH host with the given credentials.
+    fn connect_ssh_with_credentials(&mut self, host_id: u32, creds: SSHCredentials) {
+        // Extract all needed data from host before mutating self
+        let (host_display, hostname, port) = {
+            let Some(host) = self.ssh_hosts.get_by_id(host_id) else {
+                self.set_status("Host not found".to_string());
+                return;
+            };
+            (host.display().to_string(), host.hostname.clone(), host.port)
+        };
+
+        // Mark as connected
+        self.ssh_hosts.mark_connected(host_id);
+        self.save_ssh_hosts();
+
+        // Hide SSH manager
+        self.hide_ssh_manager();
+
+        // Create SSH terminal tab with password for auto-login
+        self.create_ssh_terminal_tab(&hostname, port, &creds.username, creds.password.as_deref());
+        self.set_status(format!("Connecting to {}...", host_display));
+    }
+
+    /// Creates a new terminal tab with an SSH connection.
+    fn create_ssh_terminal_tab(
+        &mut self,
+        hostname: &str,
+        port: u16,
+        username: &str,
+        password: Option<&str>,
+    ) {
+        let Some(ref mut terminals) = self.terminals else {
+            self.set_status("Terminal not available".to_string());
+            return;
+        };
+
+        // Spawn SSH with optional password for auto-login
+        match terminals.add_ssh_tab_with_password(username, hostname, port, password) {
+            Ok(idx) => {
+                // Build SSH command string for display
+                let ssh_cmd = if port == 22 {
+                    format!("ssh {}@{}", username, hostname)
+                } else {
+                    format!("ssh -p {} {}@{}", port, username, hostname)
+                };
+
+                self.set_status(format!(
+                    "SSH session started: {} (tab {})",
+                    ssh_cmd,
+                    idx + 1
+                ));
+            }
+            Err(e) => {
+                self.set_status(format!("Failed to start SSH session: {}", e));
+            }
+        }
+    }
+
+    /// Connects to an SSH host by index (for quick connect hotkeys).
+    pub fn ssh_connect_by_index(&mut self, index: usize) {
+        // Load hosts if not loaded
+        if self.ssh_hosts.is_empty() {
+            self.load_ssh_hosts();
+        }
+
+        let Some(host) = self.ssh_hosts.get_by_index(index) else {
+            self.set_status(format!("No SSH host at position {}", index + 1));
+            return;
+        };
+
+        let host_id = host.id;
+        let host_display = host.display().to_string();
+
+        // Check for saved credentials
+        if let Some(creds) = self.ssh_hosts.get_credentials(host_id) {
+            self.connect_ssh_with_credentials(host_id, creds.clone());
+        } else {
+            // Show SSH manager with credential prompt
+            self.show_ssh_manager();
+            if let Some(ref mut manager) = self.ssh_manager {
+                // Find and select the host by index
+                for _ in 0..index {
+                    manager.select_next();
+                }
+                manager.set_credential_target(host_id);
+                manager.set_mode(SSHManagerMode::CredentialEntry);
+            }
+            self.popup.set_kind(PopupKind::SSHCredentialPrompt);
+            self.set_status(format!("Enter credentials for {}", host_display));
+        }
+    }
+
+    /// Adds a new SSH host manually.
+    pub fn add_ssh_host(&mut self, hostname: String, port: u16, display_name: Option<String>) {
+        self.add_ssh_host_with_credentials(hostname, port, display_name, None);
+    }
+
+    /// Adds a new SSH host with optional credentials.
+    pub fn add_ssh_host_with_credentials(
+        &mut self,
+        hostname: String,
+        port: u16,
+        display_name: Option<String>,
+        credentials: Option<SSHCredentials>,
+    ) {
+        if hostname.is_empty() {
+            if let Some(ref mut manager) = self.ssh_manager {
+                manager.set_error("Hostname is required".to_string());
+            }
+            return;
+        }
+
+        if self.ssh_hosts.contains_hostname(&hostname) {
+            if let Some(ref mut manager) = self.ssh_manager {
+                manager.set_error("Host already exists".to_string());
+            }
+            return;
+        }
+
+        let id = if let Some(name) = display_name {
+            self.ssh_hosts
+                .add_host_with_name(hostname.clone(), port, name)
+        } else {
+            self.ssh_hosts.add_host(hostname.clone(), port)
+        };
+
+        if let Some(id) = id {
+            // Save credentials if provided
+            if let Some(creds) = credentials {
+                self.ssh_hosts.set_credentials(id, creds);
+            }
+
+            self.save_ssh_hosts();
+            if let Some(ref mut manager) = self.ssh_manager {
+                manager.clear_add_host(); // Clear the input fields
+                manager.update_from_list(&self.ssh_hosts);
+                manager.set_mode(SSHManagerMode::List);
+                manager.clear_error();
+            }
+            self.set_status(format!("Added host: {} (id={})", hostname, id));
+            info!("Successfully added SSH host: {} (id={})", hostname, id);
+        } else if let Some(ref mut manager) = self.ssh_manager {
+            manager.set_error("Maximum hosts reached".to_string());
+            warn!("Failed to add host: maximum hosts reached");
+        }
+    }
+
+    /// Deletes the selected SSH host.
+    pub fn delete_selected_ssh_host(&mut self) {
+        let Some(ref manager) = self.ssh_manager else {
+            return;
+        };
+
+        let Some(host_id) = manager.selected_host_id() else {
+            return;
+        };
+
+        let host_name = self
+            .ssh_hosts
+            .get_by_id(host_id)
+            .map(|h| h.display().to_string())
+            .unwrap_or_default();
+
+        if self.ssh_hosts.remove_host(host_id) {
+            self.save_ssh_hosts();
+            if let Some(ref mut m) = self.ssh_manager {
+                m.update_from_list(&self.ssh_hosts);
+            }
+            self.set_status(format!("Deleted host: {}", host_name));
+        }
+    }
+
+    /// Saves the edited host name.
+    pub fn save_host_name(&mut self) {
+        let Some(ref manager) = self.ssh_manager else {
+            return;
+        };
+
+        let Some(host_id) = manager.edit_name_target() else {
+            if let Some(ref mut m) = self.ssh_manager {
+                m.cancel_edit_name();
+            }
+            return;
+        };
+
+        let new_name = manager.edit_name_input().to_string();
+
+        // Update the host's display name
+        self.ssh_hosts.set_display_name(host_id, new_name.clone());
+        self.save_ssh_hosts();
+
+        // Update manager and return to list mode
+        if let Some(ref mut m) = self.ssh_manager {
+            m.update_from_list(&self.ssh_hosts);
+            m.clear_edit_name();
+        }
+
+        self.set_status(format!("Host renamed to: {}", new_name));
+    }
+
+    /// Submits the add host form from the SSH manager.
+    pub fn submit_add_ssh_host(&mut self) {
+        let (hostname, port_str, display_name, username, password) = {
+            let Some(ref manager) = self.ssh_manager else {
+                return;
+            };
+            (
+                manager.hostname_input().to_string(),
+                manager.port_input().to_string(),
+                manager.add_host_display_name().to_string(),
+                manager.add_host_username().to_string(),
+                manager.add_host_password().to_string(),
+            )
+        };
+
+        if hostname.is_empty() {
+            if let Some(ref mut manager) = self.ssh_manager {
+                manager.set_error("Hostname is required".to_string());
+            }
+            return;
+        }
+
+        let port: u16 = port_str.parse().unwrap_or(22);
+
+        // Use display name if provided, otherwise None (will use hostname)
+        let display_name_opt = if display_name.is_empty() {
+            None
+        } else {
+            Some(display_name)
+        };
+
+        // Create credentials if username is provided
+        let credentials = if !username.is_empty() {
+            let pwd = if password.is_empty() {
+                None
+            } else {
+                Some(password)
+            };
+            Some(SSHCredentials::new(username, pwd))
+        } else {
+            None
+        };
+
+        self.add_ssh_host_with_credentials(hostname, port, display_name_opt, credentials);
+    }
+
+    /// Unlocks the SSH storage with a master password.
+    pub fn unlock_ssh_storage(&mut self, password: &str) {
+        if password.is_empty() {
+            self.set_status("Master password is required".to_string());
+            return;
+        }
+
+        match self.ssh_storage.set_master_password(password) {
+            Ok(()) => {
+                // Reload hosts with decryption
+                if let Ok(list) = self.ssh_storage.load() {
+                    self.ssh_hosts = list;
+                    if let Some(ref mut manager) = self.ssh_manager {
+                        manager.update_from_list(&self.ssh_hosts);
+                    }
+                    self.set_status("SSH storage unlocked".to_string());
+                } else {
+                    self.set_status("Failed to load hosts after unlock".to_string());
+                }
+            }
+            Err(e) => {
+                self.set_status(format!("Failed to unlock: {}", e));
+            }
+        }
+    }
+
+    /// Returns whether the SSH manager is currently visible.
+    #[must_use]
+    pub fn is_ssh_manager_visible(&self) -> bool {
+        self.ssh_manager.is_some() && self.popup.kind().is_ssh_popup()
+    }
+
+    /// Returns a reference to the SSH manager selector.
+    #[must_use]
+    pub fn ssh_manager(&self) -> Option<&SSHManagerSelector> {
+        self.ssh_manager.as_ref()
+    }
+
+    /// Returns a mutable reference to the SSH manager selector.
+    pub fn ssh_manager_mut(&mut self) -> Option<&mut SSHManagerSelector> {
+        self.ssh_manager.as_mut()
     }
 }
