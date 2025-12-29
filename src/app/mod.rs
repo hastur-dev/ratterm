@@ -1956,7 +1956,8 @@ impl App {
         self.load_ssh_hosts();
 
         // Count credentials for debug
-        let creds_count = self.ssh_hosts
+        let creds_count = self
+            .ssh_hosts
             .hosts()
             .filter(|h| self.ssh_hosts.get_credentials(h.id).is_some())
             .count();
@@ -2031,11 +2032,17 @@ impl App {
         info!(
             "Saving SSH hosts: {} hosts, {} credentials",
             self.ssh_hosts.len(),
-            self.ssh_hosts.hosts().filter(|h| self.ssh_hosts.get_credentials(h.id).is_some()).count()
+            self.ssh_hosts
+                .hosts()
+                .filter(|h| self.ssh_hosts.get_credentials(h.id).is_some())
+                .count()
         );
         for host in self.ssh_hosts.hosts() {
             let has_creds = self.ssh_hosts.get_credentials(host.id).is_some();
-            info!("  - Host {}: {} (has_creds={})", host.id, host.hostname, has_creds);
+            info!(
+                "  - Host {}: {} (has_creds={})",
+                host.id, host.hostname, has_creds
+            );
         }
 
         if let Err(e) = self.ssh_storage.save(&self.ssh_hosts) {
@@ -2218,7 +2225,10 @@ impl App {
 
                     // Log the actual hosts we have
                     for host in self.ssh_hosts.hosts() {
-                        info!("  - Host in ssh_hosts: id={}, hostname={}", host.id, host.hostname);
+                        info!(
+                            "  - Host in ssh_hosts: id={}, hostname={}",
+                            host.id, host.hostname
+                        );
                     }
 
                     // Final update - ensure manager has the latest host list
@@ -2454,11 +2464,7 @@ impl App {
                 self.set_status("Host not found".to_string());
                 return;
             };
-            (
-                host.display().to_string(),
-                host.hostname.clone(),
-                host.port,
-            )
+            (host.display().to_string(), host.hostname.clone(), host.port)
         };
 
         // Mark as connected
