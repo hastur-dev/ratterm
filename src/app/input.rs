@@ -235,6 +235,16 @@ impl App {
 
     /// Handles keys in file browser mode.
     fn handle_file_browser_key(&mut self, key: KeyEvent) {
+        // Check if we're browsing remote or local
+        if self.remote_file_browser.is_some() {
+            self.handle_remote_file_browser_key(key);
+        } else {
+            self.handle_local_file_browser_key(key);
+        }
+    }
+
+    /// Handles keys for the local file browser.
+    fn handle_local_file_browser_key(&mut self, key: KeyEvent) {
         match (key.modifiers, key.code) {
             (KeyModifiers::NONE, KeyCode::Esc) => self.hide_file_browser(),
             (KeyModifiers::NONE, KeyCode::Up)
@@ -266,6 +276,105 @@ impl App {
             (KeyModifiers::NONE, KeyCode::End) => self.file_browser.move_to_end(),
             (KeyModifiers::NONE, KeyCode::Char('/')) => self.show_popup(PopupKind::SearchFiles),
             _ => {}
+        }
+    }
+
+    /// Handles keys for the remote file browser.
+    fn handle_remote_file_browser_key(&mut self, key: KeyEvent) {
+        match (key.modifiers, key.code) {
+            (KeyModifiers::NONE, KeyCode::Esc) => self.hide_file_browser(),
+            (KeyModifiers::NONE, KeyCode::Up)
+            | (KeyModifiers::NONE, KeyCode::Char('k'))
+            | (KeyModifiers::NONE, KeyCode::Char('w')) => {
+                if let Some(ref mut browser) = self.remote_file_browser {
+                    browser.move_up();
+                }
+            }
+            (KeyModifiers::NONE, KeyCode::Down)
+            | (KeyModifiers::NONE, KeyCode::Char('j'))
+            | (KeyModifiers::NONE, KeyCode::Char('s')) => {
+                if let Some(ref mut browser) = self.remote_file_browser {
+                    browser.move_down();
+                }
+            }
+            (KeyModifiers::NONE, KeyCode::Left)
+            | (KeyModifiers::NONE, KeyCode::Char('h'))
+            | (KeyModifiers::NONE, KeyCode::Char('a')) => {
+                self.remote_browser_go_up();
+            }
+            (KeyModifiers::NONE, KeyCode::Right)
+            | (KeyModifiers::NONE, KeyCode::Char('l'))
+            | (KeyModifiers::NONE, KeyCode::Char('d'))
+            | (KeyModifiers::NONE, KeyCode::Enter) => {
+                self.remote_browser_enter_selected();
+            }
+            (KeyModifiers::NONE, KeyCode::PageUp) => {
+                if let Some(ref mut browser) = self.remote_file_browser {
+                    browser.page_up();
+                }
+            }
+            (KeyModifiers::NONE, KeyCode::PageDown) => {
+                if let Some(ref mut browser) = self.remote_file_browser {
+                    browser.page_down();
+                }
+            }
+            (KeyModifiers::NONE, KeyCode::Home) => {
+                if let Some(ref mut browser) = self.remote_file_browser {
+                    browser.move_to_start();
+                }
+            }
+            (KeyModifiers::NONE, KeyCode::End) => {
+                if let Some(ref mut browser) = self.remote_file_browser {
+                    browser.move_to_end();
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Goes up a directory in the remote file browser.
+    fn remote_browser_go_up(&mut self) {
+        // We need to take ownership temporarily to call methods that need &mut self
+        if let Some(mut browser) = self.remote_file_browser.take() {
+            if let Err(e) = browser.go_up(&mut self.remote_manager) {
+                self.set_status(format!("Failed to go up: {}", e));
+            } else {
+                // Update status with new directory
+                let dir = browser.current_dir().to_string();
+                let ctx = browser.ssh_context();
+                self.set_status(format!("[SSH] {}@{}: {}", ctx.username, ctx.hostname, dir));
+            }
+            self.remote_file_browser = Some(browser);
+        }
+    }
+
+    /// Enters the selected item in the remote file browser.
+    fn remote_browser_enter_selected(&mut self) {
+        // We need to take ownership temporarily
+        if let Some(mut browser) = self.remote_file_browser.take() {
+            // Capture context and CWD before the blocking operation
+            let ctx = browser.ssh_context().clone();
+            let cwd = browser.current_dir().to_string();
+
+            match browser.enter_selected(&mut self.remote_manager) {
+                Ok(Some(path)) => {
+                    // File was selected - open it
+                    // Don't put the browser back - open_remote_file_with_cwd will clear it
+                    self.remote_file_browser = Some(browser);
+                    // Use the known CWD to avoid extra blocking call
+                    self.open_remote_file_with_cwd(&ctx, &path, Some(&cwd));
+                }
+                Ok(None) => {
+                    // Directory was entered
+                    let dir = browser.current_dir().to_string();
+                    self.set_status(format!("[SSH] {}@{}: {}", ctx.username, ctx.hostname, dir));
+                    self.remote_file_browser = Some(browser);
+                }
+                Err(e) => {
+                    self.set_status(format!("Failed to open: {}", e));
+                    self.remote_file_browser = Some(browser);
+                }
+            }
         }
     }
 

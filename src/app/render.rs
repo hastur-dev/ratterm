@@ -7,7 +7,7 @@ use ratatui::widgets::Clear;
 use crate::ui::{
     editor_tabs::EditorTabBar,
     editor_widget::EditorWidget,
-    file_picker::FilePickerWidget,
+    file_picker::{FilePickerWidget, RemoteFilePickerWidget},
     layout::FocusedPane,
     popup::{
         ModeSwitcherWidget, PopupWidget, ShellInstallPromptWidget, ShellSelectorWidget,
@@ -220,7 +220,11 @@ impl App {
     ) {
         let is_focused = self.layout.focused() == FocusedPane::Editor;
 
-        if self.file_browser.is_visible() {
+        // Check for remote file browser first
+        if let Some(ref remote_browser) = self.remote_file_browser {
+            let widget = RemoteFilePickerWidget::new(remote_browser).focused(is_focused);
+            frame.render_widget(widget, areas.editor);
+        } else if self.file_browser.is_visible() {
             let widget = FilePickerWidget::new(&self.file_browser).focused(is_focused);
             frame.render_widget(widget, areas.editor);
         } else {

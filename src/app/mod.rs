@@ -36,7 +36,7 @@ use crate::config::{Config, KeybindingMode};
 use crate::editor::Editor;
 use crate::extension::ExtensionManager;
 use crate::filebrowser::FileBrowser;
-use crate::remote::RemoteFileManager;
+use crate::remote::{RemoteFileBrowser, RemoteFileManager};
 use crate::ssh::{NetworkScanner, SSHHostList, SSHStorage};
 use crate::terminal::{BackgroundManager, TerminalMultiplexer, pty::PtyError};
 use crate::ui::{
@@ -139,6 +139,8 @@ pub struct App {
     pub(crate) ssh_scanner: Option<NetworkScanner>,
     /// Remote file manager for SFTP operations.
     pub(crate) remote_manager: RemoteFileManager,
+    /// Remote file browser for SSH directory navigation (active when browsing remote).
+    pub(crate) remote_file_browser: Option<RemoteFileBrowser>,
 }
 
 impl App {
@@ -215,6 +217,7 @@ impl App {
             ssh_hosts: SSHHostList::new(),
             ssh_scanner: None,
             remote_manager: RemoteFileManager::new(),
+            remote_file_browser: None,
         })
     }
 

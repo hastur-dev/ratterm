@@ -3,6 +3,7 @@
 use std::io;
 use std::path::PathBuf;
 
+use crate::remote::RemoteFileBrowser;
 use crate::terminal::SSHContext;
 use crate::ui::layout::FocusedPane;
 
@@ -40,16 +41,47 @@ impl App {
     }
 
     /// Opens a remote file via SFTP from an SSH session.
+    ///
+    /// If the path is absolute, no CWD lookup is needed.
     pub fn open_remote_file(&mut self, ctx: &SSHContext, remote_path: &str) {
-        let cwd = match self.remote_manager.get_remote_cwd(ctx) {
-            Ok(cwd) => cwd,
-            Err(e) => {
-                self.set_status(format!("Failed to get remote CWD: {}", e));
-                return;
+        self.open_remote_file_with_cwd(ctx, remote_path, None);
+    }
+
+    /// Opens a remote file via SFTP, with an optional known CWD.
+    ///
+    /// If `cwd` is provided, skips the blocking CWD lookup.
+    pub fn open_remote_file_with_cwd(
+        &mut self,
+        ctx: &SSHContext,
+        remote_path: &str,
+        cwd: Option<&str>,
+    ) {
+        // Show loading status
+        self.set_status(format!("Loading {}...", remote_path));
+        self.request_redraw();
+
+        // Use provided CWD or get it (blocking if not provided)
+        let resolved_cwd: String;
+        let cwd = if let Some(c) = cwd {
+            c
+        } else if remote_path.starts_with('/') {
+            // Absolute path - use a dummy CWD since it won't be used
+            "/"
+        } else {
+            // Need to get CWD for relative path resolution
+            match self.remote_manager.get_remote_cwd(ctx) {
+                Ok(c) => {
+                    resolved_cwd = c;
+                    &resolved_cwd
+                }
+                Err(e) => {
+                    self.set_status(format!("Failed to get remote CWD: {}", e));
+                    return;
+                }
             }
         };
 
-        match self.remote_manager.fetch_file(ctx, remote_path, &cwd) {
+        match self.remote_manager.fetch_file(ctx, remote_path, cwd) {
             Ok((content, remote_file)) => {
                 let display = remote_file.display_string();
 
@@ -72,6 +104,8 @@ impl App {
                 self.layout.set_focused(FocusedPane::Editor);
                 self.mode = AppMode::Normal;
                 self.file_browser.hide();
+                // Also hide remote file browser
+                self.remote_file_browser = None;
                 self.request_redraw();
             }
             Err(e) => {
@@ -118,29 +152,61 @@ impl App {
 
     /// Shows the remote file browser for an SSH session.
     pub fn show_remote_file_browser(&mut self, ssh_context: &SSHContext) {
+        // Get the remote current working directory
         let remote_cwd = match self.remote_manager.get_remote_cwd(ssh_context) {
             Ok(cwd) => cwd,
             Err(e) => {
                 self.set_status(format!("Failed to get remote CWD: {}", e));
+                // Fall back to local file browser
                 self.show_file_browser();
                 return;
             }
         };
 
+        // Create a new remote file browser
+        let mut browser = RemoteFileBrowser::new(ssh_context.clone(), remote_cwd.clone());
+
+        // Refresh to load the directory contents
+        if let Err(e) = browser.refresh(&mut self.remote_manager) {
+            self.set_status(format!("Failed to list remote directory: {}", e));
+            // Fall back to local file browser
+            self.show_file_browser();
+            return;
+        }
+
+        // Set the remote file browser as active
+        self.remote_file_browser = Some(browser);
+
+        // Hide local file browser
+        self.file_browser.hide();
+
         self.set_status(format!(
-            "Remote: {}@{}:{} - Use 'open <file>' to open files",
+            "[SSH] {}@{}: {}",
             ssh_context.username, ssh_context.hostname, remote_cwd
         ));
 
-        self.file_browser.show();
         self.mode = AppMode::FileBrowser;
         self.layout.set_focused(FocusedPane::Editor);
         self.request_redraw();
     }
 
-    /// Hides the file browser.
+    /// Returns true if the remote file browser is active.
+    #[must_use]
+    pub fn is_remote_browsing(&self) -> bool {
+        self.remote_file_browser.is_some()
+    }
+
+    /// Hides the remote file browser.
+    pub fn hide_remote_file_browser(&mut self) {
+        self.remote_file_browser = None;
+        self.mode = AppMode::Normal;
+        self.request_redraw();
+    }
+
+    /// Hides the file browser (both local and remote).
     pub fn hide_file_browser(&mut self) {
         self.file_browser.hide();
+        self.remote_file_browser = None;
         self.mode = AppMode::Normal;
         self.request_redraw();
     }

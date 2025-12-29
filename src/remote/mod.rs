@@ -3,13 +3,18 @@
 //! Provides SFTP-based remote file management for SSH terminals,
 //! including fetching, caching, and saving remote files.
 
+pub mod browser;
 pub mod sftp;
+
+pub use browser::{RemoteFileBrowser, RemoteFileEntry};
 
 use std::collections::HashMap;
 use std::path::PathBuf;
 
 use crate::terminal::SSHContext;
 use sftp::{SftpClient, SftpError};
+
+pub use sftp::RemoteDirEntry;
 
 /// Represents a remote file being edited locally.
 #[derive(Debug, Clone)]
@@ -183,6 +188,21 @@ impl RemoteFileManager {
     pub fn get_remote_cwd(&mut self, ctx: &SSHContext) -> Result<String, RemoteError> {
         let client = self.get_client(ctx)?;
         Ok(client.get_cwd()?)
+    }
+
+    /// Lists the contents of a directory on the remote host.
+    ///
+    /// # Errors
+    /// Returns error if connection or listing fails.
+    pub fn list_dir(
+        &mut self,
+        ctx: &SSHContext,
+        path: &str,
+    ) -> Result<Vec<RemoteDirEntry>, RemoteError> {
+        assert!(!path.is_empty(), "path must not be empty");
+
+        let client = self.get_client(ctx)?;
+        Ok(client.list_dir(path)?)
     }
 
     /// Resolves a potentially relative path against the remote CWD.

@@ -14,7 +14,21 @@ use crate::terminal::SSHContext;
 const MAX_FILE_SIZE: u64 = 10 * 1024 * 1024;
 
 /// SFTP connection timeout in seconds.
-const CONNECT_TIMEOUT_SECS: u64 = 30;
+const CONNECT_TIMEOUT_SECS: u64 = 10;
+
+/// Read/write timeout in seconds.
+const IO_TIMEOUT_SECS: u64 = 30;
+
+/// Represents an entry in a remote directory.
+#[derive(Debug, Clone)]
+pub struct RemoteDirEntry {
+    /// The name of the file or directory.
+    pub name: String,
+    /// True if this is a directory.
+    pub is_directory: bool,
+    /// Size in bytes (0 for directories).
+    pub size: u64,
+}
 
 /// Error type for SFTP operations.
 #[derive(Debug)]
@@ -87,8 +101,16 @@ impl SftpClient {
         )
         .map_err(|e| SftpError::ConnectionFailed(e.to_string()))?;
 
+        // Set read/write timeouts to prevent indefinite hangs
+        let io_timeout = Some(std::time::Duration::from_secs(IO_TIMEOUT_SECS));
+        let _ = tcp.set_read_timeout(io_timeout);
+        let _ = tcp.set_write_timeout(io_timeout);
+
         // Create SSH session
         let mut session = Session::new().map_err(|e| SftpError::HandshakeFailed(e.to_string()))?;
+
+        // Set session timeout (in milliseconds)
+        session.set_timeout(IO_TIMEOUT_SECS as u32 * 1000);
 
         session.set_tcp_stream(tcp);
         session
@@ -243,6 +265,52 @@ impl SftpClient {
     /// Returns error if pwd command fails.
     pub fn get_cwd(&self) -> Result<String, SftpError> {
         self.exec_command("pwd")
+    }
+
+    /// Lists contents of a directory on the remote server.
+    ///
+    /// # Returns
+    /// A vector of (filename, is_directory, size) tuples.
+    ///
+    /// # Errors
+    /// Returns error if directory cannot be read.
+    pub fn list_dir(&self, path: &str) -> Result<Vec<RemoteDirEntry>, SftpError> {
+        assert!(!path.is_empty(), "path must not be empty");
+
+        let path = Path::new(path);
+        let entries = self
+            .sftp
+            .readdir(path)
+            .map_err(|e| SftpError::FileError(format!("Cannot read directory: {}", e)))?;
+
+        let mut result = Vec::with_capacity(entries.len());
+
+        for (entry_path, stat) in entries {
+            let name = entry_path
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_default();
+
+            // Skip hidden files starting with . (except .. for parent nav)
+            // Actually, let's include all files for now and let the caller filter
+            let is_dir = stat.is_dir();
+            let size = stat.size.unwrap_or(0);
+
+            result.push(RemoteDirEntry {
+                name,
+                is_directory: is_dir,
+                size,
+            });
+        }
+
+        // Sort: directories first, then alphabetically
+        result.sort_by(|a, b| match (a.is_directory, b.is_directory) {
+            (true, false) => std::cmp::Ordering::Less,
+            (false, true) => std::cmp::Ordering::Greater,
+            _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
+        });
+
+        Ok(result)
     }
 
     /// Returns the SSH context used for this connection.
