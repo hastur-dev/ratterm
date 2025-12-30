@@ -86,6 +86,20 @@ pub enum KeyAction {
     SSHQuickConnect7,
     SSHQuickConnect8,
     SSHQuickConnect9,
+
+    // Docker Manager
+    DockerManager,
+    DockerQuickConnect1,
+    DockerQuickConnect2,
+    DockerQuickConnect3,
+    DockerQuickConnect4,
+    DockerQuickConnect5,
+    DockerQuickConnect6,
+    DockerQuickConnect7,
+    DockerQuickConnect8,
+    DockerQuickConnect9,
+    DockerStats,
+    DockerLogs,
 }
 
 impl KeyAction {
@@ -146,6 +160,18 @@ impl KeyAction {
             "ssh_quick_connect_7" => Some(Self::SSHQuickConnect7),
             "ssh_quick_connect_8" => Some(Self::SSHQuickConnect8),
             "ssh_quick_connect_9" => Some(Self::SSHQuickConnect9),
+            "docker_manager" => Some(Self::DockerManager),
+            "docker_quick_connect_1" => Some(Self::DockerQuickConnect1),
+            "docker_quick_connect_2" => Some(Self::DockerQuickConnect2),
+            "docker_quick_connect_3" => Some(Self::DockerQuickConnect3),
+            "docker_quick_connect_4" => Some(Self::DockerQuickConnect4),
+            "docker_quick_connect_5" => Some(Self::DockerQuickConnect5),
+            "docker_quick_connect_6" => Some(Self::DockerQuickConnect6),
+            "docker_quick_connect_7" => Some(Self::DockerQuickConnect7),
+            "docker_quick_connect_8" => Some(Self::DockerQuickConnect8),
+            "docker_quick_connect_9" => Some(Self::DockerQuickConnect9),
+            "docker_stats" => Some(Self::DockerStats),
+            "docker_logs" => Some(Self::DockerLogs),
             _ => None,
         }
     }
@@ -464,6 +490,60 @@ impl Keybindings {
         self.set(
             SSHQuickConnect9,
             KeyBinding::new(KeyModifiers::CONTROL, Char('9')),
+        );
+
+        // Docker Manager (Ctrl+Shift+D)
+        self.set(
+            DockerManager,
+            KeyBinding::new(KeyModifiers::CONTROL | KeyModifiers::SHIFT, Char('d')),
+        );
+
+        // Docker Quick Connect (Ctrl+Alt+1-9)
+        self.set(
+            DockerQuickConnect1,
+            KeyBinding::new(KeyModifiers::CONTROL | KeyModifiers::ALT, Char('1')),
+        );
+        self.set(
+            DockerQuickConnect2,
+            KeyBinding::new(KeyModifiers::CONTROL | KeyModifiers::ALT, Char('2')),
+        );
+        self.set(
+            DockerQuickConnect3,
+            KeyBinding::new(KeyModifiers::CONTROL | KeyModifiers::ALT, Char('3')),
+        );
+        self.set(
+            DockerQuickConnect4,
+            KeyBinding::new(KeyModifiers::CONTROL | KeyModifiers::ALT, Char('4')),
+        );
+        self.set(
+            DockerQuickConnect5,
+            KeyBinding::new(KeyModifiers::CONTROL | KeyModifiers::ALT, Char('5')),
+        );
+        self.set(
+            DockerQuickConnect6,
+            KeyBinding::new(KeyModifiers::CONTROL | KeyModifiers::ALT, Char('6')),
+        );
+        self.set(
+            DockerQuickConnect7,
+            KeyBinding::new(KeyModifiers::CONTROL | KeyModifiers::ALT, Char('7')),
+        );
+        self.set(
+            DockerQuickConnect8,
+            KeyBinding::new(KeyModifiers::CONTROL | KeyModifiers::ALT, Char('8')),
+        );
+        self.set(
+            DockerQuickConnect9,
+            KeyBinding::new(KeyModifiers::CONTROL | KeyModifiers::ALT, Char('9')),
+        );
+
+        // Docker Stats and Logs (when in Docker session)
+        self.set(
+            DockerStats,
+            KeyBinding::new(KeyModifiers::CONTROL, Char('t')),
+        );
+        self.set(
+            DockerLogs,
+            KeyBinding::new(KeyModifiers::CONTROL, Char('l')),
         );
     }
 

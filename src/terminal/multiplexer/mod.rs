@@ -243,6 +243,13 @@ impl TerminalMultiplexer {
         }
     }
 
+    /// Sets the name of a tab by index.
+    pub fn set_tab_name(&mut self, index: usize, name: String) {
+        if let Some(tab) = self.tabs.get_mut(index) {
+            tab.name = name;
+        }
+    }
+
     /// Splits the current terminal grid.
     ///
     /// # Errors

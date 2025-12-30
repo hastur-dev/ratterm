@@ -5,6 +5,7 @@
 use crate::api::ApiError;
 use crate::api::protocol::*;
 use crate::app::App;
+use crate::docker::DockerDiscovery;
 use crate::editor::edit::Position;
 use crate::terminal::ProcessStatus;
 use crate::ui::layout::FocusedPane;
@@ -72,6 +73,20 @@ impl ApiHandler {
             "background.output" => self.handle_background_output(&request, app),
             "background.kill" => self.handle_background_kill(&request, app),
             "background.clear" => self.handle_background_clear(&request, app),
+
+            // Docker operations
+            "docker.status" => self.handle_docker_status(&request, app),
+            "docker.list_containers" => self.handle_docker_list_containers(&request, app),
+            "docker.list_images" => self.handle_docker_list_images(&request, app),
+            "docker.open_manager" => self.handle_docker_open_manager(&request, app),
+            "docker.close_manager" => self.handle_docker_close_manager(&request, app),
+            "docker.refresh" => self.handle_docker_refresh(&request, app),
+            "docker.exec" => self.handle_docker_exec(&request, app),
+            "docker.run" => self.handle_docker_run(&request, app),
+            "docker.quick_connect" => self.handle_docker_quick_connect(&request, app),
+            "docker.quick_connect_slots" => self.handle_docker_quick_connect_slots(&request, app),
+            "docker.stats" => self.handle_docker_stats(&request, app),
+            "docker.logs" => self.handle_docker_logs(&request, app),
 
             _ => Err(ApiError::MethodNotFound(request.method.clone())),
         };
@@ -664,6 +679,241 @@ impl ApiHandler {
             ProcessStatus::Error => BackgroundStatusValue::Error,
             ProcessStatus::Killed => BackgroundStatusValue::Killed,
         }
+    }
+
+    // ========================================================================
+    // Docker operations
+    // ========================================================================
+
+    fn handle_docker_status(
+        &self,
+        _request: &ApiRequest,
+        _app: &mut App,
+    ) -> Result<Value, ApiError> {
+        let available = DockerDiscovery::is_docker_available();
+        let version = if available {
+            DockerDiscovery::docker_version()
+        } else {
+            None
+        };
+
+        let error = if !available {
+            Some("Docker is not available. Ensure Docker is installed and running.".to_string())
+        } else {
+            None
+        };
+
+        let result = DockerStatusResult {
+            available,
+            version,
+            error,
+        };
+
+        Ok(serde_json::to_value(result)?)
+    }
+
+    fn handle_docker_list_containers(
+        &self,
+        _request: &ApiRequest,
+        _app: &mut App,
+    ) -> Result<Value, ApiError> {
+        if !DockerDiscovery::is_docker_available() {
+            return Err(ApiError::Internal("Docker is not available".into()));
+        }
+
+        let (running, stopped) =
+            DockerDiscovery::discover_all_containers().map_err(ApiError::Internal)?;
+
+        let running_info: Vec<DockerContainerInfo> = running
+            .iter()
+            .map(|c| DockerContainerInfo {
+                id: c.id.clone(),
+                name: c.name.clone(),
+                image: c.image.clone(),
+                status: c.status.as_str().to_string(),
+                ports: c.ports.clone(),
+            })
+            .collect();
+
+        let stopped_info: Vec<DockerContainerInfo> = stopped
+            .iter()
+            .map(|c| DockerContainerInfo {
+                id: c.id.clone(),
+                name: c.name.clone(),
+                image: c.image.clone(),
+                status: c.status.as_str().to_string(),
+                ports: c.ports.clone(),
+            })
+            .collect();
+
+        let result = DockerContainersResult {
+            running: running_info,
+            stopped: stopped_info,
+        };
+
+        Ok(serde_json::to_value(result)?)
+    }
+
+    fn handle_docker_list_images(
+        &self,
+        _request: &ApiRequest,
+        _app: &mut App,
+    ) -> Result<Value, ApiError> {
+        if !DockerDiscovery::is_docker_available() {
+            return Err(ApiError::Internal("Docker is not available".into()));
+        }
+
+        let images = DockerDiscovery::discover_images().map_err(ApiError::Internal)?;
+
+        let images_info: Vec<DockerImageInfo> = images
+            .iter()
+            .map(|i| DockerImageInfo {
+                id: i.id.clone(),
+                repository: i.repository.clone(),
+                tag: i.tag.clone(),
+                size: i.size.clone(),
+            })
+            .collect();
+
+        let result = DockerImagesResult {
+            images: images_info,
+        };
+
+        Ok(serde_json::to_value(result)?)
+    }
+
+    fn handle_docker_open_manager(
+        &self,
+        _request: &ApiRequest,
+        app: &mut App,
+    ) -> Result<Value, ApiError> {
+        app.show_docker_manager();
+        Ok(json!({}))
+    }
+
+    fn handle_docker_close_manager(
+        &self,
+        _request: &ApiRequest,
+        app: &mut App,
+    ) -> Result<Value, ApiError> {
+        app.hide_docker_manager();
+        Ok(json!({}))
+    }
+
+    fn handle_docker_refresh(
+        &self,
+        _request: &ApiRequest,
+        app: &mut App,
+    ) -> Result<Value, ApiError> {
+        app.refresh_docker_discovery();
+        Ok(json!({}))
+    }
+
+    fn handle_docker_exec(&self, request: &ApiRequest, app: &mut App) -> Result<Value, ApiError> {
+        let params: DockerExecParams = serde_json::from_value(request.params.clone())?;
+
+        // Use the container ID as the name if we only have the ID
+        let container_name = params.container.clone();
+        app.exec_into_container(&params.container, &container_name);
+
+        Ok(json!({ "container": params.container }))
+    }
+
+    fn handle_docker_run(&self, request: &ApiRequest, app: &mut App) -> Result<Value, ApiError> {
+        let params: DockerRunParams = serde_json::from_value(request.params.clone())?;
+
+        // If custom options are provided, use run_image_with_options
+        if params.name.is_some()
+            || !params.ports.is_empty()
+            || !params.volumes.is_empty()
+            || !params.env.is_empty()
+        {
+            let mut options = crate::docker::DockerRunOptions::new();
+            options.name = params.name.clone();
+            options.port_mappings = params.ports.clone();
+            options.volume_mounts = params.volumes.clone();
+            options.env_vars = params.env.clone();
+            if let Some(ref shell) = params.shell {
+                options.shell = shell.clone();
+            }
+
+            app.run_image_with_options(&params.image, &params.image, &options);
+        } else {
+            // Simple run without options
+            app.run_image_interactive(&params.image, &params.image);
+        }
+
+        Ok(json!({ "image": params.image }))
+    }
+
+    fn handle_docker_quick_connect(
+        &self,
+        request: &ApiRequest,
+        app: &mut App,
+    ) -> Result<Value, ApiError> {
+        let params: DockerQuickConnectParams = serde_json::from_value(request.params.clone())?;
+
+        if params.slot < 1 || params.slot > 9 {
+            return Err(ApiError::InvalidParams(
+                "Slot must be between 1 and 9".into(),
+            ));
+        }
+
+        let slot_idx = params.slot - 1;
+        app.docker_connect_by_index(slot_idx);
+
+        Ok(json!({ "slot": params.slot }))
+    }
+
+    fn handle_docker_quick_connect_slots(
+        &self,
+        _request: &ApiRequest,
+        app: &mut App,
+    ) -> Result<Value, ApiError> {
+        let docker_items = &app.docker_items;
+
+        let mut slots = Vec::with_capacity(9);
+        for i in 0..9 {
+            let slot_info = if let Some(item) = docker_items.get_quick_connect(i) {
+                DockerQuickConnectSlot {
+                    slot: i + 1,
+                    target: Some(item.name.clone()),
+                    target_type: Some(item.item_type.as_str().to_string()),
+                }
+            } else {
+                DockerQuickConnectSlot {
+                    slot: i + 1,
+                    target: None,
+                    target_type: None,
+                }
+            };
+            slots.push(slot_info);
+        }
+
+        let result = DockerQuickConnectSlotsResult { slots };
+        Ok(serde_json::to_value(result)?)
+    }
+
+    fn handle_docker_stats(&self, _request: &ApiRequest, app: &mut App) -> Result<Value, ApiError> {
+        if !app.is_docker_session() {
+            return Err(ApiError::InvalidParams(
+                "Not in a Docker session. Use docker.exec or docker.run first.".into(),
+            ));
+        }
+
+        app.show_docker_stats();
+        Ok(json!({}))
+    }
+
+    fn handle_docker_logs(&self, _request: &ApiRequest, app: &mut App) -> Result<Value, ApiError> {
+        if !app.is_docker_session() {
+            return Err(ApiError::InvalidParams(
+                "Not in a Docker session. Use docker.exec or docker.run first.".into(),
+            ));
+        }
+
+        app.show_docker_logs();
+        Ok(json!({}))
     }
 }
 

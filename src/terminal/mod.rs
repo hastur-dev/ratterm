@@ -103,6 +103,31 @@ impl SSHContext {
     }
 }
 
+/// Docker connection context for terminal inheritance.
+///
+/// Stores metadata about a Docker container session so that
+/// stats/logs hotkeys can work on the connected container.
+#[derive(Debug, Clone)]
+pub struct DockerContext {
+    /// Container ID (short form).
+    pub container_id: String,
+    /// Container name for display.
+    pub container_name: String,
+}
+
+impl DockerContext {
+    /// Creates a new Docker context.
+    #[must_use]
+    pub fn new(container_id: String, container_name: String) -> Self {
+        assert!(!container_id.is_empty(), "container_id must not be empty");
+
+        Self {
+            container_id,
+            container_name,
+        }
+    }
+}
+
 /// Terminal emulator combining PTY and grid.
 pub struct Terminal {
     /// The PTY instance.
@@ -129,6 +154,8 @@ pub struct Terminal {
     output_buffer: String,
     /// SSH connection context (None for local terminals).
     ssh_context: Option<SSHContext>,
+    /// Docker connection context (None for non-Docker terminals).
+    docker_context: Option<DockerContext>,
 }
 
 impl Terminal {
@@ -275,6 +302,7 @@ impl Terminal {
             pending_password: None,
             output_buffer: String::new(),
             ssh_context: None,
+            docker_context: None,
         })
     }
 
@@ -305,6 +333,23 @@ impl Terminal {
     #[must_use]
     pub fn is_ssh(&self) -> bool {
         self.ssh_context.is_some()
+    }
+
+    /// Returns the Docker context if this is a Docker terminal.
+    #[must_use]
+    pub fn docker_context(&self) -> Option<&DockerContext> {
+        self.docker_context.as_ref()
+    }
+
+    /// Sets the Docker context for this terminal.
+    pub fn set_docker_context(&mut self, context: Option<DockerContext>) {
+        self.docker_context = context;
+    }
+
+    /// Returns true if this is a Docker terminal.
+    #[must_use]
+    pub fn is_docker(&self) -> bool {
+        self.docker_context.is_some()
     }
 
     /// Returns the terminal grid.

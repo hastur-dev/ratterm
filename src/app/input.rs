@@ -146,6 +146,19 @@ impl App {
                 self.ssh_connect_by_index(idx);
                 true
             }
+            // Docker Manager (Ctrl+Shift+D)
+            (m, KeyCode::Char('d') | KeyCode::Char('D'))
+                if m == KeyModifiers::CONTROL | KeyModifiers::SHIFT =>
+            {
+                self.show_docker_manager();
+                true
+            }
+            // Docker quick connect (Ctrl+Alt+1-9)
+            (m, KeyCode::Char(c @ '1'..='9')) if m == KeyModifiers::CONTROL | KeyModifiers::ALT => {
+                let idx = (c as u8 - b'1') as usize;
+                self.docker_connect_by_index(idx);
+                true
+            }
             _ => false,
         }
     }
@@ -414,6 +427,10 @@ impl App {
         }
         if self.popup.kind().is_ssh_master_password() {
             self.handle_ssh_master_password_key(key);
+            return;
+        }
+        if self.popup.kind().is_docker_manager() {
+            self.handle_docker_manager_key(key);
             return;
         }
 

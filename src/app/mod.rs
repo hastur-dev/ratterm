@@ -3,9 +3,12 @@
 //! Orchestrates the terminal emulator, code editor, and file browser.
 
 mod commands;
+mod docker_connect;
+mod docker_ops;
 mod extension_ops;
 mod file_ops;
 mod input;
+mod input_docker;
 mod input_editor;
 mod input_mouse;
 mod input_ssh;
@@ -33,6 +36,7 @@ use tracing::{debug, info, warn};
 use crate::api::{ApiHandler, ApiServer, MAX_REQUESTS_PER_FRAME, RequestReceiver};
 use crate::clipboard::Clipboard;
 use crate::config::{Config, KeybindingMode};
+use crate::docker::{DockerItemList, DockerStorage};
 use crate::editor::Editor;
 use crate::extension::ExtensionManager;
 use crate::filebrowser::FileBrowser;
@@ -40,6 +44,7 @@ use crate::remote::{RemoteFileBrowser, RemoteFileManager};
 use crate::ssh::{NetworkScanner, SSHHostList, SSHStorage};
 use crate::terminal::{BackgroundManager, TerminalMultiplexer, pty::PtyError};
 use crate::ui::{
+    docker_manager::DockerManagerSelector,
     editor_tabs::EditorTabInfo,
     layout::SplitLayout,
     popup::{
@@ -141,6 +146,12 @@ pub struct App {
     pub(crate) remote_manager: RemoteFileManager,
     /// Remote file browser for SSH directory navigation (active when browsing remote).
     pub(crate) remote_file_browser: Option<RemoteFileBrowser>,
+    /// Docker manager selector state.
+    pub(crate) docker_manager: Option<DockerManagerSelector>,
+    /// Docker storage for quick-connect settings.
+    pub(crate) docker_storage: DockerStorage,
+    /// Docker items (quick connect slots and settings).
+    pub(crate) docker_items: DockerItemList,
 }
 
 impl App {
@@ -218,6 +229,9 @@ impl App {
             ssh_scanner: None,
             remote_manager: RemoteFileManager::new(),
             remote_file_browser: None,
+            docker_manager: None,
+            docker_storage: DockerStorage::new(),
+            docker_items: DockerItemList::new(),
         })
     }
 

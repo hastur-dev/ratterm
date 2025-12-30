@@ -434,6 +434,137 @@ pub struct BackgroundKillResult {
     pub id: u64,
 }
 
+// ============================================================================
+// Docker operation parameters
+// ============================================================================
+
+/// Result for docker.list_containers.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DockerContainersResult {
+    /// Running containers.
+    pub running: Vec<DockerContainerInfo>,
+    /// Stopped containers.
+    pub stopped: Vec<DockerContainerInfo>,
+}
+
+/// Docker container information.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DockerContainerInfo {
+    /// Container ID (short form).
+    pub id: String,
+    /// Container name.
+    pub name: String,
+    /// Image name.
+    pub image: String,
+    /// Container status (running/stopped).
+    pub status: String,
+    /// Port mappings.
+    pub ports: Vec<String>,
+}
+
+/// Result for docker.list_images.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DockerImagesResult {
+    /// Available images.
+    pub images: Vec<DockerImageInfo>,
+}
+
+/// Docker image information.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DockerImageInfo {
+    /// Image ID.
+    pub id: String,
+    /// Repository name.
+    pub repository: String,
+    /// Image tag.
+    pub tag: String,
+    /// Image size.
+    pub size: String,
+}
+
+/// Parameters for docker.exec.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DockerExecParams {
+    /// Container ID or name.
+    pub container: String,
+    /// Shell to use (default: /bin/sh).
+    #[serde(default)]
+    pub shell: Option<String>,
+}
+
+/// Parameters for docker.run.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DockerRunParams {
+    /// Image name.
+    pub image: String,
+    /// Optional container name.
+    #[serde(default)]
+    pub name: Option<String>,
+    /// Port mappings (e.g., "8080:80").
+    #[serde(default)]
+    pub ports: Vec<String>,
+    /// Volume mounts (e.g., "/host:/container").
+    #[serde(default)]
+    pub volumes: Vec<String>,
+    /// Environment variables (e.g., "KEY=VALUE").
+    #[serde(default)]
+    pub env: Vec<String>,
+    /// Shell to use (default: /bin/sh).
+    #[serde(default)]
+    pub shell: Option<String>,
+}
+
+/// Parameters for docker.quick_connect.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DockerQuickConnectParams {
+    /// Slot number (1-9).
+    pub slot: usize,
+}
+
+/// Parameters for docker.assign_quick_connect.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DockerAssignQuickConnectParams {
+    /// Slot number (1-9).
+    pub slot: usize,
+    /// Container ID or image name.
+    pub target: String,
+    /// Type: "container" or "image".
+    pub target_type: String,
+}
+
+/// Result for docker.get_status.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DockerStatusResult {
+    /// Whether Docker is available.
+    pub available: bool,
+    /// Docker version (if available).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
+    /// Error message (if unavailable).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+/// Result for docker.quick_connect_slots.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DockerQuickConnectSlotsResult {
+    /// Assigned quick connect slots.
+    pub slots: Vec<DockerQuickConnectSlot>,
+}
+
+/// Quick connect slot information.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DockerQuickConnectSlot {
+    /// Slot number (1-9).
+    pub slot: usize,
+    /// Target container ID or image name.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target: Option<String>,
+    /// Target type: "container" or "image".
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target_type: Option<String>,
+}
+
 #[cfg(test)]
 #[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {

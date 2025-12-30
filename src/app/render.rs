@@ -5,6 +5,7 @@ use ratatui::style::{Color, Style};
 use ratatui::widgets::Clear;
 
 use crate::ui::{
+    docker_manager::DockerManagerWidget,
     editor_tabs::EditorTabBar,
     editor_widget::EditorWidget,
     file_picker::{FilePickerWidget, RemoteFilePickerWidget},
@@ -325,6 +326,10 @@ impl App {
         } else if let Some(ref manager) = self.ssh_manager {
             // Use special widget for SSH manager
             let widget = SSHManagerWidget::new(manager);
+            frame.render_widget(widget, area);
+        } else if let Some(ref manager) = self.docker_manager {
+            // Use special widget for Docker manager
+            let widget = DockerManagerWidget::new(manager);
             frame.render_widget(widget, area);
         } else {
             let popup_widget = PopupWidget::new(&self.popup);

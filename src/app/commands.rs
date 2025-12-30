@@ -84,6 +84,21 @@ impl App {
             "ssh.connect2" => self.ssh_connect_by_index(1),
             "ssh.connect3" => self.ssh_connect_by_index(2),
 
+            // Docker commands
+            "docker.manager" => self.show_docker_manager(),
+            "docker.refresh" => self.refresh_docker_discovery(),
+            "docker.connect1" => self.docker_connect_by_index(0),
+            "docker.connect2" => self.docker_connect_by_index(1),
+            "docker.connect3" => self.docker_connect_by_index(2),
+            "docker.connect4" => self.docker_connect_by_index(3),
+            "docker.connect5" => self.docker_connect_by_index(4),
+            "docker.connect6" => self.docker_connect_by_index(5),
+            "docker.connect7" => self.docker_connect_by_index(6),
+            "docker.connect8" => self.docker_connect_by_index(7),
+            "docker.connect9" => self.docker_connect_by_index(8),
+            "docker.stats" => self.show_docker_stats(),
+            "docker.logs" => self.show_docker_logs(),
+
             // Theme commands
             "theme.select" => self.show_theme_selector(),
             "theme.dark" => self.set_theme(ThemePreset::Dark),
