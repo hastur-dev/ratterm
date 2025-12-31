@@ -154,9 +154,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }));
 
     // Initialize tracing for logging
+    // Debug mode: write to file for easier debugging of rendering issues
+    let log_file = std::fs::File::create("ratterm_debug.log")
+        .expect("Failed to create debug log file");
     tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-        .with_writer(std::io::stderr)
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::from_default_env()
+                .add_directive("ratterm=debug".parse().unwrap()),
+        )
+        .with_writer(std::sync::Mutex::new(log_file))
+        .with_ansi(false)
         .init();
 
     // Set up terminal

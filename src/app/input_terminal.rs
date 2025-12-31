@@ -1,6 +1,7 @@
 //! Terminal input handling for the application.
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use tracing::debug;
 
 use super::App;
 use super::keymap::key_to_bytes;
@@ -239,6 +240,14 @@ impl App {
     fn handle_open_file_command(&mut self, filename: &str) {
         let debug_state = self.debug_ssh_state();
 
+        debug!(
+            "HANDLE_OPEN_FILE_CMD: filename={:?}, ssh_context={:?}, file_browser_visible={}, ide_visible={}",
+            filename,
+            self.get_active_ssh_context().is_some(),
+            self.file_browser.is_visible(),
+            self.layout.ide_visible()
+        );
+
         if let Some(ssh_context) = self.get_active_ssh_context() {
             self.set_status(format!(
                 "REMOTE: Opening '{}' from {}@{} [{}]",
@@ -262,11 +271,31 @@ impl App {
                 cwd.join(filename)
             };
 
+            debug!("HANDLE_OPEN_FILE_CMD: resolved path={:?}, exists={}, is_file={}",
+                   path, path.exists(), path.is_file());
+
             if path.exists() {
                 if path.is_file() {
+                    debug!(
+                        "HANDLE_OPEN_FILE_CMD: BEFORE show_ide(), file_browser_visible={}, ide_visible={}",
+                        self.file_browser.is_visible(),
+                        self.layout.ide_visible()
+                    );
                     self.show_ide();
-                    let _ = self.open_file(path);
+                    debug!(
+                        "HANDLE_OPEN_FILE_CMD: AFTER show_ide(), file_browser_visible={}, ide_visible={}",
+                        self.file_browser.is_visible(),
+                        self.layout.ide_visible()
+                    );
+                    let result = self.open_file(&path);
+                    debug!(
+                        "HANDLE_OPEN_FILE_CMD: AFTER open_file(), result={:?}, file_browser_visible={}, ide_visible={}",
+                        result.is_ok(),
+                        self.file_browser.is_visible(),
+                        self.layout.ide_visible()
+                    );
                 } else if path.is_dir() {
+                    debug!("HANDLE_OPEN_FILE_CMD: opening directory");
                     self.show_ide();
                     let _ = self.file_browser.change_dir(&path);
                     self.show_file_browser();

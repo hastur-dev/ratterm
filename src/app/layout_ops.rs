@@ -1,14 +1,28 @@
 //! Layout and IDE visibility operations for the App.
 
+use tracing::debug;
+
 use super::App;
 
 impl App {
     /// Shows the IDE pane (editor).
     pub fn show_ide(&mut self) {
+        debug!(
+            "SHOW_IDE: BEFORE ide_visible={}, split={}%",
+            self.layout.ide_visible(),
+            self.layout.split_percent()
+        );
+
         self.layout.show_ide();
         self.resize_for_current_layout();
         self.request_redraw();
         self.set_status("IDE opened");
+
+        debug!(
+            "SHOW_IDE: AFTER ide_visible={}, split={}%",
+            self.layout.ide_visible(),
+            self.layout.split_percent()
+        );
     }
 
     /// Hides the IDE pane.

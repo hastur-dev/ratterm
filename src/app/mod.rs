@@ -479,10 +479,15 @@ impl App {
 
         if let Some(ref mut terminals) = self.terminals {
             if areas.has_terminal() {
-                let _ = terminals.resize(
-                    areas.terminal.width.saturating_sub(2),
-                    areas.terminal.height.saturating_sub(3),
+                let term_cols = areas.terminal.width.saturating_sub(2);
+                let term_rows = areas.terminal.height.saturating_sub(3);
+                tracing::debug!(
+                    "RESIZE_LAYOUT: screen={}x{}, terminal_area=({}, {}, {}x{}), resizing_grid_to={}x{}",
+                    cols, rows,
+                    areas.terminal.x, areas.terminal.y, areas.terminal.width, areas.terminal.height,
+                    term_cols, term_rows
                 );
+                let _ = terminals.resize(term_cols, term_rows);
             }
         }
 

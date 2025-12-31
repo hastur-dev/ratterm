@@ -8,6 +8,7 @@ use ratatui::{
     style::{Color, Modifier, Style},
     widgets::{Block, Borders, Widget},
 };
+use tracing::debug;
 use unicode_width::UnicodeWidthChar;
 
 use super::ghost_text::GhostTextWidget;
@@ -65,7 +66,8 @@ impl<'a> EditorWidget<'a> {
         let buffer = self.editor.buffer();
         let gutter_width = view.gutter_width();
 
-        // Use theme colors if available
+        // Use theme colors if available with consistent fallbacks
+        // NOTE: These must match the fallbacks used in Widget::render() to avoid flicker
         let line_num_fg = self
             .theme
             .map(|t| t.line_numbers_fg)
@@ -73,14 +75,18 @@ impl<'a> EditorWidget<'a> {
         let gutter_bg = self
             .theme
             .map(|t| t.line_numbers_bg)
-            .unwrap_or(Color::Reset);
+            .unwrap_or(Color::Rgb(30, 30, 30));
+        let text_bg = self.theme.map(|t| t.background).unwrap_or(Color::Rgb(30, 30, 30));
         let current_line_fg = self.theme.map(|t| t.cursor).unwrap_or(Color::Yellow);
 
         let style = Style::default().fg(line_num_fg).bg(gutter_bg);
         let current_line_style = Style::default().fg(current_line_fg).bg(gutter_bg);
+        let separator_style = Style::default().fg(Color::DarkGray).bg(text_bg);
 
-        // Clear gutter area first to prevent ghost characters
+        // Clear gutter area AND separator column to prevent ghost characters
+        // Gutter is gutter_width columns, then 1 column separator before text
         for row in 0..area.height {
+            // Clear gutter columns
             for col in 0..gutter_width as u16 {
                 let x = area.x + col;
                 let y = area.y + row;
@@ -88,6 +94,13 @@ impl<'a> EditorWidget<'a> {
                     cell.set_char(' ');
                     cell.set_style(style);
                 }
+            }
+            // Clear separator column (between gutter and text content)
+            let sep_x = area.x + gutter_width as u16;
+            let y = area.y + row;
+            if let Some(cell) = buf.cell_mut((sep_x, y)) {
+                cell.set_char('│');
+                cell.set_style(separator_style);
             }
         }
 
@@ -139,9 +152,42 @@ impl<'a> EditorWidget<'a> {
         let text_x = area.x + gutter_width as u16 + 1;
         let text_width = area.width.saturating_sub(gutter_width as u16 + 1);
 
-        // Use theme colors if available
-        let text_fg = self.theme.map(|t| t.foreground).unwrap_or(Color::Reset);
-        let text_bg = self.theme.map(|t| t.background).unwrap_or(Color::Reset);
+        debug!(
+            "EDITOR_CONTENT: inner_area=({}, {}, {}x{}), text_x={}, text_width={}, gutter={}, view_scroll_top={}, view_height={}, buf_lines={}",
+            area.x, area.y, area.width, area.height,
+            text_x, text_width, gutter_width,
+            view.scroll_top(), view.height(), buffer.len_lines()
+        );
+
+        // DETAILED: Log first 3 visible lines' content lengths and any special chars
+        let visible_start = view.scroll_top();
+        for offset in 0..3 {
+            let line_idx = visible_start + offset;
+            if line_idx < buffer.len_lines() {
+                if let Some(line) = buffer.line(line_idx) {
+                    let line_len = line.len();
+                    let preview: String = line.chars().take(30).map(|c| if c.is_control() { '?' } else { c }).collect();
+                    let has_special = line.chars().any(|c| c as u32 > 127);
+                    debug!(
+                        "VISIBLE_LINE {}: len={}, has_special={}, preview={:?}",
+                        line_idx, line_len, has_special, preview
+                    );
+                }
+            }
+        }
+
+        // Check for potential rendering bounds issues
+        let text_end_x = text_x + text_width;
+        let text_end_y = area.y + area.height;
+        debug!(
+            "EDITOR_CONTENT: clearing from ({}, {}) to ({}, {})",
+            text_x, area.y, text_end_x.saturating_sub(1), text_end_y.saturating_sub(1)
+        );
+
+        // Use theme colors if available with consistent fallbacks
+        // NOTE: These must match the fallbacks used in Widget::render() to avoid flicker
+        let text_fg = self.theme.map(|t| t.foreground).unwrap_or(Color::White);
+        let text_bg = self.theme.map(|t| t.background).unwrap_or(Color::Rgb(30, 30, 30));
         let selection_bg = self.theme.map(|t| t.selection).unwrap_or(Color::Blue);
 
         let default_style = Style::default().fg(text_fg).bg(text_bg);
@@ -149,17 +195,8 @@ impl<'a> EditorWidget<'a> {
 
         let selection = self.editor.cursor().selection_range();
 
-        // Clear the content area first to prevent ghost characters when scrolling
-        for row in 0..area.height {
-            for col in 0..text_width {
-                let x = text_x + col;
-                let y = area.y + row;
-                if let Some(cell) = buf.cell_mut((x, y)) {
-                    cell.set_char(' ');
-                    cell.set_style(default_style);
-                }
-            }
-        }
+        // NOTE: Widget::render() already clears the inner area before calling render_content()
+        // So we don't need to clear again here - redundant clearing can cause flicker
 
         for (screen_row, line_idx) in view.visible_lines().enumerate() {
             if screen_row >= area.height as usize {
@@ -184,8 +221,8 @@ impl<'a> EditorWidget<'a> {
                 let char_width = if c == '\t' {
                     // Tab expands to next tab stop
                     tab_width - (visual_col % tab_width)
-                } else if c == '\n' {
-                    0 // Newline has no width
+                } else if c == '\n' || c == '\r' {
+                    0 // Line endings have no width
                 } else {
                     c.width().unwrap_or(1)
                 };
@@ -228,7 +265,7 @@ impl<'a> EditorWidget<'a> {
                             }
                         }
                     }
-                } else if c != '\n' {
+                } else if c != '\n' && c != '\r' {
                     let x = text_x + screen_col as u16;
                     if x < text_x + text_width {
                         if let Some(cell) = buf.cell_mut((x, y)) {
@@ -304,6 +341,42 @@ impl<'a> EditorWidget<'a> {
 
 impl Widget for EditorWidget<'_> {
     fn render(self, area: Rect, buf: &mut RatatuiBuffer) {
+        debug!(
+            "EDITOR_WIDGET_START: area=({}, {}, {}x{}), left_edge={}, focused={}, path={:?}",
+            area.x, area.y, area.width, area.height,
+            area.x,
+            self.focused,
+            self.editor.path()
+        );
+
+        // Log pre-render state of cells at the left edge (boundary with terminal)
+        {
+            let left_edge = area.x;
+            for sample_y in [2, 10, 20].iter() {
+                let y = *sample_y;
+                if y < area.y + area.height {
+                    let mut edge_info = Vec::new();
+                    for x in (left_edge.saturating_sub(3))..left_edge.saturating_add(3) {
+                        if let Some(cell) = buf.cell((x, y)) {
+                            let symbol = cell.symbol();
+                            let c = symbol.chars().next().unwrap_or(' ');
+                            edge_info.push(format!("x{}=U+{:04X}", x, c as u32));
+                        }
+                    }
+                    debug!("EDITOR_PRE_RENDER y={}: {}", y, edge_info.join(" "));
+                }
+            }
+        }
+
+        // Validate area bounds against buffer
+        let buf_area = buf.area();
+        if area.x + area.width > buf_area.width || area.y + area.height > buf_area.height {
+            debug!(
+                "EDITOR_WIDGET WARNING: area extends beyond buffer! buf=({}, {}, {}x{})",
+                buf_area.x, buf_area.y, buf_area.width, buf_area.height
+            );
+        }
+
         // Create block with border - use theme if available
         // Fallback colors match EditorTheme::default() for consistency
         let (border_focused, border_unfocused) = self
@@ -356,6 +429,18 @@ impl Widget for EditorWidget<'_> {
             return;
         }
 
+        // CRITICAL: Clear entire inner area first to prevent ghost characters during scrolling
+        let text_bg = self.theme.map(|t| t.background).unwrap_or(Color::Rgb(30, 30, 30));
+        let clear_style = Style::default().bg(text_bg).fg(Color::Reset);
+        for y in inner_area.y..inner_area.y + inner_area.height {
+            for x in inner_area.x..inner_area.x + inner_area.width {
+                if let Some(cell) = buf.cell_mut((x, y)) {
+                    cell.set_char(' ');
+                    cell.set_style(clear_style);
+                }
+            }
+        }
+
         // Render editor content
         self.render_line_numbers(inner_area, buf);
         self.render_content(inner_area, buf);
@@ -383,6 +468,25 @@ impl Widget for EditorWidget<'_> {
 
         if self.focused {
             self.render_cursor(inner_area, buf);
+        }
+
+        // Log post-render state of cells at the left edge (boundary with terminal)
+        {
+            let left_edge = area.x;
+            for sample_y in [2, 10, 20].iter() {
+                let y = *sample_y;
+                if y < area.y + area.height {
+                    let mut edge_info = Vec::new();
+                    for x in (left_edge.saturating_sub(3))..left_edge.saturating_add(3) {
+                        if let Some(cell) = buf.cell((x, y)) {
+                            let symbol = cell.symbol();
+                            let c = symbol.chars().next().unwrap_or(' ');
+                            edge_info.push(format!("x{}=U+{:04X}", x, c as u32));
+                        }
+                    }
+                    debug!("EDITOR_POST_RENDER y={}: {}", y, edge_info.join(" "));
+                }
+            }
         }
     }
 }
