@@ -73,10 +73,28 @@ impl App {
     /// Handles editor keys in Default mode (non-modal, simple keybindings).
     fn handle_editor_key_default(&mut self, key: KeyEvent) {
         match (key.modifiers, key.code) {
-            (KeyModifiers::NONE, KeyCode::Left) => self.editor.move_left(),
-            (KeyModifiers::NONE, KeyCode::Right) => self.editor.move_right(),
-            (KeyModifiers::NONE, KeyCode::Up) => self.editor.move_up(),
-            (KeyModifiers::NONE, KeyCode::Down) => self.editor.move_down(),
+            // Accept completion with Ctrl+Space
+            (KeyModifiers::CONTROL, KeyCode::Char(' ')) => {
+                if !self.accept_completion() {
+                    self.trigger_completion();
+                }
+            }
+            (KeyModifiers::NONE, KeyCode::Left) => {
+                self.dismiss_completion();
+                self.editor.move_left();
+            }
+            (KeyModifiers::NONE, KeyCode::Right) => {
+                self.dismiss_completion();
+                self.editor.move_right();
+            }
+            (KeyModifiers::NONE, KeyCode::Up) => {
+                self.dismiss_completion();
+                self.editor.move_up();
+            }
+            (KeyModifiers::NONE, KeyCode::Down) => {
+                self.dismiss_completion();
+                self.editor.move_down();
+            }
             (KeyModifiers::NONE, KeyCode::Home) => self.editor.move_to_line_start(),
             (KeyModifiers::NONE, KeyCode::End) => self.editor.move_to_line_end(),
             (KeyModifiers::NONE, KeyCode::PageUp) => self.editor.page_up(),
@@ -88,12 +106,25 @@ impl App {
             (KeyModifiers::CONTROL, KeyCode::Char('z')) => self.editor.undo(),
             (KeyModifiers::CONTROL, KeyCode::Char('y')) => self.editor.redo(),
             (KeyModifiers::CONTROL, KeyCode::Char('s')) => self.save_current_file(),
-            (KeyModifiers::NONE, KeyCode::Backspace) => self.editor.backspace(),
-            (KeyModifiers::NONE, KeyCode::Delete) => self.editor.delete(),
-            (KeyModifiers::NONE, KeyCode::Enter) => self.editor.insert_char('\n'),
-            (KeyModifiers::NONE, KeyCode::Tab) => self.editor.insert_str("    "),
+            (KeyModifiers::NONE, KeyCode::Backspace) => {
+                self.editor.backspace();
+                self.trigger_completion();
+            }
+            (KeyModifiers::NONE, KeyCode::Delete) => {
+                self.editor.delete();
+                self.dismiss_completion();
+            }
+            (KeyModifiers::NONE, KeyCode::Enter) => {
+                self.dismiss_completion();
+                self.editor.insert_char('\n');
+            }
+            (KeyModifiers::NONE, KeyCode::Tab) => {
+                self.dismiss_completion();
+                self.editor.insert_str("    ");
+            }
             (KeyModifiers::NONE, KeyCode::Char(c)) | (KeyModifiers::SHIFT, KeyCode::Char(c)) => {
                 self.editor.insert_char(c);
+                self.trigger_completion();
             }
             _ => {}
         }

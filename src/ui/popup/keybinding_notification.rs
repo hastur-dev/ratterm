@@ -126,12 +126,10 @@ impl Widget for KeybindingNotificationWidget {
             .render(chunks[3], buf);
 
         // Dismiss instruction
-        let dismiss_line = Line::from(vec![
-            Span::styled(
-                "Press any key to dismiss",
-                Style::default().fg(Color::Cyan).bg(bg_color),
-            ),
-        ]);
+        let dismiss_line = Line::from(vec![Span::styled(
+            "Press any key to dismiss",
+            Style::default().fg(Color::Cyan).bg(bg_color),
+        )]);
         Paragraph::new(dismiss_line)
             .alignment(Alignment::Center)
             .render(chunks[5], buf);

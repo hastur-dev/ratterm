@@ -401,6 +401,29 @@ Combine modifiers with `+`: `ctrl+shift+p`
 
 ---
 
+### Autocomplete
+
+Ratterm includes an intelligent autocomplete system that provides inline suggestions as you type in the editor.
+
+**Features:**
+- **Ghost text suggestions**: Grayed-out completions appear at the cursor position
+- **Debounced triggering**: Suggestions appear after 300ms of idle typing
+- **LSP support**: Intelligent completions from language servers when available
+- **Keyword fallback**: Language keywords and buffer words when LSP is unavailable
+- **Accept with Ctrl+Space**: Press Ctrl+Space (or Tab in Insert mode) to accept
+
+**Supported Languages:**
+- Rust (rust-analyzer)
+- Python (pylsp/pyright)
+- JavaScript/TypeScript (typescript-language-server)
+- Java (jdtls)
+- C# (omnisharp-roslyn)
+- PHP (intelephense)
+- SQL (sql-language-server)
+- HTML/CSS (vscode-html-languageserver)
+
+**Note:** Autocomplete is enabled by default and requires no configuration. Language servers are started automatically when available.
+
 ---
 
 ### SSH Manager Configuration

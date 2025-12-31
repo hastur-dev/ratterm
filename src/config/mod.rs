@@ -5,7 +5,6 @@
 mod keybindings;
 pub mod platform;
 pub mod shell;
-pub mod vscode;
 
 use std::fs;
 use std::io::{self, Write};

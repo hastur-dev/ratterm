@@ -37,6 +37,7 @@
 pub mod api;
 pub mod app;
 pub mod clipboard;
+pub mod completion;
 pub mod config;
 pub mod editor;
 pub mod extension;
@@ -52,6 +53,7 @@ pub mod updater;
 // Re-export main types
 pub use app::App;
 pub use clipboard::Clipboard;
+pub use completion::{CompletionContext, CompletionHandle, CompletionItem, CompletionProvider};
 pub use config::Config;
 pub use editor::Editor;
 pub use extension::{ApprovalManager, ExtensionManager};

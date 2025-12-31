@@ -1,4 +1,4 @@
-//! Editor selection methods (VSCode-style).
+//! Editor selection methods.
 
 use super::{Editor, edit::Position};
 
