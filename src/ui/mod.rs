@@ -5,6 +5,7 @@
 pub mod editor_tabs;
 pub mod editor_widget;
 pub mod file_picker;
+pub mod ghost_text;
 pub mod layout;
 pub mod popup;
 pub mod ssh_manager;

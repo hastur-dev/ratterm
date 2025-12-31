@@ -239,10 +239,11 @@ impl App {
             let tab_bar = EditorTabBar::new(&editor_tabs).focused(is_focused);
             frame.render_widget(tab_bar, editor_chunks[0]);
 
-            // Render editor content
+            // Render editor content with completion suggestion
             let widget = EditorWidget::new(&self.editor)
                 .focused(is_focused)
-                .theme(&self.config.theme_manager.current().editor);
+                .theme(&self.config.theme_manager.current().editor)
+                .suggestion(self.completion_suggestion());
             frame.render_widget(widget, editor_chunks[1]);
         }
     }

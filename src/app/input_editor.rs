@@ -30,10 +30,28 @@ impl App {
     /// Handles editor keys in Emacs mode (non-modal).
     fn handle_editor_key_emacs(&mut self, key: KeyEvent) {
         match (key.modifiers, key.code) {
-            (KeyModifiers::CONTROL, KeyCode::Char('b')) => self.editor.move_left(),
-            (KeyModifiers::CONTROL, KeyCode::Char('f')) => self.editor.move_right(),
-            (KeyModifiers::CONTROL, KeyCode::Char('p')) => self.editor.move_up(),
-            (KeyModifiers::CONTROL, KeyCode::Char('n')) => self.editor.move_down(),
+            // Accept completion with Ctrl+Space
+            (KeyModifiers::CONTROL, KeyCode::Char(' ')) => {
+                if !self.accept_completion() {
+                    self.trigger_completion();
+                }
+            }
+            (KeyModifiers::CONTROL, KeyCode::Char('b')) => {
+                self.dismiss_completion();
+                self.editor.move_left();
+            }
+            (KeyModifiers::CONTROL, KeyCode::Char('f')) => {
+                self.dismiss_completion();
+                self.editor.move_right();
+            }
+            (KeyModifiers::CONTROL, KeyCode::Char('p')) => {
+                self.dismiss_completion();
+                self.editor.move_up();
+            }
+            (KeyModifiers::CONTROL, KeyCode::Char('n')) => {
+                self.dismiss_completion();
+                self.editor.move_down();
+            }
             (KeyModifiers::CONTROL, KeyCode::Char('a')) => self.editor.move_to_line_start(),
             (KeyModifiers::CONTROL, KeyCode::Char('e')) => self.editor.move_to_line_end(),
             (KeyModifiers::ALT, KeyCode::Char('f')) => self.editor.move_word_right(),
@@ -44,27 +62,56 @@ impl App {
             (m, KeyCode::Char('>')) if m == KeyModifiers::ALT | KeyModifiers::SHIFT => {
                 self.editor.move_to_buffer_end();
             }
-            (KeyModifiers::CONTROL, KeyCode::Char('d')) => self.editor.delete(),
+            (KeyModifiers::CONTROL, KeyCode::Char('d')) => {
+                self.editor.delete();
+                self.dismiss_completion();
+            }
             (KeyModifiers::CONTROL, KeyCode::Char('/')) => self.editor.undo(),
             (m, KeyCode::Char('/')) if m == KeyModifiers::CONTROL | KeyModifiers::SHIFT => {
                 self.editor.redo();
             }
             (KeyModifiers::CONTROL, KeyCode::Char('k')) => self.editor.delete_to_line_end(),
             (KeyModifiers::CONTROL, KeyCode::Char('x')) => self.save_current_file(),
-            (KeyModifiers::NONE, KeyCode::Backspace) => self.editor.backspace(),
-            (KeyModifiers::NONE, KeyCode::Delete) => self.editor.delete(),
-            (KeyModifiers::NONE, KeyCode::Enter) => self.editor.insert_char('\n'),
-            (KeyModifiers::NONE, KeyCode::Tab) => self.editor.insert_str("    "),
-            (KeyModifiers::NONE, KeyCode::Left) => self.editor.move_left(),
-            (KeyModifiers::NONE, KeyCode::Right) => self.editor.move_right(),
-            (KeyModifiers::NONE, KeyCode::Up) => self.editor.move_up(),
-            (KeyModifiers::NONE, KeyCode::Down) => self.editor.move_down(),
+            (KeyModifiers::NONE, KeyCode::Backspace) => {
+                self.editor.backspace();
+                self.trigger_completion();
+            }
+            (KeyModifiers::NONE, KeyCode::Delete) => {
+                self.editor.delete();
+                self.dismiss_completion();
+            }
+            (KeyModifiers::NONE, KeyCode::Enter) => {
+                self.dismiss_completion();
+                self.editor.insert_char('\n');
+            }
+            (KeyModifiers::NONE, KeyCode::Tab) => {
+                if !self.accept_completion() {
+                    self.editor.insert_str("    ");
+                }
+            }
+            (KeyModifiers::NONE, KeyCode::Left) => {
+                self.dismiss_completion();
+                self.editor.move_left();
+            }
+            (KeyModifiers::NONE, KeyCode::Right) => {
+                self.dismiss_completion();
+                self.editor.move_right();
+            }
+            (KeyModifiers::NONE, KeyCode::Up) => {
+                self.dismiss_completion();
+                self.editor.move_up();
+            }
+            (KeyModifiers::NONE, KeyCode::Down) => {
+                self.dismiss_completion();
+                self.editor.move_down();
+            }
             (KeyModifiers::NONE, KeyCode::Home) => self.editor.move_to_line_start(),
             (KeyModifiers::NONE, KeyCode::End) => self.editor.move_to_line_end(),
             (KeyModifiers::NONE, KeyCode::PageUp) => self.editor.page_up(),
             (KeyModifiers::NONE, KeyCode::PageDown) => self.editor.page_down(),
             (KeyModifiers::NONE, KeyCode::Char(c)) | (KeyModifiers::SHIFT, KeyCode::Char(c)) => {
                 self.editor.insert_char(c);
+                self.trigger_completion();
             }
             _ => {}
         }
@@ -73,10 +120,28 @@ impl App {
     /// Handles editor keys in Default mode (non-modal, simple keybindings).
     fn handle_editor_key_default(&mut self, key: KeyEvent) {
         match (key.modifiers, key.code) {
-            (KeyModifiers::NONE, KeyCode::Left) => self.editor.move_left(),
-            (KeyModifiers::NONE, KeyCode::Right) => self.editor.move_right(),
-            (KeyModifiers::NONE, KeyCode::Up) => self.editor.move_up(),
-            (KeyModifiers::NONE, KeyCode::Down) => self.editor.move_down(),
+            // Accept completion with Ctrl+Space
+            (KeyModifiers::CONTROL, KeyCode::Char(' ')) => {
+                if !self.accept_completion() {
+                    self.trigger_completion();
+                }
+            }
+            (KeyModifiers::NONE, KeyCode::Left) => {
+                self.dismiss_completion();
+                self.editor.move_left();
+            }
+            (KeyModifiers::NONE, KeyCode::Right) => {
+                self.dismiss_completion();
+                self.editor.move_right();
+            }
+            (KeyModifiers::NONE, KeyCode::Up) => {
+                self.dismiss_completion();
+                self.editor.move_up();
+            }
+            (KeyModifiers::NONE, KeyCode::Down) => {
+                self.dismiss_completion();
+                self.editor.move_down();
+            }
             (KeyModifiers::NONE, KeyCode::Home) => self.editor.move_to_line_start(),
             (KeyModifiers::NONE, KeyCode::End) => self.editor.move_to_line_end(),
             (KeyModifiers::NONE, KeyCode::PageUp) => self.editor.page_up(),
@@ -88,12 +153,26 @@ impl App {
             (KeyModifiers::CONTROL, KeyCode::Char('z')) => self.editor.undo(),
             (KeyModifiers::CONTROL, KeyCode::Char('y')) => self.editor.redo(),
             (KeyModifiers::CONTROL, KeyCode::Char('s')) => self.save_current_file(),
-            (KeyModifiers::NONE, KeyCode::Backspace) => self.editor.backspace(),
-            (KeyModifiers::NONE, KeyCode::Delete) => self.editor.delete(),
-            (KeyModifiers::NONE, KeyCode::Enter) => self.editor.insert_char('\n'),
-            (KeyModifiers::NONE, KeyCode::Tab) => self.editor.insert_str("    "),
+            (KeyModifiers::NONE, KeyCode::Backspace) => {
+                self.editor.backspace();
+                self.trigger_completion();
+            }
+            (KeyModifiers::NONE, KeyCode::Delete) => {
+                self.editor.delete();
+                self.dismiss_completion();
+            }
+            (KeyModifiers::NONE, KeyCode::Enter) => {
+                self.dismiss_completion();
+                self.editor.insert_char('\n');
+            }
+            (KeyModifiers::NONE, KeyCode::Tab) => {
+                if !self.accept_completion() {
+                    self.editor.insert_str("    ");
+                }
+            }
             (KeyModifiers::NONE, KeyCode::Char(c)) | (KeyModifiers::SHIFT, KeyCode::Char(c)) => {
                 self.editor.insert_char(c);
+                self.trigger_completion();
             }
             _ => {}
         }
@@ -145,17 +224,54 @@ impl App {
     /// Handles editor keys in insert mode (Vim).
     fn handle_editor_insert_key(&mut self, key: KeyEvent) {
         match (key.modifiers, key.code) {
-            (KeyModifiers::NONE, KeyCode::Esc) => self.editor.set_mode(EditorMode::Normal),
-            (KeyModifiers::NONE, KeyCode::Backspace) => self.editor.backspace(),
-            (KeyModifiers::NONE, KeyCode::Delete) => self.editor.delete(),
-            (KeyModifiers::NONE, KeyCode::Enter) => self.editor.insert_char('\n'),
-            (KeyModifiers::NONE, KeyCode::Tab) => self.editor.insert_str("    "),
-            (KeyModifiers::NONE, KeyCode::Left) => self.editor.move_left(),
-            (KeyModifiers::NONE, KeyCode::Right) => self.editor.move_right(),
-            (KeyModifiers::NONE, KeyCode::Up) => self.editor.move_up(),
-            (KeyModifiers::NONE, KeyCode::Down) => self.editor.move_down(),
+            // Accept completion with Ctrl+Space
+            (KeyModifiers::CONTROL, KeyCode::Char(' ')) => {
+                if !self.accept_completion() {
+                    // No completion to accept, trigger one manually
+                    self.trigger_completion();
+                }
+            }
+            (KeyModifiers::NONE, KeyCode::Esc) => {
+                self.dismiss_completion();
+                self.editor.set_mode(EditorMode::Normal);
+            }
+            (KeyModifiers::NONE, KeyCode::Backspace) => {
+                self.editor.backspace();
+                self.trigger_completion();
+            }
+            (KeyModifiers::NONE, KeyCode::Delete) => {
+                self.editor.delete();
+                self.dismiss_completion();
+            }
+            (KeyModifiers::NONE, KeyCode::Enter) => {
+                self.dismiss_completion();
+                self.editor.insert_char('\n');
+            }
+            (KeyModifiers::NONE, KeyCode::Tab) => {
+                // Tab can accept completion if available, otherwise insert spaces
+                if !self.accept_completion() {
+                    self.editor.insert_str("    ");
+                }
+            }
+            (KeyModifiers::NONE, KeyCode::Left) => {
+                self.dismiss_completion();
+                self.editor.move_left();
+            }
+            (KeyModifiers::NONE, KeyCode::Right) => {
+                self.dismiss_completion();
+                self.editor.move_right();
+            }
+            (KeyModifiers::NONE, KeyCode::Up) => {
+                self.dismiss_completion();
+                self.editor.move_up();
+            }
+            (KeyModifiers::NONE, KeyCode::Down) => {
+                self.dismiss_completion();
+                self.editor.move_down();
+            }
             (KeyModifiers::NONE, KeyCode::Char(c)) | (KeyModifiers::SHIFT, KeyCode::Char(c)) => {
                 self.editor.insert_char(c);
+                self.trigger_completion();
             }
             (KeyModifiers::CONTROL, KeyCode::Char('s')) => self.save_current_file(),
             _ => {}

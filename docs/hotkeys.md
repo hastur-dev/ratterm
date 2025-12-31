@@ -104,6 +104,21 @@ These hotkeys work in the editor regardless of keybinding mode.
 | `Ctrl+Shift+E` | Search files |
 | `Ctrl+N` | Create new file |
 | `Ctrl+Shift+N` | Create new folder |
+| `Ctrl+Space` | Accept autocomplete suggestion |
+
+### Autocomplete
+
+Ratterm provides inline autocomplete suggestions that appear as grayed-out "ghost text" while typing. Suggestions are triggered automatically after a brief pause (300ms debounce) and show context-aware completions.
+
+| Hotkey | Action |
+|--------|--------|
+| `Ctrl+Space` | Accept the current suggestion (inserts the ghost text) |
+| `Esc` | Dismiss the current suggestion |
+| `Tab` | Accept suggestion (in Insert mode) or insert spaces |
+
+**Completion Sources:**
+- **LSP (Language Server Protocol)**: When available, language servers provide intelligent completions for Rust, Python, JavaScript, TypeScript, Java, C#, PHP, SQL, HTML, and CSS.
+- **Keyword Fallback**: If no LSP is available, keyword-based completions from the current buffer and language keywords are provided.
 
 ---
 

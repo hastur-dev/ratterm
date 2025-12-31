@@ -10,6 +10,7 @@ use ratatui::{
 };
 use unicode_width::UnicodeWidthChar;
 
+use super::ghost_text::GhostTextWidget;
 use crate::editor::{Editor, EditorMode};
 use crate::theme::EditorTheme;
 
@@ -21,6 +22,8 @@ pub struct EditorWidget<'a> {
     focused: bool,
     /// Theme for rendering colors.
     theme: Option<&'a EditorTheme>,
+    /// Completion suggestion to display as ghost text.
+    suggestion: Option<&'a str>,
 }
 
 impl<'a> EditorWidget<'a> {
@@ -31,6 +34,7 @@ impl<'a> EditorWidget<'a> {
             editor,
             focused: false,
             theme: None,
+            suggestion: None,
         }
     }
 
@@ -45,6 +49,13 @@ impl<'a> EditorWidget<'a> {
     #[must_use]
     pub fn theme(mut self, theme: &'a EditorTheme) -> Self {
         self.theme = Some(theme);
+        self
+    }
+
+    /// Sets the completion suggestion to display as ghost text.
+    #[must_use]
+    pub fn suggestion(mut self, suggestion: Option<&'a str>) -> Self {
+        self.suggestion = suggestion;
         self
     }
 
@@ -348,6 +359,27 @@ impl Widget for EditorWidget<'_> {
         // Render editor content
         self.render_line_numbers(inner_area, buf);
         self.render_content(inner_area, buf);
+
+        // Render ghost text (completion suggestion) if present
+        if let Some(suggestion) = self.suggestion {
+            if !suggestion.is_empty() && self.focused {
+                let cursor_pos = self.editor.cursor_position();
+                let line_content = self
+                    .editor
+                    .buffer()
+                    .line(cursor_pos.line)
+                    .unwrap_or_default();
+
+                let ghost_widget = GhostTextWidget::new(
+                    Some(suggestion),
+                    cursor_pos.line,
+                    cursor_pos.col,
+                    self.editor.view(),
+                    &line_content,
+                );
+                ghost_widget.render(inner_area, buf);
+            }
+        }
 
         if self.focused {
             self.render_cursor(inner_area, buf);
