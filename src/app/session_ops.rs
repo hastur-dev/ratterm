@@ -52,7 +52,6 @@ impl App {
         session.keybinding_mode = match self.config.mode {
             KeybindingMode::Vim => "vim".to_string(),
             KeybindingMode::Emacs => "emacs".to_string(),
-            KeybindingMode::VsCode => "vscode".to_string(),
             KeybindingMode::Default => "default".to_string(),
         };
 

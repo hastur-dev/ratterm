@@ -14,7 +14,6 @@ impl App {
             KeybindingMode::Vim => self.handle_editor_key_vim(key),
             KeybindingMode::Emacs => self.handle_editor_key_emacs(key),
             KeybindingMode::Default => self.handle_editor_key_default(key),
-            KeybindingMode::VsCode => self.handle_editor_key_vscode(key),
         }
     }
 
@@ -93,66 +92,6 @@ impl App {
             (KeyModifiers::NONE, KeyCode::Delete) => self.editor.delete(),
             (KeyModifiers::NONE, KeyCode::Enter) => self.editor.insert_char('\n'),
             (KeyModifiers::NONE, KeyCode::Tab) => self.editor.insert_str("    "),
-            (KeyModifiers::NONE, KeyCode::Char(c)) | (KeyModifiers::SHIFT, KeyCode::Char(c)) => {
-                self.editor.insert_char(c);
-            }
-            _ => {}
-        }
-    }
-
-    /// Handles editor keys in VSCode mode (non-modal, VSCode-like keybindings).
-    fn handle_editor_key_vscode(&mut self, key: KeyEvent) {
-        match (key.modifiers, key.code) {
-            (KeyModifiers::NONE, KeyCode::Left) => self.editor.move_left(),
-            (KeyModifiers::NONE, KeyCode::Right) => self.editor.move_right(),
-            (KeyModifiers::NONE, KeyCode::Up) => self.editor.move_up(),
-            (KeyModifiers::NONE, KeyCode::Down) => self.editor.move_down(),
-            (KeyModifiers::NONE, KeyCode::Home) => self.editor.move_to_line_start(),
-            (KeyModifiers::NONE, KeyCode::End) => self.editor.move_to_line_end(),
-            (KeyModifiers::NONE, KeyCode::PageUp) => self.editor.page_up(),
-            (KeyModifiers::NONE, KeyCode::PageDown) => self.editor.page_down(),
-            (KeyModifiers::CONTROL, KeyCode::Left) => self.editor.move_word_left(),
-            (KeyModifiers::CONTROL, KeyCode::Right) => self.editor.move_word_right(),
-            (KeyModifiers::CONTROL, KeyCode::Home) => self.editor.move_to_buffer_start(),
-            (KeyModifiers::CONTROL, KeyCode::End) => self.editor.move_to_buffer_end(),
-            (KeyModifiers::SHIFT, KeyCode::Left) => self.editor.select_left(),
-            (KeyModifiers::SHIFT, KeyCode::Right) => self.editor.select_right(),
-            (KeyModifiers::SHIFT, KeyCode::Up) => self.editor.select_up(),
-            (KeyModifiers::SHIFT, KeyCode::Down) => self.editor.select_down(),
-            (m, KeyCode::Left) if m == KeyModifiers::CONTROL | KeyModifiers::SHIFT => {
-                self.editor.select_word_left();
-            }
-            (m, KeyCode::Right) if m == KeyModifiers::CONTROL | KeyModifiers::SHIFT => {
-                self.editor.select_word_right();
-            }
-            (KeyModifiers::SHIFT, KeyCode::Home) => self.editor.select_to_line_start(),
-            (KeyModifiers::SHIFT, KeyCode::End) => self.editor.select_to_line_end(),
-            (KeyModifiers::CONTROL, KeyCode::Char('a')) => self.editor.select_all(),
-            (KeyModifiers::CONTROL, KeyCode::Char('l')) => self.editor.select_line(),
-            (KeyModifiers::CONTROL, KeyCode::Char('z')) => self.editor.undo(),
-            (KeyModifiers::CONTROL, KeyCode::Char('y')) => self.editor.redo(),
-            (m, KeyCode::Char('z') | KeyCode::Char('Z'))
-                if m == KeyModifiers::CONTROL | KeyModifiers::SHIFT =>
-            {
-                self.editor.redo();
-            }
-            (KeyModifiers::CONTROL, KeyCode::Char('s')) => self.save_current_file(),
-            (KeyModifiers::CONTROL, KeyCode::Char('d')) => self.editor.duplicate_line(),
-            (m, KeyCode::Char('k') | KeyCode::Char('K'))
-                if m == KeyModifiers::CONTROL | KeyModifiers::SHIFT =>
-            {
-                self.editor.delete_line();
-            }
-            (KeyModifiers::ALT, KeyCode::Up) => self.editor.move_line_up(),
-            (KeyModifiers::ALT, KeyCode::Down) => self.editor.move_line_down(),
-            (KeyModifiers::CONTROL, KeyCode::Char('/')) => self.editor.toggle_comment(),
-            (KeyModifiers::CONTROL, KeyCode::Char(']')) => self.editor.indent(),
-            (KeyModifiers::CONTROL, KeyCode::Char('[')) => self.editor.outdent(),
-            (KeyModifiers::NONE, KeyCode::Backspace) => self.editor.backspace(),
-            (KeyModifiers::NONE, KeyCode::Delete) => self.editor.delete(),
-            (KeyModifiers::NONE, KeyCode::Enter) => self.editor.insert_char('\n'),
-            (KeyModifiers::NONE, KeyCode::Tab) => self.editor.insert_str("    "),
-            (KeyModifiers::SHIFT, KeyCode::Tab) => self.editor.outdent(),
             (KeyModifiers::NONE, KeyCode::Char(c)) | (KeyModifiers::SHIFT, KeyCode::Char(c)) => {
                 self.editor.insert_char(c);
             }

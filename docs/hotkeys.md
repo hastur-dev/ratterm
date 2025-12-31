@@ -13,7 +13,7 @@ These hotkeys work regardless of which pane is focused or what mode you're in.
 | `F1` | Open Command Palette (Windows 11) |
 | `Ctrl+P` | Open Command Palette (non-Windows 11) |
 | `Ctrl+Shift+P` | Open Command Palette (non-Windows 11) |
-| `Ctrl+Shift+Tab` | Switch Editor Mode (cycles Vim/Emacs/Default/VSCode) |
+| `Ctrl+Shift+Tab` | Switch Editor Mode (cycles Vim/Emacs/Default) |
 | `Ctrl+O` | Open File Browser |
 | `Ctrl+Shift+C` | Copy selection |
 | `Ctrl+V` | Paste from clipboard |
@@ -207,52 +207,6 @@ Emacs-style keybindings with Ctrl+key navigation.
 | `Backspace` | Delete before cursor |
 | `Delete` | Delete at cursor |
 | `Tab` | Insert spaces |
-
----
-
-### VSCode Mode
-
-VSCode-style keybindings with selection support.
-
-#### Navigation
-
-| Hotkey | Action |
-|--------|--------|
-| `Arrow Keys` | Move cursor |
-| `Home` / `End` | Line start/end |
-| `Ctrl+Home` / `Ctrl+End` | Buffer start/end |
-| `Ctrl+Left` / `Ctrl+Right` | Word navigation |
-| `PageUp` / `PageDown` | Page navigation |
-
-#### Selection
-
-| Hotkey | Action |
-|--------|--------|
-| `Shift+Arrow` | Extend selection |
-| `Shift+Home` / `Shift+End` | Select to line start/end |
-| `Ctrl+Shift+Left` / `Ctrl+Shift+Right` | Select word |
-| `Ctrl+A` | Select all |
-| `Ctrl+L` | Select line |
-
-#### Editing
-
-| Hotkey | Action |
-|--------|--------|
-| `Ctrl+Z` | Undo |
-| `Ctrl+Y` | Redo |
-| `Ctrl+Shift+Z` | Redo (alternative) |
-| `Ctrl+S` | Save |
-| `Ctrl+D` | Duplicate line |
-| `Ctrl+Shift+K` | Delete line |
-| `Alt+Up` | Move line up |
-| `Alt+Down` | Move line down |
-| `Ctrl+/` | Toggle comment |
-| `Ctrl+]` | Indent |
-| `Ctrl+[` | Outdent |
-| `Tab` | Indent |
-| `Shift+Tab` | Outdent |
-| `Backspace` | Delete before cursor |
-| `Delete` | Delete at cursor |
 
 ---
 

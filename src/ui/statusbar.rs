@@ -161,7 +161,6 @@ impl Widget for StatusBar<'_> {
             KeybindingMode::Vim => "VIM",
             KeybindingMode::Emacs => "EMACS",
             KeybindingMode::Default => "STD",
-            KeybindingMode::VsCode => "VSCODE",
         };
 
         // Show editor mode for vim, or just keybinding mode for others
@@ -172,7 +171,6 @@ impl Widget for StatusBar<'_> {
             (KeybindingMode::Vim, Some(EditorMode::Command)) => "CMD",
             (KeybindingMode::Emacs, _) => "",
             (KeybindingMode::Default, _) => "",
-            (KeybindingMode::VsCode, _) => "",
             _ => "",
         };
 
