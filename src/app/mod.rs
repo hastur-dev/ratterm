@@ -88,7 +88,7 @@ pub struct App {
     pub(crate) mode: AppMode,
     /// Popup dialog.
     pub(crate) popup: Popup,
-    /// Command palette for VSCode-style command access.
+    /// Command palette for quick command access.
     pub(crate) command_palette: CommandPalette,
     /// Mode switcher for cycling through editor keybinding modes.
     pub(crate) mode_switcher: Option<ModeSwitcher>,
@@ -173,6 +173,7 @@ impl App {
 
         let editor = Editor::new(cols / 2, rows.saturating_sub(4));
         let file_browser = FileBrowser::default();
+        let cwd = file_browser.path().to_path_buf();
 
         let layout = if config.ide_always {
             SplitLayout::with_ide_visible()
@@ -226,7 +227,7 @@ impl App {
             remote_manager: RemoteFileManager::new(),
             remote_file_browser: None,
             win11_notification_shown: false,
-            completion_handle: Some(CompletionHandle::new()),
+            completion_handle: Some(CompletionHandle::new(cwd)),
             completion_suggestion: None,
         })
     }

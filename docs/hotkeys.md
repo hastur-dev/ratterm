@@ -114,7 +114,8 @@ Ratterm provides inline autocomplete suggestions that appear as grayed-out "ghos
 |--------|--------|
 | `Ctrl+Space` | Accept the current suggestion (inserts the ghost text) |
 | `Esc` | Dismiss the current suggestion |
-| `Tab` | Accept suggestion (in Insert mode) or insert spaces |
+
+**Note:** Tab only inserts spaces (4 spaces) and does not accept completions. Use `Ctrl+Space` to accept autocomplete suggestions.
 
 **Completion Sources:**
 - **LSP (Language Server Protocol)**: When available, language servers provide intelligent completions for Rust, Python, JavaScript, TypeScript, Java, C#, PHP, SQL, HTML, and CSS.

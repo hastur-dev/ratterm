@@ -35,15 +35,18 @@ pub mod keyword;
 pub mod lsp;
 pub mod provider;
 
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
+use tokio::runtime::Runtime;
 use tokio::sync::{RwLock, mpsc, oneshot};
 use tracing::{debug, warn};
 
 pub use cache::{CacheKey, CompletionCache};
 pub use debounce::DebounceState;
 pub use keyword::KeywordProvider;
+pub use lsp::LspProvider;
 pub use provider::{
     CompletionContext, CompletionItem, CompletionKind, CompletionProvider, CompletionResult,
 };
@@ -66,7 +69,6 @@ pub struct CompletionRequest {
 ///
 /// This is the main interface for triggering completions, accepting suggestions,
 /// and querying the current completion state.
-#[derive(Debug)]
 pub struct CompletionHandle {
     /// Channel to send completion requests.
     request_tx: mpsc::Sender<CompletionRequest>,
@@ -82,21 +84,37 @@ pub struct CompletionHandle {
 
     /// Debounce state.
     debounce: Arc<DebounceState>,
+
+    /// Runtime for async operations.
+    runtime: Arc<Runtime>,
 }
 
 impl CompletionHandle {
     /// Creates a new completion handle and spawns the background engine.
+    ///
+    /// # Arguments
+    /// * `cwd` - The current working directory for LSP operations
     #[must_use]
-    pub fn new() -> Self {
+    pub fn new(cwd: PathBuf) -> Self {
+        // Create a dedicated tokio runtime for completion operations
+        let runtime = Arc::new(
+            tokio::runtime::Builder::new_multi_thread()
+                .worker_threads(2)
+                .enable_all()
+                .thread_name("completion-runtime")
+                .build()
+                .expect("Failed to create completion runtime"),
+        );
+
         let (request_tx, request_rx) = mpsc::channel(REQUEST_CHANNEL_SIZE);
         let current_suggestion = Arc::new(RwLock::new(None));
         let running = Arc::new(AtomicBool::new(true));
         let debounce = Arc::new(DebounceState::with_default_delay());
 
-        // Spawn the background engine
-        let engine = CompletionEngine::new(request_rx, Arc::clone(&running));
+        // Spawn the background engine with LSP support within our runtime
+        let engine = CompletionEngine::new(request_rx, Arc::clone(&running), cwd);
 
-        tokio::spawn(async move {
+        runtime.spawn(async move {
             engine.run().await;
         });
 
@@ -106,6 +124,7 @@ impl CompletionHandle {
             last_request_id: AtomicU64::new(0),
             running,
             debounce,
+            runtime,
         }
     }
 
@@ -125,7 +144,7 @@ impl CompletionHandle {
         let debounce = Arc::clone(&self.debounce);
         let current_suggestion = Arc::clone(&self.current_suggestion);
 
-        tokio::spawn(async move {
+        self.runtime.spawn(async move {
             // Wait for debounce
             if debounce.wait(debounce_id).await.is_none() {
                 // Cancelled by newer request
@@ -174,7 +193,7 @@ impl CompletionHandle {
         let request_tx = self.request_tx.clone();
         let current_suggestion = Arc::clone(&self.current_suggestion);
 
-        tokio::spawn(async move {
+        self.runtime.spawn(async move {
             let (response_tx, response_rx) = oneshot::channel();
 
             let request = CompletionRequest {
@@ -264,7 +283,7 @@ impl CompletionHandle {
 
 impl Default for CompletionHandle {
     fn default() -> Self {
-        Self::new()
+        Self::new(PathBuf::from("."))
     }
 }
 
@@ -294,11 +313,20 @@ struct CompletionEngine {
 
 impl CompletionEngine {
     /// Creates a new completion engine.
-    fn new(request_rx: mpsc::Receiver<CompletionRequest>, running: Arc<AtomicBool>) -> Self {
-        // Initialize with default providers
+    ///
+    /// # Arguments
+    /// * `request_rx` - Channel to receive completion requests
+    /// * `running` - Shared flag for engine lifecycle
+    /// * `cwd` - Current working directory for LSP operations
+    fn new(
+        request_rx: mpsc::Receiver<CompletionRequest>,
+        running: Arc<AtomicBool>,
+        cwd: PathBuf,
+    ) -> Self {
+        // Initialize with default providers (LSP has higher priority)
         let providers: Vec<Arc<dyn CompletionProvider>> = vec![
+            Arc::new(LspProvider::new(cwd)),
             Arc::new(KeywordProvider::new()),
-            // LSP provider will be added when available
         ];
 
         Self {
@@ -398,36 +426,40 @@ impl CompletionEngine {
 mod tests {
     use super::*;
 
-    #[tokio::test]
-    async fn test_completion_handle_creation() {
-        let handle = CompletionHandle::new();
+    // Note: These tests use #[test] instead of #[tokio::test] because
+    // CompletionHandle creates its own internal tokio runtime, and dropping
+    // a runtime from within an async context causes a panic.
+
+    #[test]
+    fn test_completion_handle_creation() {
+        let handle = CompletionHandle::new(PathBuf::from("."));
         assert!(!handle.has_suggestion());
     }
 
-    #[tokio::test]
-    async fn test_completion_handle_dismiss() {
-        let handle = CompletionHandle::new();
+    #[test]
+    fn test_completion_handle_dismiss() {
+        let handle = CompletionHandle::new(PathBuf::from("."));
         handle.dismiss();
         assert!(!handle.has_suggestion());
     }
 
-    #[tokio::test]
-    async fn test_completion_handle_cancel() {
-        let handle = CompletionHandle::new();
+    #[test]
+    fn test_completion_handle_cancel() {
+        let handle = CompletionHandle::new(PathBuf::from("."));
         handle.cancel();
         // Should not panic
     }
 
-    #[tokio::test]
-    async fn test_completion_handle_shutdown() {
-        let handle = CompletionHandle::new();
+    #[test]
+    fn test_completion_handle_shutdown() {
+        let handle = CompletionHandle::new(PathBuf::from("."));
         handle.shutdown();
         assert!(!handle.running.load(Ordering::Relaxed));
     }
 
-    #[tokio::test]
-    async fn test_completion_trigger() {
-        let handle = CompletionHandle::new();
+    #[test]
+    fn test_completion_trigger() {
+        let handle = CompletionHandle::new(PathBuf::from("."));
 
         let context = CompletionContext::new("rust", 0, 5)
             .with_prefix("let x")
@@ -437,7 +469,7 @@ mod tests {
         handle.trigger_immediate(context);
 
         // Give the engine time to process
-        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        std::thread::sleep(std::time::Duration::from_millis(100));
 
         // Should have a suggestion (from keyword provider)
         // Note: This may or may not have a suggestion depending on matching
