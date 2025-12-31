@@ -199,6 +199,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize extensions
     app.init_extensions();
 
+    // Check for Windows 11 keybinding notification
+    app.check_win11_notification();
+
     // Show update status in the app
     match update_result {
         StartupUpdateResult::DevModeUpdateAvailable { current, latest } => {

@@ -10,8 +10,9 @@ These hotkeys work regardless of which pane is focused or what mode you're in.
 |--------|--------|
 | `Ctrl+Q` | Quit application |
 | `Ctrl+I` | Toggle IDE pane visibility |
-| `Ctrl+P` | Open Command Palette |
-| `Ctrl+Shift+P` | Open Command Palette (alternative) |
+| `F1` | Open Command Palette (Windows 11) |
+| `Ctrl+P` | Open Command Palette (non-Windows 11) |
+| `Ctrl+Shift+P` | Open Command Palette (non-Windows 11) |
 | `Ctrl+Shift+Tab` | Switch Editor Mode (cycles Vim/Emacs/Default/VSCode) |
 | `Ctrl+O` | Open File Browser |
 | `Ctrl+Shift+C` | Copy selection |
@@ -276,7 +277,9 @@ When the file browser is open.
 
 ## Command Palette
 
-Press `Ctrl+P` or `Ctrl+Shift+P` to open.
+Press `F1` (Windows 11) or `Ctrl+Shift+P` (other platforms) to open.
+
+> **Note for Windows 11 users:** The command palette keybinding has been changed from `Ctrl+Shift+P` to `F1` because Windows 11 uses `Ctrl+Shift+P` for its system-wide command palette in terminals and other applications.
 
 | Hotkey | Action |
 |--------|--------|

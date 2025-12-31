@@ -4,12 +4,14 @@
 
 mod command_palette;
 mod extension_approval;
+mod keybinding_notification;
 mod mode_switcher;
 mod shell_selector;
 mod theme_selector;
 
 pub use command_palette::{Command, CommandPalette};
 pub use extension_approval::{ExtensionApprovalPrompt, ExtensionApprovalWidget};
+pub use keybinding_notification::KeybindingNotificationWidget;
 pub use mode_switcher::{ModeSwitcher, ModeSwitcherWidget};
 pub use shell_selector::{
     ShellInstallPrompt, ShellInstallPromptWidget, ShellSelector, ShellSelectorItem,
@@ -42,7 +44,7 @@ pub enum PopupKind {
     CreateFolder,
     /// Confirm save before exit.
     ConfirmSaveBeforeExit,
-    /// Command palette (VSCode-style Ctrl+Shift+P).
+    /// Command palette (VSCode-style Ctrl+Shift+P or F1 on Windows 11).
     CommandPalette,
     /// Mode switcher (Ctrl+Shift+Tab to cycle through editor modes).
     ModeSwitcher,
@@ -64,6 +66,8 @@ pub enum PopupKind {
     SSHMasterPassword,
     /// SSH network scan subnet entry.
     SSHSubnetEntry,
+    /// Windows 11 keybinding change notification.
+    KeybindingChangeNotification,
 }
 
 impl PopupKind {
@@ -89,6 +93,7 @@ impl PopupKind {
             Self::SSHStorageSetup => "SSH Storage Setup",
             Self::SSHMasterPassword => "Master Password",
             Self::SSHSubnetEntry => "Network Scan",
+            Self::KeybindingChangeNotification => "Windows 11 Keybinding Change",
         }
     }
 
@@ -114,6 +119,7 @@ impl PopupKind {
             Self::SSHStorageSetup => "",
             Self::SSHMasterPassword => "Password: ",
             Self::SSHSubnetEntry => "Subnet (e.g., 192.168.1.0/24): ",
+            Self::KeybindingChangeNotification => "",
         }
     }
 
@@ -200,6 +206,12 @@ impl PopupKind {
                 | Self::SSHMasterPassword
                 | Self::SSHSubnetEntry
         )
+    }
+
+    /// Returns true if this popup is the keybinding change notification.
+    #[must_use]
+    pub fn is_keybinding_notification(&self) -> bool {
+        matches!(self, Self::KeybindingChangeNotification)
     }
 }
 
