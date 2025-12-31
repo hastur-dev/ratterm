@@ -45,7 +45,7 @@ shell = system
 
 # Keybinding Mode
 # ---------------
-# Set the keybinding mode: vim, emacs, vscode, or default
+# Set the keybinding mode: vim, emacs, or default
 # mode = default
 mode = vim
 
@@ -271,7 +271,6 @@ impl Config {
                 self.mode = match value.to_lowercase().as_str() {
                     "vim" => KeybindingMode::Vim,
                     "emacs" => KeybindingMode::Emacs,
-                    "vscode" | "vs" | "code" => KeybindingMode::VsCode,
                     _ => KeybindingMode::Default,
                 };
             }

@@ -100,7 +100,6 @@ Sets the editor keybinding mode.
 | `default` | Standard arrow-key navigation with common shortcuts |
 | `vim` | Modal editing with Normal/Insert/Visual/Command modes |
 | `emacs` | Emacs-style keybindings (Ctrl+key navigation) |
-| `vscode` / `vs` / `code` | VSCode-style keybindings with selection support |
 
 **Example:**
 ```
@@ -520,8 +519,8 @@ auto_close_tabs_on_shell_change = true
 # Show IDE pane always (false = terminal-first mode)
 ide-always = false
 
-# Use VSCode keybinding mode
-mode = vscode
+# Use Vim keybinding mode
+mode = vim
 
 # Theme settings
 theme = dracula
