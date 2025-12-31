@@ -3,6 +3,8 @@
 use fuzzy_matcher::FuzzyMatcher;
 use fuzzy_matcher::skim::SkimMatcherV2;
 
+use crate::config::command_palette_hotkey;
+
 /// A command that can be executed from the command palette.
 #[derive(Debug, Clone)]
 pub struct Command {
@@ -36,8 +38,15 @@ impl Command {
     /// Returns formatted display string for command palette.
     #[must_use]
     pub fn display(&self) -> String {
-        if let Some(kb) = self.keybinding {
-            format!("{}: {}  ({})", self.category, self.label, kb)
+        // Special handling for the command palette keybinding on Windows 11
+        let kb = if self.id == "app.commandPalette" {
+            Some(command_palette_hotkey())
+        } else {
+            self.keybinding
+        };
+
+        if let Some(key) = kb {
+            format!("{}: {}  ({})", self.category, self.label, key)
         } else {
             format!("{}: {}", self.category, self.label)
         }

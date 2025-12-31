@@ -10,8 +10,8 @@ use crate::ui::{
     file_picker::{FilePickerWidget, RemoteFilePickerWidget},
     layout::FocusedPane,
     popup::{
-        ModeSwitcherWidget, PopupWidget, ShellInstallPromptWidget, ShellSelectorWidget,
-        ThemeSelectorWidget,
+        KeybindingNotificationWidget, ModeSwitcherWidget, PopupWidget, ShellInstallPromptWidget,
+        ShellSelectorWidget, ThemeSelectorWidget,
     },
     ssh_manager::SSHManagerWidget,
     statusbar::StatusBar,
@@ -325,6 +325,10 @@ impl App {
         } else if let Some(ref manager) = self.ssh_manager {
             // Use special widget for SSH manager
             let widget = SSHManagerWidget::new(manager);
+            frame.render_widget(widget, area);
+        } else if self.popup.kind().is_keybinding_notification() {
+            // Use special widget for Windows 11 keybinding notification
+            let widget = KeybindingNotificationWidget::new();
             frame.render_widget(widget, area);
         } else {
             let popup_widget = PopupWidget::new(&self.popup);

@@ -3,6 +3,7 @@
 //! Handles loading and parsing the .ratrc configuration file.
 
 mod keybindings;
+pub mod platform;
 pub mod shell;
 pub mod vscode;
 
@@ -11,6 +12,7 @@ use std::io::{self, Write};
 use std::path::PathBuf;
 
 pub use keybindings::{KeyAction, KeyBinding, KeybindingMode, Keybindings};
+pub use platform::{command_palette_hotkey, is_windows_11};
 pub use shell::{ShellDetector, ShellInfo, ShellInstallInfo, ShellInstaller, ShellType};
 
 use crate::ssh::StorageMode;

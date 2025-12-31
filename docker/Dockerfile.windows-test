@@ -1,0 +1,49 @@
+# Dockerfile for Windows cross-compilation and Windows 11 compatibility testing
+# This builds and tests the codebase with Windows-specific code paths
+#
+# Usage: docker compose -f docker/docker-compose.yml run windows-test
+#
+# Note: This does NOT run on actual Windows - it cross-compiles for Windows
+# and runs tests with mock Windows 11 detection for verification.
+
+FROM rust:1.85-bookworm
+
+# Install cross-compilation tools for Windows
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    mingw-w64 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Add Windows targets
+RUN rustup target add x86_64-pc-windows-gnu
+RUN rustup target add x86_64-pc-windows-msvc
+
+# Install Rust components
+RUN rustup component add rustfmt clippy
+
+# Set working directory
+WORKDIR /app
+
+# Copy the project
+COPY . .
+
+# Run tests for the platform module and Windows 11 detection logic
+# These tests run on Linux but verify the code structure
+CMD ["sh", "-c", "\
+    echo '=== Windows 11 Compatibility Test Suite ===' && \
+    echo '' && \
+    echo '1. Checking Windows-specific code compilation...' && \
+    cargo check --all-features && \
+    echo '' && \
+    echo '2. Running platform detection tests...' && \
+    cargo test --all-features platform:: -- --nocapture && \
+    echo '' && \
+    echo '3. Running keybinding notification tests...' && \
+    cargo test --all-features keybinding_notification:: -- --nocapture && \
+    echo '' && \
+    echo '4. Verifying Windows cross-compilation (x86_64-pc-windows-gnu)...' && \
+    cargo check --target x86_64-pc-windows-gnu --all-features && \
+    echo '' && \
+    echo '=== All Windows 11 compatibility tests passed ===' \
+"]
