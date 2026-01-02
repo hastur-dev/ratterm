@@ -190,26 +190,6 @@ mode = vim
 # paste = ctrl+v
 ```
 
-### VSCode Settings Import
-
-Ratterm can automatically import settings from your existing VSCode installation. The following settings are supported:
-
-| VSCode Setting | Description |
-|----------------|-------------|
-| `editor.tabSize` | Number of spaces per tab |
-| `editor.insertSpaces` | Use spaces instead of tabs |
-| `editor.wordWrap` | Word wrap mode (off/on/bounded) |
-| `editor.cursorStyle` | Cursor style (line/block/underline) |
-| `editor.lineNumbers` | Line numbers mode (off/on/relative) |
-| `files.autoSave` | Auto-save mode |
-| `files.trimTrailingWhitespace` | Trim trailing whitespace on save |
-| `files.insertFinalNewline` | Insert final newline on save |
-
-Settings are loaded from:
-- **Windows**: `%APPDATA%\Code\User\settings.json`
-- **macOS**: `~/Library/Application Support/Code/User/settings.json`
-- **Linux**: `~/.config/Code/User/settings.json`
-
 ## Environment Variables
 
 | Variable | Description |

@@ -1,4 +1,4 @@
-//! Command palette for VSCode-style command access.
+//! Command palette for quick command access.
 
 use fuzzy_matcher::FuzzyMatcher;
 use fuzzy_matcher::skim::SkimMatcherV2;

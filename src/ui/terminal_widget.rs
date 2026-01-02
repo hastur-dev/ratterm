@@ -8,6 +8,7 @@ use ratatui::{
     style::{Color, Modifier, Style},
     widgets::{Block, Borders, Widget},
 };
+use tracing::debug;
 
 use crate::terminal::{Terminal, grid::Grid};
 use crate::theme::TerminalTheme;
@@ -64,19 +65,60 @@ impl<'a> TerminalWidget<'a> {
         let visible_rows = area.height as usize;
         let cols = grid.cols().min(area.width) as usize;
 
-        // Get background color from theme
-        let bg_color = self.theme.map(|t| t.background).unwrap_or(Color::Reset);
-        let fg_color = self.theme.map(|t| t.foreground).unwrap_or(Color::Reset);
-        let clear_style = Style::default().fg(fg_color).bg(bg_color);
+        // DIAGNOSTIC: Track if grid dimensions mismatch render area
+        let grid_cols = grid.cols();
+        let grid_rows = grid.rows();
+        let area_cols = area.width;
+        let area_rows = area.height;
+        let cols_mismatch = grid_cols != area_cols;
+        let rows_mismatch = grid_rows != area_rows;
 
-        // Clear the entire terminal area first to prevent ghost characters when scrolling
-        for row in 0..area.height {
-            for col in 0..area.width {
-                let x = area.x + col;
-                let y = area.y + row;
-                if let Some(cell) = buf.cell_mut((x, y)) {
-                    cell.set_char(' ');
-                    cell.set_style(clear_style);
+        debug!(
+            "TERMINAL_GRID: area=({}, {}, {}x{}), grid_cols={}, grid_rows={}, scroll_offset={}, MISMATCH=cols:{} rows:{}",
+            area.x,
+            area.y,
+            area.width,
+            area.height,
+            grid_cols,
+            grid_rows,
+            scroll_offset,
+            cols_mismatch,
+            rows_mismatch
+        );
+
+        // NOTE: Widget::render() already clears the inner area before calling render_grid()
+        // So we don't need to clear again here - redundant clearing can cause flicker
+
+        // DIAGNOSTIC: Log how many rows would be filled vs empty at the top
+        let grid_rows_usize = grid_rows as usize;
+        let empty_top_rows = visible_rows.saturating_sub(grid_rows_usize);
+        if empty_top_rows > 0 || cols_mismatch || rows_mismatch {
+            debug!(
+                "TERMINAL_GRID_FILL: visible_rows={}, grid_rows={}, empty_top_rows={}, effective_cols={}",
+                visible_rows, grid_rows, empty_top_rows, cols
+            );
+        }
+
+        // DIAGNOSTIC: Log grid content for first few rows to check if empty
+        let sample_rows = 3.min(grid_rows_usize);
+        for row_idx in 0..sample_rows {
+            if let Some(row) = grid.row(row_idx) {
+                let mut non_space_count = 0;
+                let mut last_char: Option<char> = None;
+                for col_idx in 0..cols.min(20) {
+                    if let Some(cell) = row.cell(col_idx as u16) {
+                        let c = cell.character();
+                        if c != ' ' && c != '\0' {
+                            non_space_count += 1;
+                            last_char = Some(c);
+                        }
+                    }
+                }
+                if row_idx < 3 || non_space_count > 0 {
+                    debug!(
+                        "TERMINAL_ROW_{}: non_space_first20={}, last_char={:?}",
+                        row_idx, non_space_count, last_char
+                    );
                 }
             }
         }
@@ -191,29 +233,70 @@ impl<'a> TerminalWidget<'a> {
             .unwrap_or(Color::Rgb(38, 79, 120));
         let selection_style = Style::default().bg(selection_color).fg(Color::White);
 
+        // Log characters near the right edge for the first few rows (debug boundary issues)
+        if screen_row < 3 && cols > 5 {
+            let mut edge_chars = Vec::new();
+            for check_col in (cols.saturating_sub(5))..cols {
+                if let Some(cell) = row.cell(check_col as u16) {
+                    let c = cell.character();
+                    let is_wide = cell.is_wide();
+                    edge_chars.push(format!(
+                        "c{}='{}'{} U+{:04X}",
+                        check_col,
+                        if c.is_control() { '?' } else { c },
+                        if is_wide { "W" } else { "" },
+                        c as u32
+                    ));
+                }
+            }
+            debug!(
+                "TERM_ROW_EDGE row={}: area_right={}, cols={} | {}",
+                screen_row,
+                area.x + area.width,
+                cols,
+                edge_chars.join(" ")
+            );
+        }
+
         for col in 0..cols {
             if let Some(cell) = row.cell(col as u16) {
                 let x = area.x + col as u16;
-                if x < area.x + area.width {
-                    if let Some(ratatui_cell) = buf.cell_mut((x, y)) {
-                        ratatui_cell.set_char(cell.character());
+                // CRITICAL: Check bounds strictly to prevent overflow into adjacent panes
+                if x >= area.x + area.width {
+                    break; // Don't render beyond the area boundary
+                }
 
-                        // Check if this cell is selected
-                        if grid.is_cell_selected(col as u16, grid_row as u16) {
-                            ratatui_cell.set_style(selection_style);
+                // Skip wide continuation cells (they're rendered as part of the wide char)
+                if cell.is_wide_continuation() {
+                    continue;
+                }
+
+                if let Some(ratatui_cell) = buf.cell_mut((x, y)) {
+                    let c = cell.character();
+
+                    // For wide characters at the right edge, render a space instead
+                    // to prevent overflow into adjacent panes
+                    if cell.is_wide() && x + 1 >= area.x + area.width {
+                        ratatui_cell.set_char(' ');
+                    } else {
+                        ratatui_cell.set_char(c);
+                    }
+
+                    // Check if this cell is selected
+                    if grid.is_cell_selected(col as u16, grid_row as u16) {
+                        ratatui_cell.set_style(selection_style);
+                    } else {
+                        // Use theme palette and default colors if available
+                        let style = if let Some(theme) = self.theme {
+                            cell.style().to_ratatui_with_palette_and_defaults(
+                                &theme.palette,
+                                Some(theme.foreground),
+                                Some(theme.background),
+                            )
                         } else {
-                            // Use theme palette and default colors if available
-                            let style = if let Some(theme) = self.theme {
-                                cell.style().to_ratatui_with_palette_and_defaults(
-                                    &theme.palette,
-                                    Some(theme.foreground),
-                                    Some(theme.background),
-                                )
-                            } else {
-                                cell.style().to_ratatui()
-                            };
-                            ratatui_cell.set_style(style);
-                        }
+                            cell.style().to_ratatui()
+                        };
+                        ratatui_cell.set_style(style);
                     }
                 }
             }
@@ -223,6 +306,45 @@ impl<'a> TerminalWidget<'a> {
 
 impl Widget for TerminalWidget<'_> {
     fn render(self, area: Rect, buf: &mut RatatuiBuffer) {
+        debug!(
+            "TERMINAL_WIDGET_START: area=({}, {}, {}x{}), right_edge={}, focused={}, title={:?}",
+            area.x,
+            area.y,
+            area.width,
+            area.height,
+            area.x + area.width,
+            self.focused,
+            self.title
+        );
+
+        // Log pre-render state of cells at the right edge to detect corruption
+        {
+            let right_edge = area.x + area.width;
+            for sample_y in [2, 10, 20].iter() {
+                let y = *sample_y;
+                if y < area.y + area.height {
+                    let mut edge_info = Vec::new();
+                    for x in (right_edge.saturating_sub(3))..right_edge.saturating_add(3) {
+                        if let Some(cell) = buf.cell((x, y)) {
+                            let symbol = cell.symbol();
+                            let c = symbol.chars().next().unwrap_or(' ');
+                            edge_info.push(format!("x{}=U+{:04X}", x, c as u32));
+                        }
+                    }
+                    debug!("TERM_PRE_RENDER y={}: {}", y, edge_info.join(" "));
+                }
+            }
+        }
+
+        // Validate area bounds against buffer
+        let buf_area = buf.area();
+        if area.x + area.width > buf_area.width || area.y + area.height > buf_area.height {
+            debug!(
+                "TERMINAL_WIDGET WARNING: area extends beyond buffer! buf=({}, {}, {}x{})",
+                buf_area.x, buf_area.y, buf_area.width, buf_area.height
+            );
+        }
+
         // Create block with border - use theme if available
         let (border_focused, border_unfocused) = self
             .theme
@@ -250,8 +372,46 @@ impl Widget for TerminalWidget<'_> {
         let inner_area = block.inner(area);
         block.render(area, buf);
 
+        if inner_area.width == 0 || inner_area.height == 0 {
+            return;
+        }
+
+        // CRITICAL: Clear entire inner area first to prevent ghost characters
+        let bg_color = self
+            .theme
+            .map(|t| t.background)
+            .unwrap_or(Color::Rgb(30, 30, 30));
+        let clear_style = Style::default().bg(bg_color).fg(Color::Reset);
+        for y in inner_area.y..inner_area.y + inner_area.height {
+            for x in inner_area.x..inner_area.x + inner_area.width {
+                if let Some(cell) = buf.cell_mut((x, y)) {
+                    cell.set_char(' ');
+                    cell.set_style(clear_style);
+                }
+            }
+        }
+
         // Render terminal content with scroll support
         self.render_grid(inner_area, buf);
+
+        // Log post-render state of cells at the right edge
+        {
+            let right_edge = area.x + area.width;
+            for sample_y in [2, 10, 20].iter() {
+                let y = *sample_y;
+                if y < area.y + area.height {
+                    let mut edge_info = Vec::new();
+                    for x in (right_edge.saturating_sub(3))..right_edge.saturating_add(3) {
+                        if let Some(cell) = buf.cell((x, y)) {
+                            let symbol = cell.symbol();
+                            let c = symbol.chars().next().unwrap_or(' ');
+                            edge_info.push(format!("x{}=U+{:04X}", x, c as u32));
+                        }
+                    }
+                    debug!("TERM_POST_RENDER y={}: {}", y, edge_info.join(" "));
+                }
+            }
+        }
     }
 }
 

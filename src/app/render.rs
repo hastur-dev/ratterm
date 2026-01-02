@@ -2,7 +2,7 @@
 
 use ratatui::layout::{Constraint, Direction, Layout};
 use ratatui::style::{Color, Style};
-use ratatui::widgets::Clear;
+use tracing::debug;
 
 use crate::ui::{
     docker_manager::DockerManagerWidget,
@@ -27,33 +27,149 @@ impl App {
     pub fn render(&self, frame: &mut ratatui::Frame) {
         let area = frame.area();
 
-        // Clear the entire frame first to prevent rendering artifacts
-        frame.render_widget(Clear, area);
+        // Track frame count for debugging initial render issues
+        static FRAME_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let frame_num = FRAME_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
-        // Explicitly reset entire buffer to prevent ghost characters
-        let bg_color = self.config.theme_manager.current().editor.background;
-        let clear_style = Style::default().bg(bg_color).fg(Color::Reset);
-        let buf = frame.buffer_mut();
-        for y in area.y..area.y + area.height {
-            for x in area.x..area.x + area.width {
-                if let Some(cell) = buf.cell_mut((x, y)) {
-                    cell.reset();
-                    cell.set_char(' ');
-                    cell.set_style(clear_style);
+        debug!(
+            "RENDER START: frame={}, frame_area=({}, {}, {}x{})",
+            frame_num, area.x, area.y, area.width, area.height
+        );
+
+        // NOTE: Each pane (terminal, editor, status bar) handles its own clearing
+        // with appropriate background colors. No frame-level clear needed - removing
+        // it prevents flicker from inconsistent colors between panes.
+
+        let areas = self.layout.calculate(area);
+
+        debug!(
+            "LAYOUT: terminal=({}, {}, {}x{}), editor=({}, {}, {}x{}), ide_visible={}, focused={:?}",
+            areas.terminal.x,
+            areas.terminal.y,
+            areas.terminal.width,
+            areas.terminal.height,
+            areas.editor.x,
+            areas.editor.y,
+            areas.editor.width,
+            areas.editor.height,
+            self.layout.ide_visible(),
+            self.layout.focused()
+        );
+
+        // On first 5 frames, log initial buffer state BEFORE any rendering
+        if frame_num < 5 && areas.has_terminal() && areas.has_editor() {
+            let buf = frame.buffer_mut();
+            for y in 0..5.min(area.height) {
+                let mut nonspace_cells = Vec::new();
+                for x in 0..area.width {
+                    if let Some(cell) = buf.cell((x, y)) {
+                        let c = cell.symbol().chars().next().unwrap_or(' ');
+                        if c != ' ' && c != '\0' {
+                            nonspace_cells.push(format!("({},{}='{}')", x, y, c));
+                        }
+                    }
+                }
+                if !nonspace_cells.is_empty() {
+                    debug!(
+                        "FRAME_{}_INITIAL y={}: {}",
+                        frame_num,
+                        y,
+                        nonspace_cells.join(" ")
+                    );
                 }
             }
         }
 
-        let areas = self.layout.calculate(area);
-
         // Render terminal pane (with split support)
         if areas.has_terminal() {
+            debug!("RENDER: terminal pane");
             self.render_terminal_pane(frame, &areas);
+        }
+
+        // Log boundary cells AFTER terminal render, BEFORE editor render
+        if areas.has_terminal() && areas.has_editor() {
+            let buf = frame.buffer_mut();
+            let boundary_x = areas.terminal.x + areas.terminal.width; // First column of editor
+            // Sample a few rows at the boundary with detailed hex info
+            for sample_y in [2, 10, 20].iter() {
+                let y = *sample_y;
+                if y < area.height {
+                    // Log cells around the boundary with hex codes for debugging
+                    let mut boundary_info = Vec::new();
+                    for x_offset in -3i16..6 {
+                        let x = (boundary_x as i16 + x_offset) as u16;
+                        if x < area.width {
+                            if let Some(cell) = buf.cell((x, y)) {
+                                let symbol = cell.symbol();
+                                let first_char = symbol.chars().next().unwrap_or(' ');
+                                let char_code = first_char as u32;
+                                let display = if first_char.is_control() || char_code > 0x7F {
+                                    format!("x{:02}U+{:04X}", x, char_code)
+                                } else {
+                                    format!("x{}='{}'", x, first_char)
+                                };
+                                boundary_info.push(display);
+                            }
+                        }
+                    }
+                    debug!(
+                        "BOUNDARY_DETAIL y={}: term_end={}, ed_start={} | {}",
+                        y,
+                        boundary_x.saturating_sub(1),
+                        boundary_x,
+                        boundary_info.join(" ")
+                    );
+                }
+            }
         }
 
         // Render editor or file browser
         if areas.has_editor() {
+            debug!(
+                "RENDER: editor pane, file_browser_visible={}, remote_browser={}, open_files={}, current_idx={}",
+                self.file_browser.is_visible(),
+                self.remote_file_browser.is_some(),
+                self.open_files.len(),
+                self.current_file_idx
+            );
+            debug!(
+                "RENDER: editor content mode - will render: {}",
+                if self.remote_file_browser.is_some() {
+                    "RemoteFilePicker"
+                } else if self.file_browser.is_visible() {
+                    "FilePicker"
+                } else {
+                    "EditorWidget + TabBar"
+                }
+            );
             self.render_editor_pane(frame, &areas);
+
+            // Log boundary cells AFTER editor render - detailed hex info
+            let buf = frame.buffer_mut();
+            let boundary_x = areas.editor.x; // First column of editor
+            for sample_y in [2, 10, 20].iter() {
+                let y = *sample_y;
+                if y < area.height {
+                    let mut boundary_info = Vec::new();
+                    for x_offset in -3i16..6 {
+                        let x = (boundary_x as i16 + x_offset) as u16;
+                        if x < area.width {
+                            if let Some(cell) = buf.cell((x, y)) {
+                                let symbol = cell.symbol();
+                                let first_char = symbol.chars().next().unwrap_or(' ');
+                                let char_code = first_char as u32;
+                                let display = if first_char.is_control() || char_code > 0x7F {
+                                    format!("x{:02}U+{:04X}", x, char_code)
+                                } else {
+                                    format!("x{}='{}'", x, first_char)
+                                };
+                                boundary_info.push(display);
+                            }
+                        }
+                    }
+                    debug!("AFTER_EDITOR y={}: | {}", y, boundary_info.join(" "));
+                }
+            }
         }
 
         // Render status bar
@@ -62,6 +178,40 @@ impl App {
         // Render popup if visible
         if self.popup.is_visible() {
             self.render_popup(frame, area);
+        }
+
+        // On first 5 frames, log FINAL buffer state AFTER all rendering
+        if frame_num < 5 && areas.has_terminal() && areas.has_editor() {
+            let buf = frame.buffer_mut();
+            // Check specific rows where the issue might be happening
+            // Log both terminal and editor content at same rows for comparison
+            for y in 0..5.min(area.height) {
+                let mut term_chars = String::new();
+                let mut ed_chars = String::new();
+                // Sample terminal content (columns 0-20)
+                for x in 0..20.min(areas.terminal.width) {
+                    if let Some(cell) = buf.cell((x, y)) {
+                        let c = cell.symbol().chars().next().unwrap_or(' ');
+                        term_chars.push(if c.is_control() { '?' } else { c });
+                    }
+                }
+                // Sample editor content (first 20 columns of editor area)
+                for x in areas.editor.x..areas.editor.x + 20.min(areas.editor.width) {
+                    if let Some(cell) = buf.cell((x, y)) {
+                        let c = cell.symbol().chars().next().unwrap_or(' ');
+                        ed_chars.push(if c.is_control() { '?' } else { c });
+                    }
+                }
+                debug!(
+                    "FRAME_{}_FINAL y={}: TERM[0..20]=[{}] EDIT[{}..{}]=[{}]",
+                    frame_num,
+                    y,
+                    term_chars.trim_end(),
+                    areas.editor.x,
+                    areas.editor.x + 20.min(areas.editor.width),
+                    ed_chars.trim_end()
+                );
+            }
         }
     }
 
@@ -74,6 +224,45 @@ impl App {
         if let Some(ref terminals) = self.terminals {
             let is_focused = self.layout.focused() == FocusedPane::Terminal;
             let tab_info = terminals.tab_info();
+
+            // DIAGNOSTIC: Log terminal grid vs render area dimensions
+            if let Some(terminal) = terminals.active_terminal() {
+                let grid = terminal.grid();
+                let inner_width = areas.terminal.width.saturating_sub(2); // account for borders
+                let inner_height = areas.terminal.height.saturating_sub(3); // account for tab bar + borders
+                let cols_match = grid.cols() == inner_width;
+                let rows_match = grid.rows() == inner_height;
+                debug!(
+                    "RENDER_TERM_PANE: terminal_area=({}, {}, {}x{}), inner={}x{}, grid={}x{}, MATCH=cols:{} rows:{}",
+                    areas.terminal.x,
+                    areas.terminal.y,
+                    areas.terminal.width,
+                    areas.terminal.height,
+                    inner_width,
+                    inner_height,
+                    grid.cols(),
+                    grid.rows(),
+                    cols_match,
+                    rows_match
+                );
+            }
+
+            // CRITICAL: Clear the entire terminal area BEFORE any widget renders
+            // This prevents any ghost characters from previous frames
+            let terminal_theme = &self.config.theme_manager.current().terminal;
+            let clear_style = Style::default()
+                .bg(terminal_theme.background)
+                .fg(Color::Reset);
+            let buf = frame.buffer_mut();
+            for y in areas.terminal.y..areas.terminal.y + areas.terminal.height {
+                for x in areas.terminal.x..areas.terminal.x + areas.terminal.width {
+                    if let Some(cell) = buf.cell_mut((x, y)) {
+                        cell.reset();
+                        cell.set_char(' ');
+                        cell.set_style(clear_style);
+                    }
+                }
+            }
 
             // Split area for tab bar + terminal content
             let terminal_chunks = Layout::default()
@@ -221,29 +410,112 @@ impl App {
     ) {
         let is_focused = self.layout.focused() == FocusedPane::Editor;
 
+        debug!(
+            "RENDER_EDITOR_PANE: editor_area=({}, {}, {}x{}), view_dims=({}, {}), buf_lines={}",
+            areas.editor.x,
+            areas.editor.y,
+            areas.editor.width,
+            areas.editor.height,
+            self.editor.view().width(),
+            self.editor.view().height(),
+            self.editor.buffer().len_lines()
+        );
+
+        // CRITICAL: Clear the entire editor area BEFORE any widget renders
+        // This prevents any ghost characters from previous frames
+        let bg_color = self.config.theme_manager.current().editor.background;
+        let clear_style = Style::default().bg(bg_color).fg(Color::Reset);
+        {
+            let buf = frame.buffer_mut();
+            for y in areas.editor.y..areas.editor.y + areas.editor.height {
+                for x in areas.editor.x..areas.editor.x + areas.editor.width {
+                    if let Some(cell) = buf.cell_mut((x, y)) {
+                        cell.reset();
+                        cell.set_char(' ');
+                        cell.set_style(clear_style);
+                    }
+                }
+            }
+        }
+
+        // Log boundary AFTER clear, BEFORE widget render - detailed hex info
+        {
+            let buf = frame.buffer_mut();
+            let boundary_x = areas.editor.x;
+            for sample_y in [2, 10, 20].iter() {
+                let y = *sample_y;
+                if y < areas.editor.y + areas.editor.height {
+                    let mut boundary_info = Vec::new();
+                    for x_offset in -3i16..6 {
+                        let x = (boundary_x as i16 + x_offset) as u16;
+                        if x < areas.editor.x + areas.editor.width + 3 {
+                            if let Some(cell) = buf.cell((x, y)) {
+                                let symbol = cell.symbol();
+                                let first_char = symbol.chars().next().unwrap_or(' ');
+                                let char_code = first_char as u32;
+                                let display = if first_char.is_control() || char_code > 0x7F {
+                                    format!("x{:02}U+{:04X}", x, char_code)
+                                } else {
+                                    format!("x{}='{}'", x, first_char)
+                                };
+                                boundary_info.push(display);
+                            }
+                        }
+                    }
+                    debug!("AFTER_CLEAR y={}: | {}", y, boundary_info.join(" "));
+                }
+            }
+        }
+
+        // Log state before widget selection - CRITICAL for debugging
+        debug!(
+            "RENDER_EDITOR_PANE: WIDGET_DECISION remote_browser={}, file_browser_visible={}, mode={:?}, open_files={}",
+            self.remote_file_browser.is_some(),
+            self.file_browser.is_visible(),
+            self.mode,
+            self.open_files.len()
+        );
+
         // Check for remote file browser first
         if let Some(ref remote_browser) = self.remote_file_browser {
+            debug!("RENDER_EDITOR_PANE: >>> RENDERING RemoteFilePicker <<<");
             let widget = RemoteFilePickerWidget::new(remote_browser).focused(is_focused);
             frame.render_widget(widget, areas.editor);
         } else if self.file_browser.is_visible() {
+            debug!("RENDER_EDITOR_PANE: >>> RENDERING FilePicker <<<");
             let widget = FilePickerWidget::new(&self.file_browser).focused(is_focused);
             frame.render_widget(widget, areas.editor);
         } else {
+            debug!("RENDER_EDITOR_PANE: >>> RENDERING EditorWidget + TabBar <<<");
+
             // Split area for tab bar + editor content
             let editor_chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([Constraint::Length(1), Constraint::Min(1)])
                 .split(areas.editor);
 
+            debug!(
+                "RENDER_EDITOR_PANE: split into tab_bar=({}, {}, {}x{}) + editor=({}, {}, {}x{})",
+                editor_chunks[0].x,
+                editor_chunks[0].y,
+                editor_chunks[0].width,
+                editor_chunks[0].height,
+                editor_chunks[1].x,
+                editor_chunks[1].y,
+                editor_chunks[1].width,
+                editor_chunks[1].height
+            );
+
             // Render editor tab bar
             let editor_tabs = self.editor_tab_info();
             let tab_bar = EditorTabBar::new(&editor_tabs).focused(is_focused);
             frame.render_widget(tab_bar, editor_chunks[0]);
 
-            // Render editor content
+            // Render editor content with completion suggestion
             let widget = EditorWidget::new(&self.editor)
                 .focused(is_focused)
-                .theme(&self.config.theme_manager.current().editor);
+                .theme(&self.config.theme_manager.current().editor)
+                .suggestion(self.completion_suggestion());
             frame.render_widget(widget, editor_chunks[1]);
         }
     }

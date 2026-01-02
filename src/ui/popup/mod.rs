@@ -44,7 +44,7 @@ pub enum PopupKind {
     CreateFolder,
     /// Confirm save before exit.
     ConfirmSaveBeforeExit,
-    /// Command palette (VSCode-style Ctrl+Shift+P or F1 on Windows 11).
+    /// Command palette (Ctrl+Shift+P or F1 on Windows 11).
     CommandPalette,
     /// Mode switcher (Ctrl+Shift+Tab to cycle through editor modes).
     ModeSwitcher,
