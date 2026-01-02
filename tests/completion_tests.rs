@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used)]
 //! Integration tests for the autocomplete/completion system.
 //!
 //! These tests verify that:

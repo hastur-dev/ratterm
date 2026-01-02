@@ -95,6 +95,7 @@ impl CompletionHandle {
     /// # Arguments
     /// * `cwd` - The current working directory for LSP operations
     #[must_use]
+    #[allow(clippy::expect_used)] // Runtime creation is fundamental; panic is appropriate on failure
     pub fn new(cwd: PathBuf) -> Self {
         // Create a dedicated tokio runtime for completion operations
         let runtime = Arc::new(

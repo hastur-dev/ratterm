@@ -66,6 +66,8 @@ pub enum PopupKind {
     SSHMasterPassword,
     /// SSH network scan subnet entry.
     SSHSubnetEntry,
+    /// Docker Manager for managing Docker containers/images.
+    DockerManager,
     /// Windows 11 keybinding change notification.
     KeybindingChangeNotification,
 }
@@ -93,6 +95,7 @@ impl PopupKind {
             Self::SSHStorageSetup => "SSH Storage Setup",
             Self::SSHMasterPassword => "Master Password",
             Self::SSHSubnetEntry => "Network Scan",
+            Self::DockerManager => "Docker Manager",
             Self::KeybindingChangeNotification => "Windows 11 Keybinding Change",
         }
     }
@@ -119,6 +122,7 @@ impl PopupKind {
             Self::SSHStorageSetup => "",
             Self::SSHMasterPassword => "Password: ",
             Self::SSHSubnetEntry => "Subnet (e.g., 192.168.1.0/24): ",
+            Self::DockerManager => "",
             Self::KeybindingChangeNotification => "",
         }
     }
@@ -206,6 +210,12 @@ impl PopupKind {
                 | Self::SSHMasterPassword
                 | Self::SSHSubnetEntry
         )
+    }
+
+    /// Returns true if this popup is the Docker manager.
+    #[must_use]
+    pub fn is_docker_manager(&self) -> bool {
+        matches!(self, Self::DockerManager)
     }
 
     /// Returns true if this popup is the keybinding change notification.

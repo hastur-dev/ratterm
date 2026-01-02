@@ -392,3 +392,125 @@ Press `Ctrl+P` and type "ssh" to access these commands:
 | `SSH: Quick Connect #1` | Connect to saved host #1 |
 | `SSH: Quick Connect #2` | Connect to saved host #2 |
 | `SSH: Quick Connect #3` | Connect to saved host #3 |
+
+---
+
+## Docker Manager
+
+The Docker Manager provides container and image management capabilities.
+
+### Opening Docker Manager
+
+| Hotkey | Action |
+|--------|--------|
+| `Ctrl+Shift+D` | Open Docker Manager |
+
+### Docker Manager Navigation
+
+When the Docker Manager is open:
+
+| Hotkey | Action |
+|--------|--------|
+| `Esc` | Close Docker Manager |
+| `Up` / `k` | Previous container/image |
+| `Down` / `j` | Next container/image |
+| `Home` / `g` | First item |
+| `End` / `G` | Last item |
+| `Tab` | Switch section (Running → Stopped → Images) |
+| `Shift+Tab` | Previous section |
+
+### Section Quick Jump
+
+| Hotkey | Action |
+|--------|--------|
+| `Shift+R` | Jump to Running Containers section |
+| `Shift+S` | Jump to Stopped Containers section |
+| `Shift+I` | Jump to Images section |
+
+### Host Selection
+
+Manage Docker containers on remote machines via SSH. This allows you to connect to Docker on servers registered in the SSH Manager.
+
+| Hotkey | Action |
+|--------|--------|
+| `h` | Open host selection (choose local or SSH host) |
+| `Up` / `k` | Previous host |
+| `Down` / `j` | Next host |
+| `l` | Quick-select Local host |
+| `Enter` | Select host (may prompt for credentials) |
+| `Esc` | Cancel host selection |
+| `Shift+D` | Debug: Show current host configuration |
+
+**Note:** Each host has its own set of quick-connect slots. Switching hosts switches which slots are displayed and used.
+
+### Host Credential Entry
+
+When selecting a remote host without saved credentials:
+
+| Hotkey | Action |
+|--------|--------|
+| `Tab` | Next field (Username → Password → Save) |
+| `Shift+Tab` | Previous field |
+| `Space` | Toggle "Save credentials" checkbox |
+| `Enter` | Submit credentials and connect |
+| `Esc` | Cancel, return to host selection |
+
+### Container/Image Actions
+
+| Hotkey | Action |
+|--------|--------|
+| `Enter` | Connect to container / Run image |
+| `Ctrl+O` | Run image with options (ports, volumes, env) |
+| `r` | Refresh container/image discovery |
+| `d` / `Delete` | Remove stopped container or image |
+| `h` | Select Docker host (local or remote via SSH) |
+| `1-9` | Assign to quick connect slot (Ctrl+Alt+1-9) |
+
+### Docker Quick Connect
+
+Connect directly to assigned containers/images:
+
+| Hotkey | Action |
+|--------|--------|
+| `Ctrl+Alt+1` | Quick connect to slot #1 |
+| `Ctrl+Alt+2` | Quick connect to slot #2 |
+| ... | ... |
+| `Ctrl+Alt+9` | Quick connect to slot #9 |
+
+### Docker Session Hotkeys
+
+When inside a Docker session (after exec into container):
+
+| Hotkey | Action |
+|--------|--------|
+| `Ctrl+T` | Show container stats (split panel) |
+| `Ctrl+L` | Show container logs (split panel) |
+
+### Run Options Form
+
+When running an image with options (`Ctrl+O`):
+
+| Field | Description |
+|-------|-------------|
+| Name | Container name (optional) |
+| Ports | Port mappings, e.g., `8080:80` (comma-separated) |
+| Volumes | Volume mounts, e.g., `/host:/container` (comma-separated) |
+| Env Vars | Environment variables, e.g., `KEY=VALUE` (comma-separated) |
+| Shell | Shell to use (default: /bin/sh) |
+
+**Navigation:** Use `Tab` to move between fields, `Enter` to submit, `Esc` to cancel.
+
+### Docker Container Actions by Section
+
+#### Running Containers
+- `Enter` - Execute into container (`docker exec -it`)
+- `1-9` - Assign to quick connect slot
+
+#### Stopped Containers
+- `Enter` - Start container and execute into it
+- `d` - Remove container
+
+#### Images
+- `Enter` - Run image with default settings (shows confirm dialog)
+- `Ctrl+O` - Run image with custom options
+- `d` - Remove image

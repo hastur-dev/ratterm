@@ -5,6 +5,7 @@ use ratatui::style::{Color, Style};
 use tracing::debug;
 
 use crate::ui::{
+    docker_manager::DockerManagerWidget,
     editor_tabs::EditorTabBar,
     editor_widget::EditorWidget,
     file_picker::{FilePickerWidget, RemoteFilePickerWidget},
@@ -43,8 +44,14 @@ impl App {
 
         debug!(
             "LAYOUT: terminal=({}, {}, {}x{}), editor=({}, {}, {}x{}), ide_visible={}, focused={:?}",
-            areas.terminal.x, areas.terminal.y, areas.terminal.width, areas.terminal.height,
-            areas.editor.x, areas.editor.y, areas.editor.width, areas.editor.height,
+            areas.terminal.x,
+            areas.terminal.y,
+            areas.terminal.width,
+            areas.terminal.height,
+            areas.editor.x,
+            areas.editor.y,
+            areas.editor.width,
+            areas.editor.height,
             self.layout.ide_visible(),
             self.layout.focused()
         );
@@ -63,7 +70,12 @@ impl App {
                     }
                 }
                 if !nonspace_cells.is_empty() {
-                    debug!("FRAME_{}_INITIAL y={}: {}", frame_num, y, nonspace_cells.join(" "));
+                    debug!(
+                        "FRAME_{}_INITIAL y={}: {}",
+                        frame_num,
+                        y,
+                        nonspace_cells.join(" ")
+                    );
                 }
             }
         }
@@ -102,7 +114,10 @@ impl App {
                     }
                     debug!(
                         "BOUNDARY_DETAIL y={}: term_end={}, ed_start={} | {}",
-                        y, boundary_x.saturating_sub(1), boundary_x, boundary_info.join(" ")
+                        y,
+                        boundary_x.saturating_sub(1),
+                        boundary_x,
+                        boundary_info.join(" ")
                     );
                 }
             }
@@ -152,10 +167,7 @@ impl App {
                             }
                         }
                     }
-                    debug!(
-                        "AFTER_EDITOR y={}: | {}",
-                        y, boundary_info.join(" ")
-                    );
+                    debug!("AFTER_EDITOR y={}: | {}", y, boundary_info.join(" "));
                 }
             }
         }
@@ -192,8 +204,11 @@ impl App {
                 }
                 debug!(
                     "FRAME_{}_FINAL y={}: TERM[0..20]=[{}] EDIT[{}..{}]=[{}]",
-                    frame_num, y, term_chars.trim_end(),
-                    areas.editor.x, areas.editor.x + 20.min(areas.editor.width),
+                    frame_num,
+                    y,
+                    term_chars.trim_end(),
+                    areas.editor.x,
+                    areas.editor.x + 20.min(areas.editor.width),
                     ed_chars.trim_end()
                 );
             }
@@ -216,20 +231,28 @@ impl App {
                 let inner_width = areas.terminal.width.saturating_sub(2); // account for borders
                 let inner_height = areas.terminal.height.saturating_sub(3); // account for tab bar + borders
                 let cols_match = grid.cols() == inner_width;
-                let rows_match = grid.rows() as u16 == inner_height;
+                let rows_match = grid.rows() == inner_height;
                 debug!(
                     "RENDER_TERM_PANE: terminal_area=({}, {}, {}x{}), inner={}x{}, grid={}x{}, MATCH=cols:{} rows:{}",
-                    areas.terminal.x, areas.terminal.y, areas.terminal.width, areas.terminal.height,
-                    inner_width, inner_height,
-                    grid.cols(), grid.rows(),
-                    cols_match, rows_match
+                    areas.terminal.x,
+                    areas.terminal.y,
+                    areas.terminal.width,
+                    areas.terminal.height,
+                    inner_width,
+                    inner_height,
+                    grid.cols(),
+                    grid.rows(),
+                    cols_match,
+                    rows_match
                 );
             }
 
             // CRITICAL: Clear the entire terminal area BEFORE any widget renders
             // This prevents any ghost characters from previous frames
             let terminal_theme = &self.config.theme_manager.current().terminal;
-            let clear_style = Style::default().bg(terminal_theme.background).fg(Color::Reset);
+            let clear_style = Style::default()
+                .bg(terminal_theme.background)
+                .fg(Color::Reset);
             let buf = frame.buffer_mut();
             for y in areas.terminal.y..areas.terminal.y + areas.terminal.height {
                 for x in areas.terminal.x..areas.terminal.x + areas.terminal.width {
@@ -439,10 +462,7 @@ impl App {
                             }
                         }
                     }
-                    debug!(
-                        "AFTER_CLEAR y={}: | {}",
-                        y, boundary_info.join(" ")
-                    );
+                    debug!("AFTER_CLEAR y={}: | {}", y, boundary_info.join(" "));
                 }
             }
         }
@@ -476,8 +496,14 @@ impl App {
 
             debug!(
                 "RENDER_EDITOR_PANE: split into tab_bar=({}, {}, {}x{}) + editor=({}, {}, {}x{})",
-                editor_chunks[0].x, editor_chunks[0].y, editor_chunks[0].width, editor_chunks[0].height,
-                editor_chunks[1].x, editor_chunks[1].y, editor_chunks[1].width, editor_chunks[1].height
+                editor_chunks[0].x,
+                editor_chunks[0].y,
+                editor_chunks[0].width,
+                editor_chunks[0].height,
+                editor_chunks[1].x,
+                editor_chunks[1].y,
+                editor_chunks[1].width,
+                editor_chunks[1].height
             );
 
             // Render editor tab bar
@@ -572,6 +598,10 @@ impl App {
         } else if let Some(ref manager) = self.ssh_manager {
             // Use special widget for SSH manager
             let widget = SSHManagerWidget::new(manager);
+            frame.render_widget(widget, area);
+        } else if let Some(ref manager) = self.docker_manager {
+            // Use special widget for Docker manager
+            let widget = DockerManagerWidget::new(manager);
             frame.render_widget(widget, area);
         } else if self.popup.kind().is_keybinding_notification() {
             // Use special widget for Windows 11 keybinding notification

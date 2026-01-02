@@ -152,6 +152,19 @@ impl App {
                 self.ssh_connect_by_index(idx);
                 true
             }
+            // Docker Manager (Ctrl+Shift+D)
+            (m, KeyCode::Char('d') | KeyCode::Char('D'))
+                if m == KeyModifiers::CONTROL | KeyModifiers::SHIFT =>
+            {
+                self.show_docker_manager();
+                true
+            }
+            // Docker quick connect (Ctrl+Alt+1-9)
+            (m, KeyCode::Char(c @ '1'..='9')) if m == KeyModifiers::CONTROL | KeyModifiers::ALT => {
+                let idx = (c as u8 - b'1') as usize;
+                self.docker_connect_by_index(idx);
+                true
+            }
             _ => false,
         }
     }
@@ -251,8 +264,14 @@ impl App {
 
     /// Handles keys for the local file browser.
     fn handle_local_file_browser_key(&mut self, key: KeyEvent) {
+        use super::FileBrowserContext;
+
         match (key.modifiers, key.code) {
-            (KeyModifiers::NONE, KeyCode::Esc) => self.hide_file_browser(),
+            (KeyModifiers::NONE, KeyCode::Esc) => {
+                // Reset context when cancelling
+                self.file_browser_context = FileBrowserContext::OpenFile;
+                self.hide_file_browser();
+            }
             (KeyModifiers::NONE, KeyCode::Up)
             | (KeyModifiers::NONE, KeyCode::Char('k'))
             | (KeyModifiers::NONE, KeyCode::Char('w')) => self.file_browser.move_up(),
@@ -267,13 +286,19 @@ impl App {
             (KeyModifiers::NONE, KeyCode::Right)
             | (KeyModifiers::NONE, KeyCode::Char('l'))
             | (KeyModifiers::NONE, KeyCode::Char('d')) => {
-                if let Ok(Some(path)) = self.file_browser.enter_selected() {
-                    let _ = self.open_file(path);
-                }
+                self.handle_file_browser_selection();
             }
             (KeyModifiers::NONE, KeyCode::Enter) => {
-                if let Ok(Some(path)) = self.file_browser.enter_selected() {
-                    let _ = self.open_file(path);
+                self.handle_file_browser_selection();
+            }
+            // 'f' key to select current directory (for Docker volume mount)
+            (KeyModifiers::NONE, KeyCode::Char('f')) => {
+                if self.file_browser_context == FileBrowserContext::DockerVolumeMount {
+                    // Select current directory as volume mount path
+                    let current_dir = self.file_browser.path().to_path_buf();
+                    self.handle_docker_volume_path_selected(&current_dir);
+                    self.file_browser_context = FileBrowserContext::OpenFile;
+                    self.hide_file_browser();
                 }
             }
             (KeyModifiers::NONE, KeyCode::PageUp) => self.file_browser.page_up(),
@@ -282,6 +307,25 @@ impl App {
             (KeyModifiers::NONE, KeyCode::End) => self.file_browser.move_to_end(),
             (KeyModifiers::NONE, KeyCode::Char('/')) => self.show_popup(PopupKind::SearchFiles),
             _ => {}
+        }
+    }
+
+    /// Handles file browser selection based on context.
+    fn handle_file_browser_selection(&mut self) {
+        use super::FileBrowserContext;
+
+        if let Ok(Some(path)) = self.file_browser.enter_selected() {
+            match self.file_browser_context {
+                FileBrowserContext::OpenFile => {
+                    let _ = self.open_file(path);
+                }
+                FileBrowserContext::DockerVolumeMount => {
+                    // Selected a file/directory for Docker volume mount
+                    self.handle_docker_volume_path_selected(&path);
+                    self.file_browser_context = FileBrowserContext::OpenFile;
+                    self.hide_file_browser();
+                }
+            }
         }
     }
 
@@ -424,6 +468,10 @@ impl App {
         }
         if self.popup.kind().is_ssh_master_password() {
             self.handle_ssh_master_password_key(key);
+            return;
+        }
+        if self.popup.kind().is_docker_manager() {
+            self.handle_docker_manager_key(key);
             return;
         }
 

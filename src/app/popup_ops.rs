@@ -399,7 +399,8 @@ impl App {
             | PopupKind::SSHCredentialPrompt
             | PopupKind::SSHStorageSetup
             | PopupKind::SSHMasterPassword
-            | PopupKind::SSHSubnetEntry => {
+            | PopupKind::SSHSubnetEntry
+            | PopupKind::DockerManager => {
                 self.hide_popup();
             }
             PopupKind::KeybindingChangeNotification => {

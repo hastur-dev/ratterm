@@ -3,9 +3,13 @@
 //! Orchestrates the terminal emulator, code editor, and file browser.
 
 mod commands;
+mod docker_connect;
+mod docker_ops;
 mod extension_ops;
 mod file_ops;
 mod input;
+mod input_docker;
+mod input_docker_create;
 mod input_editor;
 mod input_mouse;
 mod input_ssh;
@@ -23,7 +27,7 @@ mod terminal_ops;
 use std::cell::Cell;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::TryRecvError;
+use std::sync::mpsc::{Receiver, TryRecvError};
 use std::time::Duration;
 
 use crossterm::event::{self, Event};
@@ -34,6 +38,7 @@ use crate::api::{ApiHandler, ApiServer, MAX_REQUESTS_PER_FRAME, RequestReceiver}
 use crate::clipboard::Clipboard;
 use crate::completion::CompletionHandle;
 use crate::config::{Config, KeybindingMode};
+use crate::docker::{DockerItemList, DockerStorage};
 use crate::editor::Editor;
 use crate::extension::ExtensionManager;
 use crate::filebrowser::FileBrowser;
@@ -41,6 +46,7 @@ use crate::remote::{RemoteFileBrowser, RemoteFileManager};
 use crate::ssh::{NetworkScanner, SSHHostList, SSHStorage};
 use crate::terminal::{BackgroundManager, TerminalMultiplexer, pty::PtyError};
 use crate::ui::{
+    docker_manager::DockerManagerSelector,
     editor_tabs::EditorTabInfo,
     layout::SplitLayout,
     popup::{
@@ -63,6 +69,33 @@ pub enum AppMode {
     FileBrowser,
     /// Popup dialog is active.
     Popup,
+}
+
+/// Context for file browser operations.
+///
+/// Tracks what the file browser is being used for so we can
+/// route the selection appropriately.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FileBrowserContext {
+    /// Normal file opening (default).
+    #[default]
+    OpenFile,
+    /// Selecting a volume mount path for Docker container creation.
+    DockerVolumeMount,
+}
+
+/// Result from a background Docker operation.
+#[derive(Debug, Clone)]
+pub enum DockerBackgroundResult {
+    /// Image pull completed.
+    ImagePulled {
+        /// Image name that was pulled.
+        image: String,
+        /// Whether the operation succeeded.
+        success: bool,
+        /// Error message if failed.
+        error: Option<String>,
+    },
 }
 
 /// Open file tab.
@@ -142,6 +175,16 @@ pub struct App {
     pub(crate) remote_manager: RemoteFileManager,
     /// Remote file browser for SSH directory navigation (active when browsing remote).
     pub(crate) remote_file_browser: Option<RemoteFileBrowser>,
+    /// Docker manager selector state.
+    pub(crate) docker_manager: Option<DockerManagerSelector>,
+    /// Docker storage for quick-connect settings.
+    pub(crate) docker_storage: DockerStorage,
+    /// Docker items (quick connect slots and settings).
+    pub(crate) docker_items: DockerItemList,
+    /// Context for file browser operations (what the selection is for).
+    pub(crate) file_browser_context: FileBrowserContext,
+    /// Receiver for background Docker operation results.
+    pub(crate) docker_background_rx: Option<Receiver<DockerBackgroundResult>>,
     /// Whether the Windows 11 keybinding notification has been shown.
     pub(crate) win11_notification_shown: bool,
     /// Completion handle for autocomplete functionality.
@@ -226,6 +269,11 @@ impl App {
             ssh_scanner: None,
             remote_manager: RemoteFileManager::new(),
             remote_file_browser: None,
+            docker_manager: None,
+            docker_storage: DockerStorage::new(),
+            docker_items: DockerItemList::new(),
+            file_browser_context: FileBrowserContext::OpenFile,
+            docker_background_rx: None,
             win11_notification_shown: false,
             completion_handle: Some(CompletionHandle::new(cwd)),
             completion_suggestion: None,
@@ -483,9 +531,14 @@ impl App {
                 let term_rows = areas.terminal.height.saturating_sub(3);
                 tracing::debug!(
                     "RESIZE_LAYOUT: screen={}x{}, terminal_area=({}, {}, {}x{}), resizing_grid_to={}x{}",
-                    cols, rows,
-                    areas.terminal.x, areas.terminal.y, areas.terminal.width, areas.terminal.height,
-                    term_cols, term_rows
+                    cols,
+                    rows,
+                    areas.terminal.x,
+                    areas.terminal.y,
+                    areas.terminal.width,
+                    areas.terminal.height,
+                    term_cols,
+                    term_rows
                 );
                 let _ = terminals.resize(term_cols, term_rows);
             }

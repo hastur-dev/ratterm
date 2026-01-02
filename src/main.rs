@@ -153,18 +153,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         original_hook(panic_info);
     }));
 
-    // Initialize tracing for logging
-    // Debug mode: write to file for easier debugging of rendering issues
-    let log_file = std::fs::File::create("ratterm_debug.log")
-        .expect("Failed to create debug log file");
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::from_default_env()
-                .add_directive("ratterm=debug".parse().unwrap()),
-        )
-        .with_writer(std::sync::Mutex::new(log_file))
-        .with_ansi(false)
-        .init();
+    // Initialize tracing for logging (both stderr and file)
+    setup_logging();
 
     // Set up terminal
     enable_raw_mode()?;
@@ -290,6 +280,40 @@ fn restore_terminal() -> io::Result<()> {
     disable_raw_mode()?;
     execute!(io::stdout(), LeaveAlternateScreen, DisableMouseCapture)?;
     Ok(())
+}
+
+/// Sets up logging to both stderr and a file.
+///
+/// Logs are written to `~/.ratterm/ratterm.log` with daily rotation.
+fn setup_logging() {
+    use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+
+    // Create log directory if it doesn't exist
+    let log_dir = dirs::home_dir()
+        .map(|h| h.join(".ratterm"))
+        .unwrap_or_else(|| std::path::PathBuf::from("."));
+
+    std::fs::create_dir_all(&log_dir).ok();
+
+    // Create file appender with daily rotation
+    let file_appender = tracing_appender::rolling::daily(&log_dir, "ratterm.log");
+
+    // Build the subscriber with both stderr and file layers
+    let env_filter = tracing_subscriber::EnvFilter::from_default_env();
+
+    tracing_subscriber::registry()
+        .with(env_filter)
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_writer(std::io::stderr)
+                .with_ansi(true),
+        )
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_writer(file_appender)
+                .with_ansi(false),
+        )
+        .init();
 }
 
 /// Handles extension subcommands: `rat ext <command>`

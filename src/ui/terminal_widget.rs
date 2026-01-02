@@ -71,13 +71,19 @@ impl<'a> TerminalWidget<'a> {
         let area_cols = area.width;
         let area_rows = area.height;
         let cols_mismatch = grid_cols != area_cols;
-        let rows_mismatch = grid_rows as u16 != area_rows;
+        let rows_mismatch = grid_rows != area_rows;
 
         debug!(
             "TERMINAL_GRID: area=({}, {}, {}x{}), grid_cols={}, grid_rows={}, scroll_offset={}, MISMATCH=cols:{} rows:{}",
-            area.x, area.y, area.width, area.height,
-            grid_cols, grid_rows, scroll_offset,
-            cols_mismatch, rows_mismatch
+            area.x,
+            area.y,
+            area.width,
+            area.height,
+            grid_cols,
+            grid_rows,
+            scroll_offset,
+            cols_mismatch,
+            rows_mismatch
         );
 
         // NOTE: Widget::render() already clears the inner area before calling render_grid()
@@ -302,7 +308,10 @@ impl Widget for TerminalWidget<'_> {
     fn render(self, area: Rect, buf: &mut RatatuiBuffer) {
         debug!(
             "TERMINAL_WIDGET_START: area=({}, {}, {}x{}), right_edge={}, focused={}, title={:?}",
-            area.x, area.y, area.width, area.height,
+            area.x,
+            area.y,
+            area.width,
+            area.height,
             area.x + area.width,
             self.focused,
             self.title
@@ -368,7 +377,10 @@ impl Widget for TerminalWidget<'_> {
         }
 
         // CRITICAL: Clear entire inner area first to prevent ghost characters
-        let bg_color = self.theme.map(|t| t.background).unwrap_or(Color::Rgb(30, 30, 30));
+        let bg_color = self
+            .theme
+            .map(|t| t.background)
+            .unwrap_or(Color::Rgb(30, 30, 30));
         let clear_style = Style::default().bg(bg_color).fg(Color::Reset);
         for y in inner_area.y..inner_area.y + inner_area.height {
             for x in inner_area.x..inner_area.x + inner_area.width {

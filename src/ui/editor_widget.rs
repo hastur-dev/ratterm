@@ -76,7 +76,10 @@ impl<'a> EditorWidget<'a> {
             .theme
             .map(|t| t.line_numbers_bg)
             .unwrap_or(Color::Rgb(30, 30, 30));
-        let text_bg = self.theme.map(|t| t.background).unwrap_or(Color::Rgb(30, 30, 30));
+        let text_bg = self
+            .theme
+            .map(|t| t.background)
+            .unwrap_or(Color::Rgb(30, 30, 30));
         let current_line_fg = self.theme.map(|t| t.cursor).unwrap_or(Color::Yellow);
 
         let style = Style::default().fg(line_num_fg).bg(gutter_bg);
@@ -154,9 +157,16 @@ impl<'a> EditorWidget<'a> {
 
         debug!(
             "EDITOR_CONTENT: inner_area=({}, {}, {}x{}), text_x={}, text_width={}, gutter={}, view_scroll_top={}, view_height={}, buf_lines={}",
-            area.x, area.y, area.width, area.height,
-            text_x, text_width, gutter_width,
-            view.scroll_top(), view.height(), buffer.len_lines()
+            area.x,
+            area.y,
+            area.width,
+            area.height,
+            text_x,
+            text_width,
+            gutter_width,
+            view.scroll_top(),
+            view.height(),
+            buffer.len_lines()
         );
 
         // DETAILED: Log first 3 visible lines' content lengths and any special chars
@@ -166,7 +176,11 @@ impl<'a> EditorWidget<'a> {
             if line_idx < buffer.len_lines() {
                 if let Some(line) = buffer.line(line_idx) {
                     let line_len = line.len();
-                    let preview: String = line.chars().take(30).map(|c| if c.is_control() { '?' } else { c }).collect();
+                    let preview: String = line
+                        .chars()
+                        .take(30)
+                        .map(|c| if c.is_control() { '?' } else { c })
+                        .collect();
                     let has_special = line.chars().any(|c| c as u32 > 127);
                     debug!(
                         "VISIBLE_LINE {}: len={}, has_special={}, preview={:?}",
@@ -181,13 +195,19 @@ impl<'a> EditorWidget<'a> {
         let text_end_y = area.y + area.height;
         debug!(
             "EDITOR_CONTENT: clearing from ({}, {}) to ({}, {})",
-            text_x, area.y, text_end_x.saturating_sub(1), text_end_y.saturating_sub(1)
+            text_x,
+            area.y,
+            text_end_x.saturating_sub(1),
+            text_end_y.saturating_sub(1)
         );
 
         // Use theme colors if available with consistent fallbacks
         // NOTE: These must match the fallbacks used in Widget::render() to avoid flicker
         let text_fg = self.theme.map(|t| t.foreground).unwrap_or(Color::White);
-        let text_bg = self.theme.map(|t| t.background).unwrap_or(Color::Rgb(30, 30, 30));
+        let text_bg = self
+            .theme
+            .map(|t| t.background)
+            .unwrap_or(Color::Rgb(30, 30, 30));
         let selection_bg = self.theme.map(|t| t.selection).unwrap_or(Color::Blue);
 
         let default_style = Style::default().fg(text_fg).bg(text_bg);
@@ -343,7 +363,10 @@ impl Widget for EditorWidget<'_> {
     fn render(self, area: Rect, buf: &mut RatatuiBuffer) {
         debug!(
             "EDITOR_WIDGET_START: area=({}, {}, {}x{}), left_edge={}, focused={}, path={:?}",
-            area.x, area.y, area.width, area.height,
+            area.x,
+            area.y,
+            area.width,
+            area.height,
             area.x,
             self.focused,
             self.editor.path()
@@ -430,7 +453,10 @@ impl Widget for EditorWidget<'_> {
         }
 
         // CRITICAL: Clear entire inner area first to prevent ghost characters during scrolling
-        let text_bg = self.theme.map(|t| t.background).unwrap_or(Color::Rgb(30, 30, 30));
+        let text_bg = self
+            .theme
+            .map(|t| t.background)
+            .unwrap_or(Color::Rgb(30, 30, 30));
         let clear_style = Style::default().bg(text_bg).fg(Color::Reset);
         for y in inner_area.y..inner_area.y + inner_area.height {
             for x in inner_area.x..inner_area.x + inner_area.width {

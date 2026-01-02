@@ -9,6 +9,21 @@ use super::keymap::key_to_bytes;
 impl App {
     /// Handles key events for the terminal pane.
     pub(super) fn handle_terminal_key(&mut self, key: KeyEvent) {
+        // Docker session hotkeys (Ctrl+T for stats, Ctrl+L for logs)
+        if self.is_docker_session() {
+            match (key.modifiers, key.code) {
+                (KeyModifiers::CONTROL, KeyCode::Char('t')) => {
+                    self.show_docker_stats();
+                    return;
+                }
+                (KeyModifiers::CONTROL, KeyCode::Char('l')) => {
+                    self.show_docker_logs();
+                    return;
+                }
+                _ => {}
+            }
+        }
+
         match (key.modifiers, key.code) {
             (KeyModifiers::CONTROL, KeyCode::Char('t')) => {
                 self.add_terminal_tab();
@@ -271,8 +286,12 @@ impl App {
                 cwd.join(filename)
             };
 
-            debug!("HANDLE_OPEN_FILE_CMD: resolved path={:?}, exists={}, is_file={}",
-                   path, path.exists(), path.is_file());
+            debug!(
+                "HANDLE_OPEN_FILE_CMD: resolved path={:?}, exists={}, is_file={}",
+                path,
+                path.exists(),
+                path.is_file()
+            );
 
             if path.exists() {
                 if path.is_file() {
