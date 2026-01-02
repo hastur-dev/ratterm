@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value as JsonValue, json};
 use thiserror::Error;
 use tokio::sync::{Mutex, mpsc, oneshot};
-use tracing::{debug, error};
+use tracing::debug;
 
 use super::config::LspConfig;
 use crate::completion::provider::{CompletionItem, CompletionKind};
