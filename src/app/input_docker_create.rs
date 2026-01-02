@@ -459,9 +459,8 @@ impl App {
         let tab_name = format!("Docker: {}@{}", image_name, hostname);
 
         // Create an SSH terminal tab that runs the docker command
-        match terminals.add_ssh_command_tab(
-            hostname, port, username, command, &tab_name, password,
-        ) {
+        match terminals.add_ssh_command_tab(hostname, port, username, command, &tab_name, password)
+        {
             Ok(_) => {
                 info!(
                     "Created SSH terminal for docker command on {}@{}",

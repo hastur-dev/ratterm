@@ -291,13 +291,7 @@ impl TerminalMultiplexer {
         }
 
         let mut grid = TerminalGrid::new_ssh_command(
-            self.cols,
-            self.rows,
-            ssh_host,
-            ssh_port,
-            ssh_user,
-            command,
-            tab_name,
+            self.cols, self.rows, ssh_host, ssh_port, ssh_user, command, tab_name,
         )?;
 
         // Set password for SSH auto-login if provided

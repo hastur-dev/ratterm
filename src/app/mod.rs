@@ -184,6 +184,8 @@ pub struct App {
     pub(crate) file_browser_context: FileBrowserContext,
     /// Receiver for background Docker operation results.
     pub(crate) docker_background_rx: Option<Receiver<DockerBackgroundResult>>,
+    /// Whether the Windows 11 keybinding notification has been shown.
+    pub(crate) win11_notification_shown: bool,
 }
 
 impl App {
@@ -266,6 +268,7 @@ impl App {
             docker_items: DockerItemList::new(),
             file_browser_context: FileBrowserContext::OpenFile,
             docker_background_rx: None,
+            win11_notification_shown: false,
         })
     }
 
@@ -515,6 +518,46 @@ impl App {
 
         if let Some(ref mut terminals) = self.terminals {
             terminals.shutdown();
+        }
+    }
+
+    /// Marks the Windows 11 keybinding notification as shown.
+    pub fn mark_win11_notification_shown(&mut self) {
+        self.win11_notification_shown = true;
+        // Persist this to a marker file so it's not shown again
+        if let Some(data_dir) = dirs::data_local_dir() {
+            let marker_path = data_dir.join("ratterm").join(".win11_notification_shown");
+            if let Some(parent) = marker_path.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            let _ = std::fs::write(&marker_path, "1");
+        }
+    }
+
+    /// Checks if Windows 11 keybinding notification should be shown.
+    pub fn should_show_win11_notification(&self) -> bool {
+        use crate::config::is_windows_11;
+
+        if !is_windows_11() || self.win11_notification_shown {
+            return false;
+        }
+
+        // Check if marker file exists
+        if let Some(data_dir) = dirs::data_local_dir() {
+            let marker_path = data_dir.join("ratterm").join(".win11_notification_shown");
+            if marker_path.exists() {
+                return false;
+            }
+        }
+
+        true
+    }
+
+    /// Shows the Windows 11 keybinding notification if needed.
+    pub fn check_win11_notification(&mut self) {
+        if self.should_show_win11_notification() {
+            self.show_popup(PopupKind::KeybindingChangeNotification);
+            self.win11_notification_shown = true;
         }
     }
 }

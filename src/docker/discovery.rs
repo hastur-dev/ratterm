@@ -267,11 +267,18 @@ impl DockerDiscovery {
         // On Windows with password, run plink directly to avoid cmd.exe quoting issues
         #[cfg(target_os = "windows")]
         if let Some(password) = host.password() {
-            tracing::info!("run_remote_with_timeout: using run_plink_direct for docker_cmd={}", docker_cmd);
+            tracing::info!(
+                "run_remote_with_timeout: using run_plink_direct for docker_cmd={}",
+                docker_cmd
+            );
             let result = Self::run_plink_direct(host, password, &docker_cmd, timeout_ms);
             if let Some(ref out) = result {
-                tracing::info!("run_plink_direct result: status={:?}, stdout_len={}, stderr_len={}",
-                    out.status, out.stdout.len(), out.stderr.len());
+                tracing::info!(
+                    "run_plink_direct result: status={:?}, stdout_len={}, stderr_len={}",
+                    out.status,
+                    out.stdout.len(),
+                    out.stderr.len()
+                );
             } else {
                 tracing::info!("run_plink_direct result: None (timeout or error)");
             }
@@ -330,7 +337,12 @@ impl DockerDiscovery {
         cmd.arg(docker_cmd);
 
         // Debug: log the command
-        tracing::debug!("plink command: plink -pw [REDACTED] {}@{} {}", username, hostname, docker_cmd);
+        tracing::debug!(
+            "plink command: plink -pw [REDACTED] {}@{} {}",
+            username,
+            hostname,
+            docker_cmd
+        );
 
         // Configure to pipe stdin and capture output
         cmd.stdin(Stdio::piped())
@@ -407,9 +419,13 @@ impl DockerDiscovery {
     pub fn is_docker_available_remote(host: &DockerHost) -> bool {
         assert!(host.is_remote(), "host must be remote");
 
-        Self::run_remote_with_timeout(host, &["version", "--format", "{{.Server.Version}}"], REMOTE_QUICK_TIMEOUT_MS)
-            .map(|o| o.status.success())
-            .unwrap_or(false)
+        Self::run_remote_with_timeout(
+            host,
+            &["version", "--format", "{{.Server.Version}}"],
+            REMOTE_QUICK_TIMEOUT_MS,
+        )
+        .map(|o| o.status.success())
+        .unwrap_or(false)
     }
 
     /// Checks Docker availability on a specific host.
@@ -429,10 +445,7 @@ impl DockerDiscovery {
         // Check if SSH connection works and docker CLI exists
         let output = Self::run_remote_with_timeout(host, &["--version"], REMOTE_QUICK_TIMEOUT_MS);
 
-        let cli_exists = output
-            .as_ref()
-            .map(|o| o.status.success())
-            .unwrap_or(false);
+        let cli_exists = output.as_ref().map(|o| o.status.success()).unwrap_or(false);
 
         if !cli_exists {
             // Could be SSH failure or docker not installed
@@ -448,7 +461,8 @@ impl DockerDiscovery {
         }
 
         // Docker CLI exists, check if daemon is running
-        let output = Self::run_remote_with_timeout(host, &["ps", "-q", "--no-trunc"], REMOTE_TIMEOUT_MS);
+        let output =
+            Self::run_remote_with_timeout(host, &["ps", "-q", "--no-trunc"], REMOTE_TIMEOUT_MS);
 
         match output {
             Some(o) if o.status.success() => DockerAvailability::Available,
@@ -561,8 +575,12 @@ impl DockerDiscovery {
     ) -> Result<(Vec<DockerContainer>, Vec<DockerContainer>), String> {
         assert!(host.is_remote(), "host must be remote");
 
-        let output = Self::run_remote_with_timeout(host, &["ps", "-a", "--format", "{{json .}}"], REMOTE_TIMEOUT_MS)
-            .ok_or_else(|| "Docker command timed out".to_string())?;
+        let output = Self::run_remote_with_timeout(
+            host,
+            &["ps", "-a", "--format", "{{json .}}"],
+            REMOTE_TIMEOUT_MS,
+        )
+        .ok_or_else(|| "Docker command timed out".to_string())?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -590,8 +608,12 @@ impl DockerDiscovery {
     pub fn discover_images_remote(host: &DockerHost) -> Result<Vec<DockerImage>, String> {
         assert!(host.is_remote(), "host must be remote");
 
-        let output = Self::run_remote_with_timeout(host, &["images", "--format", "{{json .}}"], REMOTE_TIMEOUT_MS)
-            .ok_or_else(|| "Docker command timed out".to_string())?;
+        let output = Self::run_remote_with_timeout(
+            host,
+            &["images", "--format", "{{json .}}"],
+            REMOTE_TIMEOUT_MS,
+        )
+        .ok_or_else(|| "Docker command timed out".to_string())?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -678,12 +700,10 @@ impl DockerDiscovery {
         } else if Self::is_sshpass_available() {
             Ok(())
         } else {
-            Err(
-                "sshpass is required for SSH password authentication. \
+            Err("sshpass is required for SSH password authentication. \
                  Install it with: apt install sshpass (Debian/Ubuntu), \
                  brew install sshpass (macOS), or use SSH key authentication instead."
-                    .to_string(),
-            )
+                .to_string())
         }
     }
 
@@ -1216,12 +1236,9 @@ impl DockerDiscovery {
                 }
             }
             DockerHost::Remote { .. } => {
-                let output = Self::run_remote_with_timeout(
-                    host,
-                    &["stop", container_id],
-                    REMOTE_TIMEOUT_MS,
-                )
-                .ok_or("Remote command timed out")?;
+                let output =
+                    Self::run_remote_with_timeout(host, &["stop", container_id], REMOTE_TIMEOUT_MS)
+                        .ok_or("Remote command timed out")?;
 
                 if !output.status.success() {
                     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -1444,8 +1461,7 @@ impl DockerDiscovery {
             ),
         };
 
-        let output =
-            output.ok_or_else(|| "Docker search command timed out".to_string())?;
+        let output = output.ok_or_else(|| "Docker search command timed out".to_string())?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -1483,12 +1499,10 @@ impl DockerDiscovery {
         // Extract fields from JSON
         let name = Self::extract_json_field(json_line, "Name")?;
 
-        let description =
-            Self::extract_json_field(json_line, "Description").unwrap_or_default();
+        let description = Self::extract_json_field(json_line, "Description").unwrap_or_default();
 
         // StarCount can be a number or string
-        let stars_str =
-            Self::extract_json_field(json_line, "StarCount").unwrap_or_default();
+        let stars_str = Self::extract_json_field(json_line, "StarCount").unwrap_or_default();
         let stars = stars_str.parse::<u32>().unwrap_or(0);
 
         // IsOfficial can be "[OK]" or "true" or empty
@@ -1514,10 +1528,7 @@ impl DockerDiscovery {
     ///
     /// # Returns
     /// `Ok(true)` if image exists, `Ok(false)` if not, `Err(String)` on failure.
-    pub fn image_exists_on_host(
-        host: &DockerHost,
-        image_name: &str,
-    ) -> Result<bool, String> {
+    pub fn image_exists_on_host(host: &DockerHost, image_name: &str) -> Result<bool, String> {
         assert!(!image_name.is_empty(), "image_name must not be empty");
 
         tracing::info!("Checking if image '{}' exists on {:?}", image_name, host);
@@ -1528,13 +1539,14 @@ impl DockerDiscovery {
                 cmd.args(["images", "-q", image_name]);
                 Self::run_with_timeout(&mut cmd, COMMAND_TIMEOUT_MS)
             }
-            DockerHost::Remote { .. } => {
-                Self::run_remote_with_timeout(host, &["images", "-q", image_name], REMOTE_TIMEOUT_MS)
-            }
+            DockerHost::Remote { .. } => Self::run_remote_with_timeout(
+                host,
+                &["images", "-q", image_name],
+                REMOTE_TIMEOUT_MS,
+            ),
         };
 
-        let output =
-            output.ok_or_else(|| "Docker images command timed out".to_string())?;
+        let output = output.ok_or_else(|| "Docker images command timed out".to_string())?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -1559,10 +1571,7 @@ impl DockerDiscovery {
     ///
     /// # Returns
     /// `Ok(())` on success, `Err(String)` on failure.
-    pub fn pull_image_on_host(
-        host: &DockerHost,
-        image_name: &str,
-    ) -> Result<(), String> {
+    pub fn pull_image_on_host(host: &DockerHost, image_name: &str) -> Result<(), String> {
         assert!(!image_name.is_empty(), "image_name must not be empty");
 
         tracing::info!("Pulling image '{}' on {:?}", image_name, host);
@@ -1763,7 +1772,8 @@ mod tests {
             None,
         );
 
-        let cmd = DockerDiscovery::build_remote_docker_command(&host, "docker exec -it abc123 /bin/sh");
+        let cmd =
+            DockerDiscovery::build_remote_docker_command(&host, "docker exec -it abc123 /bin/sh");
         assert!(cmd.contains("ssh"));
         assert!(cmd.contains("-p 2222"));
         assert!(cmd.contains("user@192.168.1.100"));

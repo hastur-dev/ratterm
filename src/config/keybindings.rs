@@ -13,8 +13,6 @@ pub enum KeybindingMode {
     Emacs,
     /// Default/simple keybindings.
     Default,
-    /// VSCode-style keybindings.
-    VsCode,
 }
 
 /// Actions that can be bound to keys.
@@ -345,7 +343,6 @@ impl Keybindings {
             KeybindingMode::Vim => kb.set_vim_bindings(),
             KeybindingMode::Emacs => kb.set_emacs_bindings(),
             KeybindingMode::Default => kb.set_default_bindings(),
-            KeybindingMode::VsCode => kb.set_vscode_bindings(),
         }
 
         kb
@@ -713,51 +710,6 @@ impl Keybindings {
         );
 
         // Default mode doesn't have insert/visual modes
-        self.set(EditorInsert, KeyBinding::new(KeyModifiers::NONE, Enter));
-        self.set(EditorAppend, KeyBinding::new(KeyModifiers::NONE, Enter));
-    }
-
-    /// Sets VSCode-style editor keybindings.
-    fn set_vscode_bindings(&mut self) {
-        use KeyAction::*;
-        use KeyCode::*;
-
-        // Arrow key navigation (same as default)
-        self.set(EditorLeft, KeyBinding::new(KeyModifiers::NONE, Left));
-        self.set(EditorRight, KeyBinding::new(KeyModifiers::NONE, Right));
-        self.set(EditorUp, KeyBinding::new(KeyModifiers::NONE, Up));
-        self.set(EditorDown, KeyBinding::new(KeyModifiers::NONE, Down));
-
-        // Home/End for line navigation
-        self.set(EditorLineStart, KeyBinding::new(KeyModifiers::NONE, Home));
-        self.set(EditorLineEnd, KeyBinding::new(KeyModifiers::NONE, End));
-
-        // Ctrl+arrow for word navigation
-        self.set(
-            EditorWordRight,
-            KeyBinding::new(KeyModifiers::CONTROL, Right),
-        );
-        self.set(EditorWordLeft, KeyBinding::new(KeyModifiers::CONTROL, Left));
-
-        // Ctrl+Home/End for buffer navigation
-        self.set(
-            EditorBufferStart,
-            KeyBinding::new(KeyModifiers::CONTROL, Home),
-        );
-        self.set(EditorBufferEnd, KeyBinding::new(KeyModifiers::CONTROL, End));
-
-        // VSCode standard shortcuts
-        self.set(EditorDelete, KeyBinding::new(KeyModifiers::NONE, Delete));
-        self.set(
-            EditorUndo,
-            KeyBinding::new(KeyModifiers::CONTROL, Char('z')),
-        );
-        self.set(
-            EditorRedo,
-            KeyBinding::new(KeyModifiers::CONTROL, Char('y')),
-        );
-
-        // VSCode mode doesn't have insert/visual modes - always in insert
         self.set(EditorInsert, KeyBinding::new(KeyModifiers::NONE, Enter));
         self.set(EditorAppend, KeyBinding::new(KeyModifiers::NONE, Enter));
     }

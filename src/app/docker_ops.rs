@@ -58,7 +58,12 @@ impl App {
         // Debug: show host details
         let host_debug = match &host {
             DockerHost::Local => "Local".to_string(),
-            DockerHost::Remote { hostname, username, password, .. } => {
+            DockerHost::Remote {
+                hostname,
+                username,
+                password,
+                ..
+            } => {
                 format!(
                     "Remote({}@{}, has_pwd={})",
                     username,
@@ -170,9 +175,11 @@ impl App {
     pub fn docker_host_display_name(&self) -> String {
         match &self.docker_items.selected_host {
             DockerHost::Local => "Local".to_string(),
-            DockerHost::Remote { display_name, hostname, .. } => {
-                display_name.clone().unwrap_or_else(|| hostname.clone())
-            }
+            DockerHost::Remote {
+                display_name,
+                hostname,
+                ..
+            } => display_name.clone().unwrap_or_else(|| hostname.clone()),
         }
     }
 
@@ -320,7 +327,12 @@ impl App {
             } => {
                 format!(
                     "DockerHost::Remote {{ id: {}, host: {}, port: {}, user: {}, name: {:?}, has_pwd: {} }}",
-                    host_id, hostname, port, username, display_name, password.is_some()
+                    host_id,
+                    hostname,
+                    port,
+                    username,
+                    display_name,
+                    password.is_some()
                 )
             }
         }
@@ -371,7 +383,10 @@ impl App {
         use std::sync::mpsc::channel;
         use std::thread;
 
-        info!("Spawning background pull for image '{}' on {:?}", image_name, host);
+        info!(
+            "Spawning background pull for image '{}' on {:?}",
+            image_name, host
+        );
 
         let (tx, rx) = channel();
         self.docker_background_rx = Some(rx);
@@ -420,7 +435,11 @@ impl App {
     /// Handles a completed background Docker operation.
     fn handle_docker_background_result(&mut self, result: super::DockerBackgroundResult) {
         match result {
-            super::DockerBackgroundResult::ImagePulled { image, success, error } => {
+            super::DockerBackgroundResult::ImagePulled {
+                image,
+                success,
+                error,
+            } => {
                 if success {
                     info!("Background pull completed for '{}'", image);
                     self.set_status(format!("Downloaded '{}' successfully", image));

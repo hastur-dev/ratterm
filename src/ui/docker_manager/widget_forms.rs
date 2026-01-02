@@ -301,7 +301,10 @@ pub fn render_host_selection_list(selector: &DockerManagerSelector, area: Rect, 
 
     // Add scroll indicators if needed
     if scroll_offset > 0 {
-        lines.insert(0, Line::styled("  ▲ more above", Style::default().fg(Color::DarkGray)));
+        lines.insert(
+            0,
+            Line::styled("  ▲ more above", Style::default().fg(Color::DarkGray)),
+        );
         if !lines.is_empty() && lines.len() > 1 {
             lines.remove(1);
         }
@@ -360,7 +363,12 @@ pub fn render_host_credentials_form(
     );
 
     // Render save checkbox
-    render_save_checkbox(save, HostCredentialField::SaveCheckbox == current_field, chunks[2], buf);
+    render_save_checkbox(
+        save,
+        HostCredentialField::SaveCheckbox == current_field,
+        chunks[2],
+        buf,
+    );
 
     // Render help text
     render_credential_help(chunks[3], buf);
@@ -435,9 +443,10 @@ fn render_save_checkbox(checked: bool, is_focused: bool, area: Rect, buf: &mut B
         Style::default().fg(Color::White)
     };
 
-    let line = Line::from(vec![
-        Span::styled(format!("{} Save credentials", checkbox), style),
-    ]);
+    let line = Line::from(vec![Span::styled(
+        format!("{} Save credentials", checkbox),
+        style,
+    )]);
 
     let para = Paragraph::new(line);
     para.render(area, buf);

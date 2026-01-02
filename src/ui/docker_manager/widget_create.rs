@@ -46,11 +46,7 @@ fn download_status_line(selector: &DockerManagerSelector) -> Option<Line<'static
 }
 
 /// Renders the creation mode UI.
-pub fn render_creation_mode(
-    selector: &DockerManagerSelector,
-    area: Rect,
-    buf: &mut Buffer,
-) {
+pub fn render_creation_mode(selector: &DockerManagerSelector, area: Rect, buf: &mut Buffer) {
     // Clear background
     Clear.render(area, buf);
 
@@ -118,10 +114,7 @@ fn render_search_hub(selector: &DockerManagerSelector, area: Rect, buf: &mut Buf
 fn render_search_results(selector: &DockerManagerSelector, area: Rect, buf: &mut Buffer) {
     let state = selector.creation_state();
 
-    let title = format!(
-        " Search Results ({}) ",
-        state.search_results.len()
-    );
+    let title = format!(" Search Results ({}) ", state.search_results.len());
 
     let block = Block::default()
         .title(title)
@@ -158,7 +151,10 @@ fn render_search_results(selector: &DockerManagerSelector, area: Rect, buf: &mut
         // Truncate description
         let max_desc_len = (chunks[0].width as usize).saturating_sub(name.len() + stars.len() + 10);
         let desc = if result.description.len() > max_desc_len {
-            format!("{}...", &result.description[..max_desc_len.saturating_sub(3)])
+            format!(
+                "{}...",
+                &result.description[..max_desc_len.saturating_sub(3)]
+            )
         } else {
             result.description.clone()
         };
@@ -300,7 +296,9 @@ fn render_volume_host_path(selector: &DockerManagerSelector, area: Rect, buf: &m
         lines.push(Line::from(""));
     }
 
-    lines.push(Line::from("Enter host path to mount (or leave empty to skip):"));
+    lines.push(Line::from(
+        "Enter host path to mount (or leave empty to skip):",
+    ));
     lines.push(Line::from(""));
     lines.push(Line::from(vec![
         Span::raw("> "),
@@ -350,7 +348,10 @@ fn render_volume_container_path(selector: &DockerManagerSelector, area: Rect, bu
         lines.push(Line::from(""));
     }
 
-    lines.push(Line::from(format!("Host path: {}", state.current_host_path)));
+    lines.push(Line::from(format!(
+        "Host path: {}",
+        state.current_host_path
+    )));
     lines.push(Line::from(""));
     lines.push(Line::from("Enter container path (e.g., /app/data):"));
     lines.push(Line::from(""));

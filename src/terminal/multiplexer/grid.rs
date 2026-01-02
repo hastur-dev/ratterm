@@ -165,13 +165,7 @@ impl TerminalGrid {
         assert!(rows > 0, "Rows must be positive");
 
         let terminal = Terminal::with_ssh_command(
-            cols,
-            rows,
-            ssh_host,
-            ssh_port,
-            ssh_user,
-            command,
-            tab_name,
+            cols, rows, ssh_host, ssh_port, ssh_user, command, tab_name,
         )?;
 
         Ok(Self {

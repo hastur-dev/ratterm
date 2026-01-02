@@ -4,6 +4,7 @@
 
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
+use crate::config::is_windows_11;
 use crate::ui::layout::FocusedPane;
 use crate::ui::popup::PopupKind;
 
@@ -82,13 +83,18 @@ impl App {
                 self.show_file_browser();
                 true
             }
+            // Command palette: F1 on Windows 11, Ctrl+Shift+P on other platforms
+            (KeyModifiers::NONE, KeyCode::F(1)) if is_windows_11() => {
+                self.show_popup(PopupKind::CommandPalette);
+                true
+            }
             (m, KeyCode::Char('p') | KeyCode::Char('P'))
-                if m == KeyModifiers::CONTROL | KeyModifiers::SHIFT =>
+                if m == KeyModifiers::CONTROL | KeyModifiers::SHIFT && !is_windows_11() =>
             {
                 self.show_popup(PopupKind::CommandPalette);
                 true
             }
-            (KeyModifiers::CONTROL, KeyCode::Char('p')) => {
+            (KeyModifiers::CONTROL, KeyCode::Char('p')) if !is_windows_11() => {
                 self.show_popup(PopupKind::CommandPalette);
                 true
             }
@@ -428,6 +434,10 @@ impl App {
             self.handle_confirmation_key(key);
             return;
         }
+        if self.popup.kind().is_keybinding_notification() {
+            self.handle_keybinding_notification_key(key);
+            return;
+        }
         if self.popup.kind().is_mode_switcher() {
             self.handle_mode_switcher_key(key);
             return;
@@ -581,6 +591,19 @@ impl App {
             | (KeyModifiers::SHIFT, KeyCode::Char('C'))
             | (KeyModifiers::NONE, KeyCode::Esc) => {
                 self.hide_popup();
+            }
+            _ => {}
+        }
+    }
+
+    fn handle_keybinding_notification_key(&mut self, key: KeyEvent) {
+        // Dismiss the notification on any key press
+        match (key.modifiers, key.code) {
+            (KeyModifiers::NONE, KeyCode::Esc)
+            | (KeyModifiers::NONE, KeyCode::Enter)
+            | (KeyModifiers::NONE, KeyCode::Char(_)) => {
+                self.hide_popup();
+                self.mark_win11_notification_shown();
             }
             _ => {}
         }

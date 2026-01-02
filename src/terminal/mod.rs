@@ -482,9 +482,8 @@ impl Terminal {
         #[cfg(windows)]
         {
             // Try common Docker locations on Windows
-            let docker_desktop = PathBuf::from(
-                "C:\\Program Files\\Docker\\Docker\\resources\\bin\\docker.exe",
-            );
+            let docker_desktop =
+                PathBuf::from("C:\\Program Files\\Docker\\Docker\\resources\\bin\\docker.exe");
             if docker_desktop.exists() {
                 return docker_desktop;
             }

@@ -27,7 +27,10 @@ impl App {
         let host = self.docker_items.selected_host.clone();
         let host_name = self.docker_host_display_name();
 
-        self.set_status(format!("Connecting to {} on {}...", container_name, host_name));
+        self.set_status(format!(
+            "Connecting to {} on {}...",
+            container_name, host_name
+        ));
 
         let Some(ref mut terminals) = self.terminals else {
             self.set_status("No terminal available".to_string());
@@ -133,7 +136,10 @@ impl App {
         let cmd = self.build_command_for_host(&docker_run_cmd);
 
         let host_name = self.docker_host_display_name();
-        self.set_status(format!("Running {} with options on {}...", display_name, host_name));
+        self.set_status(format!(
+            "Running {} with options on {}...",
+            display_name, host_name
+        ));
 
         // Create a new terminal tab with the docker run command
         self.create_docker_terminal_tab(&cmd, image_name, display_name);

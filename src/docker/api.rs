@@ -83,7 +83,10 @@ impl<'a> DockerHostManager<'a> {
         let host = &self.items.selected_host;
 
         results.push("=== Testing Current Docker Host ===".to_string());
-        results.push(format!("Host Type: {}", if host.is_local() { "Local" } else { "Remote" }));
+        results.push(format!(
+            "Host Type: {}",
+            if host.is_local() { "Local" } else { "Remote" }
+        ));
         results.push(format!("Display Name: {}", host.display_name()));
 
         match host {
@@ -114,10 +117,19 @@ impl<'a> DockerHostManager<'a> {
         results.push("\n--- Discovery Test ---".to_string());
         let discovery_result = DockerDiscovery::discover_all_for_host(host);
 
-        results.push(format!("Docker Available: {}", discovery_result.docker_available));
+        results.push(format!(
+            "Docker Available: {}",
+            discovery_result.docker_available
+        ));
         results.push(format!("Availability: {:?}", discovery_result.availability));
-        results.push(format!("Running Containers: {}", discovery_result.running_containers.len()));
-        results.push(format!("Stopped Containers: {}", discovery_result.stopped_containers.len()));
+        results.push(format!(
+            "Running Containers: {}",
+            discovery_result.running_containers.len()
+        ));
+        results.push(format!(
+            "Stopped Containers: {}",
+            discovery_result.stopped_containers.len()
+        ));
         results.push(format!("Images: {}", discovery_result.images.len()));
 
         if let Some(err) = discovery_result.error {
@@ -144,7 +156,12 @@ impl<'a> DockerHostManager<'a> {
             } => {
                 format!(
                     "DockerHost::Remote {{ host_id: {}, hostname: {}, port: {}, username: {}, display_name: {:?}, has_password: {} }}",
-                    host_id, hostname, port, username, display_name, password.is_some()
+                    host_id,
+                    hostname,
+                    port,
+                    username,
+                    display_name,
+                    password.is_some()
                 )
             }
         }
@@ -200,24 +217,26 @@ impl DockerApi {
         if output.status.success() {
             let stdout = String::from_utf8_lossy(&output.stdout);
             if stdout.trim().contains("SSH_OK") {
-                Ok(format!("SSH connection to {}@{}:{} successful", username, hostname, port))
+                Ok(format!(
+                    "SSH connection to {}@{}:{} successful",
+                    username, hostname, port
+                ))
             } else {
                 Ok(format!("SSH connected, output: {}", stdout.trim()))
             }
         } else {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            Err(format!("SSH failed: {}. Make sure you have SSH key auth set up or use the main app with password.", stderr.trim()))
+            Err(format!(
+                "SSH failed: {}. Make sure you have SSH key auth set up or use the main app with password.",
+                stderr.trim()
+            ))
         }
     }
 
     /// Tests if Docker is available on a remote host.
     ///
     /// Returns Ok with Docker version if available, Err otherwise.
-    pub fn test_remote_docker(
-        hostname: &str,
-        port: u16,
-        username: &str,
-    ) -> Result<String, String> {
+    pub fn test_remote_docker(hostname: &str, port: u16, username: &str) -> Result<String, String> {
         let host = DockerHost::remote(
             0, // Temporary ID
             hostname.to_string(),
@@ -229,18 +248,35 @@ impl DockerApi {
         let available = DockerDiscovery::is_docker_available_remote(&host);
         if available {
             // Try to get Docker version
-            let version_cmd = DockerDiscovery::build_remote_docker_command(&host, "docker --version");
+            let version_cmd =
+                DockerDiscovery::build_remote_docker_command(&host, "docker --version");
 
-            let output = Command::new(if cfg!(target_os = "windows") { "cmd" } else { "sh" })
-                .args(if cfg!(target_os = "windows") { vec!["/C", &version_cmd] } else { vec!["-c", &version_cmd] })
-                .output()
-                .map_err(|e| format!("Failed to get Docker version: {}", e))?;
+            let output = Command::new(if cfg!(target_os = "windows") {
+                "cmd"
+            } else {
+                "sh"
+            })
+            .args(if cfg!(target_os = "windows") {
+                vec!["/C", &version_cmd]
+            } else {
+                vec!["-c", &version_cmd]
+            })
+            .output()
+            .map_err(|e| format!("Failed to get Docker version: {}", e))?;
 
             if output.status.success() {
                 let version = String::from_utf8_lossy(&output.stdout);
-                Ok(format!("Docker available on {}@{}: {}", username, hostname, version.trim()))
+                Ok(format!(
+                    "Docker available on {}@{}: {}",
+                    username,
+                    hostname,
+                    version.trim()
+                ))
             } else {
-                Ok(format!("Docker available on {}@{} (version check failed)", username, hostname))
+                Ok(format!(
+                    "Docker available on {}@{} (version check failed)",
+                    username, hostname
+                ))
             }
         } else {
             Err(format!("Docker not available on {}@{}", username, hostname))
@@ -255,18 +291,14 @@ impl DockerApi {
         port: u16,
         username: &str,
     ) -> Result<Vec<DockerContainer>, String> {
-        let host = DockerHost::remote(
-            0,
-            hostname.to_string(),
-            port,
-            username.to_string(),
-            None,
-        );
+        let host = DockerHost::remote(0, hostname.to_string(), port, username.to_string(), None);
 
         let result = DockerDiscovery::discover_all_for_host(&host);
 
         if !result.docker_available {
-            return Err(result.error.unwrap_or_else(|| "Docker not available".to_string()));
+            return Err(result
+                .error
+                .unwrap_or_else(|| "Docker not available".to_string()));
         }
 
         let mut all_containers = result.running_containers;
@@ -280,36 +312,22 @@ impl DockerApi {
         port: u16,
         username: &str,
     ) -> Result<Vec<DockerImage>, String> {
-        let host = DockerHost::remote(
-            0,
-            hostname.to_string(),
-            port,
-            username.to_string(),
-            None,
-        );
+        let host = DockerHost::remote(0, hostname.to_string(), port, username.to_string(), None);
 
         let result = DockerDiscovery::discover_all_for_host(&host);
 
         if !result.docker_available {
-            return Err(result.error.unwrap_or_else(|| "Docker not available".to_string()));
+            return Err(result
+                .error
+                .unwrap_or_else(|| "Docker not available".to_string()));
         }
 
         Ok(result.images)
     }
 
     /// Performs full discovery on a remote host.
-    pub fn discover_remote(
-        hostname: &str,
-        port: u16,
-        username: &str,
-    ) -> DockerDiscoveryResult {
-        let host = DockerHost::remote(
-            0,
-            hostname.to_string(),
-            port,
-            username.to_string(),
-            None,
-        );
+    pub fn discover_remote(hostname: &str, port: u16, username: &str) -> DockerDiscoveryResult {
+        let host = DockerHost::remote(0, hostname.to_string(), port, username.to_string(), None);
 
         DockerDiscovery::discover_all_for_host(&host)
     }
@@ -323,13 +341,7 @@ impl DockerApi {
         username: &str,
         docker_command: &str,
     ) -> String {
-        let host = DockerHost::remote(
-            0,
-            hostname.to_string(),
-            port,
-            username.to_string(),
-            None,
-        );
+        let host = DockerHost::remote(0, hostname.to_string(), port, username.to_string(), None);
 
         DockerDiscovery::build_remote_docker_command(&host, docker_command)
     }
@@ -343,24 +355,14 @@ impl DockerApi {
         username: &str,
         docker_args: &str,
     ) -> Result<(String, String, i32), String> {
-        let host = DockerHost::remote(
-            0,
-            hostname.to_string(),
-            port,
-            username.to_string(),
-            None,
-        );
+        let host = DockerHost::remote(0, hostname.to_string(), port, username.to_string(), None);
 
         let full_cmd = DockerDiscovery::build_remote_docker_command(&host, docker_args);
 
         let output = if cfg!(target_os = "windows") {
-            Command::new("cmd")
-                .args(["/C", &full_cmd])
-                .output()
+            Command::new("cmd").args(["/C", &full_cmd]).output()
         } else {
-            Command::new("sh")
-                .args(["-c", &full_cmd])
-                .output()
+            Command::new("sh").args(["-c", &full_cmd]).output()
         };
 
         let output = output.map_err(|e| format!("Failed to execute command: {}", e))?;
@@ -373,14 +375,13 @@ impl DockerApi {
     }
 
     /// Returns diagnostic information about remote Docker connectivity.
-    pub fn diagnose_remote(
-        hostname: &str,
-        port: u16,
-        username: &str,
-    ) -> Vec<String> {
+    pub fn diagnose_remote(hostname: &str, port: u16, username: &str) -> Vec<String> {
         let mut results = Vec::new();
 
-        results.push(format!("=== Diagnosing Docker on {}@{}:{} ===", username, hostname, port));
+        results.push(format!(
+            "=== Diagnosing Docker on {}@{}:{} ===",
+            username, hostname, port
+        ));
 
         // Test 1: SSH connectivity
         results.push("\n[1] Testing SSH connectivity...".to_string());
@@ -446,6 +447,7 @@ impl DockerApi {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 
@@ -490,7 +492,10 @@ mod tests {
         if cfg!(target_os = "windows") {
             assert!(cmd.contains("plink"), "Expected plink in command");
             assert!(cmd.contains("-pw"), "Expected -pw flag in command");
-            assert!(cmd.contains("hastur@10.0.0.18"), "Expected user@host in command");
+            assert!(
+                cmd.contains("hastur@10.0.0.18"),
+                "Expected user@host in command"
+            );
         }
     }
 
@@ -515,7 +520,10 @@ mod tests {
 
         let result = DockerDiscovery::discover_all_for_host(&host);
 
-        assert!(result.docker_available, "Docker should be available on Desk Rock5c");
+        assert!(
+            result.docker_available,
+            "Docker should be available on Desk Rock5c"
+        );
         assert!(
             !result.running_containers.is_empty(),
             "Should find at least one running container"

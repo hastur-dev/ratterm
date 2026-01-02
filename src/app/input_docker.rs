@@ -447,14 +447,20 @@ impl App {
             (KeyModifiers::NONE, KeyCode::Char('k') | KeyCode::Up) => {
                 if let Some(ref mut manager) = self.docker_manager {
                     manager.select_prev_host();
-                    debug!("Docker host selection: moved up to index {}", manager.host_selection_index());
+                    debug!(
+                        "Docker host selection: moved up to index {}",
+                        manager.host_selection_index()
+                    );
                 }
             }
             // Navigate down
             (KeyModifiers::NONE, KeyCode::Char('j') | KeyCode::Down) => {
                 if let Some(ref mut manager) = self.docker_manager {
                     manager.select_next_host();
-                    debug!("Docker host selection: moved down to index {}", manager.host_selection_index());
+                    debug!(
+                        "Docker host selection: moved down to index {}",
+                        manager.host_selection_index()
+                    );
                 }
             }
             // Quick-select local
@@ -499,14 +505,20 @@ impl App {
             (KeyModifiers::NONE, KeyCode::Tab) => {
                 if let Some(ref mut manager) = self.docker_manager {
                     manager.next_cred_field();
-                    debug!("Docker credentials: moved to field {:?}", manager.cred_field());
+                    debug!(
+                        "Docker credentials: moved to field {:?}",
+                        manager.cred_field()
+                    );
                 }
             }
             // Previous field
             (KeyModifiers::SHIFT, KeyCode::BackTab) => {
                 if let Some(ref mut manager) = self.docker_manager {
                     manager.prev_cred_field();
-                    debug!("Docker credentials: moved to field {:?}", manager.cred_field());
+                    debug!(
+                        "Docker credentials: moved to field {:?}",
+                        manager.cred_field()
+                    );
                 }
             }
             // Submit credentials
@@ -524,7 +536,10 @@ impl App {
             (KeyModifiers::NONE, KeyCode::Char(' ')) => {
                 if let Some(ref mut manager) = self.docker_manager {
                     manager.toggle_save_credentials();
-                    debug!("Docker credentials: save checkbox toggled to {}", manager.cred_save());
+                    debug!(
+                        "Docker credentials: save checkbox toggled to {}",
+                        manager.cred_save()
+                    );
                 }
             }
             // Character input
@@ -542,7 +557,8 @@ impl App {
         if let Some(ref mut manager) = self.docker_manager {
             manager.select_local_host();
         }
-        self.docker_items.set_selected_host(crate::docker::DockerHost::Local);
+        self.docker_items
+            .set_selected_host(crate::docker::DockerHost::Local);
         self.set_status("Switched to local Docker".to_string());
         self.refresh_docker_discovery();
     }
@@ -591,7 +607,10 @@ impl App {
             return;
         }
 
-        info!("docker_confirm_host_selection: selected remote host, has_creds={}", has_creds);
+        info!(
+            "docker_confirm_host_selection: selected remote host, has_creds={}",
+            has_creds
+        );
 
         // Remote host - check if credentials are available
         if has_creds {
@@ -603,7 +622,10 @@ impl App {
                 return;
             };
 
-            info!("docker_confirm_host_selection: looking up SSH host id={}", hid);
+            info!(
+                "docker_confirm_host_selection: looking up SSH host id={}",
+                hid
+            );
 
             // Extract all needed data from SSH hosts first (before mutable borrow)
             let host_data = {
@@ -631,34 +653,56 @@ impl App {
                         ))
                     }
                     (None, _) => {
-                        warn!("docker_confirm_host_selection: SSH host not found for id={}", hid);
+                        warn!(
+                            "docker_confirm_host_selection: SSH host not found for id={}",
+                            hid
+                        );
                         None // SSH host not found
                     }
                     (_, None) => {
-                        warn!("docker_confirm_host_selection: No credentials for host id={}", hid);
+                        warn!(
+                            "docker_confirm_host_selection: No credentials for host id={}",
+                            hid
+                        );
                         None // No credentials
                     }
                 }
             };
 
             let Some((hostname, ssh_port, username, password)) = host_data else {
-                info!("docker_confirm_host_selection: host_data is None, prompting for credentials");
+                info!(
+                    "docker_confirm_host_selection: host_data is None, prompting for credentials"
+                );
                 self.set_status(format!("SSH host {} or credentials not found", hid));
                 if let Some(ref mut manager) = self.docker_manager {
-                    info!("docker_confirm_host_selection: calling start_host_credentials({})", hid);
+                    info!(
+                        "docker_confirm_host_selection: calling start_host_credentials({})",
+                        hid
+                    );
                     manager.start_host_credentials(hid);
-                    info!("docker_confirm_host_selection: mode is now {:?}", manager.mode());
+                    info!(
+                        "docker_confirm_host_selection: mode is now {:?}",
+                        manager.mode()
+                    );
                 }
                 return;
             };
 
             if username.is_empty() {
-                info!("docker_confirm_host_selection: username is empty, prompting for credentials");
+                info!(
+                    "docker_confirm_host_selection: username is empty, prompting for credentials"
+                );
                 self.set_status("Username is empty - prompting for credentials".to_string());
                 if let Some(ref mut manager) = self.docker_manager {
-                    info!("docker_confirm_host_selection: calling start_host_credentials({})", hid);
+                    info!(
+                        "docker_confirm_host_selection: calling start_host_credentials({})",
+                        hid
+                    );
                     manager.start_host_credentials(hid);
-                    info!("docker_confirm_host_selection: mode is now {:?}", manager.mode());
+                    info!(
+                        "docker_confirm_host_selection: mode is now {:?}",
+                        manager.mode()
+                    );
                 }
                 return;
             }
@@ -674,12 +718,20 @@ impl App {
                 password_missing
             );
             if password_missing {
-                info!("docker_confirm_host_selection: password is None or empty, prompting for credentials");
+                info!(
+                    "docker_confirm_host_selection: password is None or empty, prompting for credentials"
+                );
                 self.set_status("Password is required - prompting for credentials".to_string());
                 if let Some(ref mut manager) = self.docker_manager {
-                    info!("docker_confirm_host_selection: calling start_host_credentials({})", hid);
+                    info!(
+                        "docker_confirm_host_selection: calling start_host_credentials({})",
+                        hid
+                    );
                     manager.start_host_credentials(hid);
-                    info!("docker_confirm_host_selection: mode is now {:?}", manager.mode());
+                    info!(
+                        "docker_confirm_host_selection: mode is now {:?}",
+                        manager.mode()
+                    );
                 }
                 return;
             }
@@ -706,14 +758,16 @@ impl App {
             if let Some(ref mut manager) = self.docker_manager {
                 manager.set_selected_host(docker_host.clone());
                 manager.set_mode(DockerManagerMode::List);
-                info!("docker_confirm_host_selection: updated manager, mode is now {:?}", manager.mode());
+                info!(
+                    "docker_confirm_host_selection: updated manager, mode is now {:?}",
+                    manager.mode()
+                );
             }
 
             // Debug: show the host we're switching to
             self.set_status(format!(
                 "Switching to: {}@{} (discovering...)",
-                username,
-                hostname
+                username, hostname
             ));
 
             info!("docker_confirm_host_selection: calling refresh_docker_discovery");
@@ -731,9 +785,15 @@ impl App {
                 display_name
             ));
             if let Some(ref mut manager) = self.docker_manager {
-                info!("docker_confirm_host_selection: calling start_host_credentials({}) from else branch", hid);
+                info!(
+                    "docker_confirm_host_selection: calling start_host_credentials({}) from else branch",
+                    hid
+                );
                 manager.start_host_credentials(hid);
-                info!("docker_confirm_host_selection: mode is now {:?}", manager.mode());
+                info!(
+                    "docker_confirm_host_selection: mode is now {:?}",
+                    manager.mode()
+                );
             }
         }
     }
@@ -784,8 +844,7 @@ impl App {
 
         // Save credentials if requested
         if save {
-            let creds =
-                crate::ssh::SSHCredentials::new(username.clone(), Some(password.clone()));
+            let creds = crate::ssh::SSHCredentials::new(username.clone(), Some(password.clone()));
             self.ssh_hosts.set_credentials(host_id, creds.clone());
             if let Err(e) = self.ssh_storage.save(&self.ssh_hosts) {
                 self.set_status(format!("Warning: failed to save credentials: {}", e));
@@ -809,10 +868,7 @@ impl App {
             manager.set_mode(DockerManagerMode::List);
         }
 
-        self.set_status(format!(
-            "Connecting to {}@{}...",
-            username, hd.hostname
-        ));
+        self.set_status(format!("Connecting to {}@{}...", username, hd.hostname));
         self.refresh_docker_discovery();
     }
 }

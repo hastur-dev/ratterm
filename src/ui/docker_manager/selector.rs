@@ -3,13 +3,13 @@
 use tracing::info;
 
 use crate::docker::{
-    ContainerCreationState, DockerAvailability, DockerContainer, DockerDiscoveryResult,
-    DockerHost, DockerImage, DockerRunOptions,
+    ContainerCreationState, DockerAvailability, DockerContainer, DockerDiscoveryResult, DockerHost,
+    DockerImage, DockerRunOptions,
 };
 
 use super::types::{
     DockerHostDisplay, DockerItemDisplay, DockerListSection, DockerManagerMode,
-    HostCredentialField, RunOptionsField, MAX_DISPLAY_HOSTS, MAX_DISPLAY_ITEMS,
+    HostCredentialField, MAX_DISPLAY_HOSTS, MAX_DISPLAY_ITEMS, RunOptionsField,
 };
 
 /// Docker Manager selector state.
@@ -1003,6 +1003,7 @@ impl Default for DockerManagerSelector {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 
@@ -1012,7 +1013,13 @@ mod tests {
 
         // Simulate loading hosts - one local, two remote
         let ssh_hosts = vec![
-            (1u32, "host1.example.com".to_string(), 22u16, Some("My Server".to_string()), false),
+            (
+                1u32,
+                "host1.example.com".to_string(),
+                22u16,
+                Some("My Server".to_string()),
+                false,
+            ),
             (2u32, "host2.example.com".to_string(), 22u16, None, true), // has_creds = true
         ];
 
@@ -1187,8 +1194,20 @@ mod tests {
 
         // Load hosts - one has credentials, one doesn't
         let ssh_hosts = vec![
-            (1u32, "host1.example.com".to_string(), 22u16, Some("Host With Creds".to_string()), true),
-            (2u32, "host2.example.com".to_string(), 22u16, Some("Host Without Creds".to_string()), false),
+            (
+                1u32,
+                "host1.example.com".to_string(),
+                22u16,
+                Some("Host With Creds".to_string()),
+                true,
+            ),
+            (
+                2u32,
+                "host2.example.com".to_string(),
+                22u16,
+                Some("Host Without Creds".to_string()),
+                false,
+            ),
         ];
         selector.load_available_hosts(&ssh_hosts);
 

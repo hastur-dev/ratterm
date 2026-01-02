@@ -478,7 +478,10 @@ impl DockerSearchResult {
         } else {
             self.description.clone()
         };
-        format!("{}{} - {} ({}★)", self.name, official_badge, desc, self.stars)
+        format!(
+            "{}{} - {} ({}★)",
+            self.name, official_badge, desc, self.stars
+        )
     }
 }
 
@@ -499,7 +502,10 @@ impl VolumeMountConfig {
     #[must_use]
     pub fn new(host_path: String, container_path: String) -> Self {
         assert!(!host_path.is_empty(), "host_path must not be empty");
-        assert!(!container_path.is_empty(), "container_path must not be empty");
+        assert!(
+            !container_path.is_empty(),
+            "container_path must not be empty"
+        );
         Self {
             host_path,
             container_path,
@@ -644,7 +650,12 @@ impl ContainerCreationState {
     pub fn build_run_command(&self) -> Option<String> {
         let image = self.selected_image.as_ref()?;
 
-        let mut parts = vec!["docker".to_string(), "run".to_string(), "-it".to_string(), "--rm".to_string()];
+        let mut parts = vec![
+            "docker".to_string(),
+            "run".to_string(),
+            "-it".to_string(),
+            "--rm".to_string(),
+        ];
 
         // Add volume mounts
         for mount in &self.volume_mounts {
@@ -885,7 +896,8 @@ impl DockerItemList {
                     migrated.insert(idx.to_string(), qc.clone());
                 }
             }
-            self.host_quick_connect.insert("local".to_string(), migrated);
+            self.host_quick_connect
+                .insert("local".to_string(), migrated);
             // Clear legacy array
             self.quick_connect = Default::default();
         }
@@ -909,8 +921,7 @@ impl DockerItemList {
     pub fn get_quick_connect(&self, index: usize) -> Option<&DockerQuickConnectItem> {
         if index < MAX_QUICK_CONNECT {
             let key = index.to_string();
-            self.current_host_slots()
-                .and_then(|slots| slots.get(&key))
+            self.current_host_slots().and_then(|slots| slots.get(&key))
         } else {
             None
         }
@@ -1169,13 +1180,8 @@ mod tests {
         assert_eq!(list.get_quick_connect(0).unwrap().id, "local123");
 
         // Switch to remote host
-        let remote_host = DockerHost::remote(
-            1,
-            "server.com".to_string(),
-            22,
-            "user".to_string(),
-            None,
-        );
+        let remote_host =
+            DockerHost::remote(1, "server.com".to_string(), 22, "user".to_string(), None);
         list.set_selected_host(remote_host.clone());
 
         // Remote should have no quick-connect yet

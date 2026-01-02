@@ -13,6 +13,6 @@ mod widget_render;
 pub use selector::DockerManagerSelector;
 pub use types::{
     CreationField, DockerHostDisplay, DockerItemDisplay, DockerListSection, DockerManagerMode,
-    HostCredentialField, RunOptionsField, MAX_DISPLAY_HOSTS,
+    HostCredentialField, MAX_DISPLAY_HOSTS, RunOptionsField,
 };
 pub use widget::DockerManagerWidget;

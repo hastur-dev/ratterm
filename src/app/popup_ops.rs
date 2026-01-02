@@ -403,6 +403,10 @@ impl App {
             | PopupKind::DockerManager => {
                 self.hide_popup();
             }
+            PopupKind::KeybindingChangeNotification => {
+                self.hide_popup();
+                self.mark_win11_notification_shown();
+            }
         }
     }
 }
