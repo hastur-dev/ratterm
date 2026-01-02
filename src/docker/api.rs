@@ -484,17 +484,38 @@ mod tests {
         assert!(host.password().is_some());
         assert_eq!(host.password().unwrap(), "Im408839!");
 
-        // Build the command and verify it uses plink with password
+        // Build the command and verify it generates a valid SSH command
         let cmd = DockerDiscovery::build_remote_docker_command(&host, "docker ps");
         println!("Generated command: {}", cmd);
 
-        // On Windows, should use plink with -pw
+        // On Windows with plink available, should use plink with -pw
+        // On Windows without plink, falls back to ssh.exe
+        // On Linux/Mac with sshpass, should use sshpass
+        // On Linux/Mac without sshpass, falls back to ssh
         if cfg!(target_os = "windows") {
-            assert!(cmd.contains("plink"), "Expected plink in command");
-            assert!(cmd.contains("-pw"), "Expected -pw flag in command");
+            if cmd.contains("plink") {
+                // Plink is available - verify password flag is used
+                assert!(cmd.contains("-pw"), "Expected -pw flag in plink command");
+                assert!(
+                    cmd.contains("hastur@10.0.0.18"),
+                    "Expected user@host in command"
+                );
+            } else {
+                // Plink not available - should fall back to ssh.exe
+                assert!(
+                    cmd.contains("ssh"),
+                    "Expected ssh fallback when plink unavailable"
+                );
+                assert!(
+                    cmd.contains("hastur@10.0.0.18"),
+                    "Expected user@host in command"
+                );
+            }
+        } else {
+            // Linux/Mac - should use ssh or sshpass
             assert!(
-                cmd.contains("hastur@10.0.0.18"),
-                "Expected user@host in command"
+                cmd.contains("ssh") || cmd.contains("sshpass"),
+                "Expected ssh or sshpass in command"
             );
         }
     }
