@@ -190,6 +190,86 @@ impl TerminalMultiplexer {
         Ok(index)
     }
 
+    /// Adds a new terminal tab with a Docker exec session (local container).
+    ///
+    /// # Errors
+    /// Returns error if maximum tabs reached or terminal creation fails.
+    pub fn add_docker_exec_tab(
+        &mut self,
+        container_id: &str,
+        container_name: &str,
+        shell: &str,
+    ) -> Result<usize, PtyError> {
+        if self.tabs.len() >= MAX_TABS {
+            return Err(PtyError::MaxTabsReached);
+        }
+
+        let grid = TerminalGrid::new_docker_exec(
+            self.cols,
+            self.rows,
+            container_id,
+            container_name,
+            shell,
+        )?;
+
+        let index = self.tabs.len();
+        let tab_name = format!("Docker: {}", container_name);
+        let tab = TerminalTab::new(grid, tab_name, index);
+
+        self.tabs.push(tab);
+        self.active_tab = index;
+        Ok(index)
+    }
+
+    /// Adds a new terminal tab with a Docker exec session via SSH (remote container).
+    ///
+    /// # Errors
+    /// Returns error if maximum tabs reached or terminal creation fails.
+    #[allow(clippy::too_many_arguments)]
+    pub fn add_docker_exec_ssh_tab(
+        &mut self,
+        container_id: &str,
+        container_name: &str,
+        shell: &str,
+        ssh_host: &str,
+        ssh_port: u16,
+        ssh_user: &str,
+        host_id: u32,
+        password: Option<&str>,
+    ) -> Result<usize, PtyError> {
+        if self.tabs.len() >= MAX_TABS {
+            return Err(PtyError::MaxTabsReached);
+        }
+
+        let mut grid = TerminalGrid::new_docker_exec_ssh(
+            self.cols,
+            self.rows,
+            container_id,
+            container_name,
+            shell,
+            ssh_host,
+            ssh_port,
+            ssh_user,
+            host_id,
+        )?;
+
+        // Set password for SSH auto-login if provided
+        if let Some(pwd) = password {
+            if let Some(terminal) = grid.focused_mut() {
+                terminal.set_pending_password(pwd.to_string());
+                terminal.set_ssh_password(pwd.to_string());
+            }
+        }
+
+        let index = self.tabs.len();
+        let tab_name = format!("Docker: {}@{}", container_name, ssh_host);
+        let tab = TerminalTab::new(grid, tab_name, index);
+
+        self.tabs.push(tab);
+        self.active_tab = index;
+        Ok(index)
+    }
+
     /// Closes the current tab.
     ///
     /// Returns false if this is the last tab (cannot close).

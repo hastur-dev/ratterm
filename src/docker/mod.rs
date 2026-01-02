@@ -5,21 +5,26 @@
 //! - Managing quick-connect hotkeys for Docker items
 //! - Connecting to containers via `docker exec`
 //! - Running images as new containers
+//! - Remote Docker management via SSH
 //!
 //! # Features
 //!
-//! - **Discovery**: Scans local system for containers and images via Docker CLI
-//! - **Quick Connect**: Assign Ctrl+Alt+1-9 hotkeys to frequently used items
+//! - **Discovery**: Scans local and remote systems for containers and images via Docker CLI
+//! - **Quick Connect**: Assign Ctrl+Alt+1-9 hotkeys to frequently used items (per-host)
 //! - **Container Stats**: View real-time container resource usage
 //! - **Container Logs**: Stream container logs in split terminal pane
+//! - **Remote Management**: Manage Docker on remote hosts via SSH
+//! - **API Layer**: Programmatic access for testing and extensions
 
+pub mod api;
 pub mod container;
 pub mod discovery;
 pub mod storage;
 
+pub use api::{DockerApi, DockerHostManager};
 pub use container::{
-    DockerContainer, DockerImage, DockerItemList, DockerItemType, DockerQuickConnectItem,
-    DockerRunOptions, DockerStatus,
+    DockerContainer, DockerHost, DockerImage, DockerItemList, DockerItemType,
+    DockerQuickConnectItem, DockerRunOptions, DockerStatus, QuickConnectSlots,
 };
 pub use discovery::{DockerAvailability, DockerDiscovery, DockerDiscoveryResult};
 pub use storage::{DockerStorage, DockerStorageError};

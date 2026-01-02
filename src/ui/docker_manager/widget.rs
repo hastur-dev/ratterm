@@ -57,6 +57,12 @@ impl Widget for DockerManagerWidget<'_> {
             DockerManagerMode::Connecting => {
                 self.render_connecting_mode(popup_area, buf);
             }
+            DockerManagerMode::HostSelection => {
+                self.render_host_selection_mode(popup_area, buf);
+            }
+            DockerManagerMode::HostCredentials => {
+                self.render_host_credentials_mode(popup_area, buf);
+            }
         }
     }
 }
@@ -245,13 +251,13 @@ impl DockerManagerWidget<'_> {
     fn render_help_text(&self, area: Rect, buf: &mut Buffer) {
         let help = match self.selector.section() {
             super::types::DockerListSection::RunningContainers => {
-                "Enter:exec | Tab:section | r:refresh | 1-9:assign | Ctrl+O:options | Esc:close"
+                "Enter:exec | h:host | Tab:section | r:refresh | 1-9:assign | Esc:close"
             }
             super::types::DockerListSection::StoppedContainers => {
-                "Enter:start+exec | Tab:section | r:refresh | d:remove | Esc:close"
+                "Enter:start+exec | h:host | Tab:section | r:refresh | d:remove | Esc:close"
             }
             super::types::DockerListSection::Images => {
-                "Enter:run | Tab:section | r:refresh | Ctrl+O:options | d:remove | Esc:close"
+                "Enter:run | h:host | Tab:section | r:refresh | d:remove | Esc:close"
             }
         };
 
@@ -270,21 +276,25 @@ impl DockerManagerWidget<'_> {
             DockerAvailability::NotInstalled => vec![
                 Line::from(""),
                 Line::from(Span::styled(
-                    "Docker is not installed on this system.",
+                    "Docker is not installed locally.",
                     Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
                 )),
                 Line::from(""),
-                Line::from("You need to install Docker to use this feature."),
+                Line::from("You can manage Docker on a remote host via SSH,"),
+                Line::from("or install Docker locally to manage containers here."),
                 Line::from(""),
                 Line::from(Span::styled(
                     "Visit https://www.docker.com/get-started to install Docker.",
                     Style::default().fg(Color::Cyan),
                 )),
                 Line::from(""),
-                Line::from(Span::styled(
-                    "[Esc] Close",
-                    Style::default().fg(Color::DarkGray),
-                )),
+                Line::from(vec![
+                    Span::styled("[h] ", Style::default().fg(Color::Green)),
+                    Span::styled("Select Remote Host", Style::default().fg(Color::White)),
+                    Span::styled("    ", Style::default()),
+                    Span::styled("[Esc] ", Style::default().fg(Color::Red)),
+                    Span::styled("Close", Style::default().fg(Color::White)),
+                ]),
             ],
             DockerAvailability::NotRunning => vec![
                 Line::from(""),
@@ -295,17 +305,20 @@ impl DockerManagerWidget<'_> {
                         .add_modifier(Modifier::BOLD),
                 )),
                 Line::from(""),
-                Line::from("Would you like to start Docker?"),
+                Line::from("Start Docker locally, or manage Docker on a remote host."),
                 Line::from(""),
                 Line::from(vec![
                     Span::styled("[Enter] ", Style::default().fg(Color::Green)),
-                    Span::styled("Start Docker Desktop", Style::default().fg(Color::White)),
-                    Span::styled("    ", Style::default()),
+                    Span::styled("Start Docker", Style::default().fg(Color::White)),
+                    Span::styled("  ", Style::default()),
+                    Span::styled("[h] ", Style::default().fg(Color::Magenta)),
+                    Span::styled("Remote Host", Style::default().fg(Color::White)),
+                    Span::styled("  ", Style::default()),
                     Span::styled("[r] ", Style::default().fg(Color::Cyan)),
                     Span::styled("Retry", Style::default().fg(Color::White)),
-                    Span::styled("    ", Style::default()),
+                    Span::styled("  ", Style::default()),
                     Span::styled("[Esc] ", Style::default().fg(Color::Red)),
-                    Span::styled("Cancel", Style::default().fg(Color::White)),
+                    Span::styled("Close", Style::default().fg(Color::White)),
                 ]),
             ],
             DockerAvailability::DaemonError(msg) => {
@@ -332,18 +345,21 @@ impl DockerManagerWidget<'_> {
 
                 lines.push(Line::from(""));
                 lines.push(Line::from(
-                    "This may indicate Docker Desktop needs to be restarted.",
+                    "Restart Docker locally, or manage Docker on a remote host.",
                 ));
                 lines.push(Line::from(""));
                 lines.push(Line::from(vec![
                     Span::styled("[Enter] ", Style::default().fg(Color::Green)),
-                    Span::styled("Restart Docker Desktop", Style::default().fg(Color::White)),
-                    Span::styled("    ", Style::default()),
+                    Span::styled("Restart", Style::default().fg(Color::White)),
+                    Span::styled("  ", Style::default()),
+                    Span::styled("[h] ", Style::default().fg(Color::Magenta)),
+                    Span::styled("Remote Host", Style::default().fg(Color::White)),
+                    Span::styled("  ", Style::default()),
                     Span::styled("[r] ", Style::default().fg(Color::Cyan)),
                     Span::styled("Retry", Style::default().fg(Color::White)),
-                    Span::styled("    ", Style::default()),
+                    Span::styled("  ", Style::default()),
                     Span::styled("[Esc] ", Style::default().fg(Color::Red)),
-                    Span::styled("Cancel", Style::default().fg(Color::White)),
+                    Span::styled("Close", Style::default().fg(Color::White)),
                 ]));
 
                 lines
@@ -351,16 +367,22 @@ impl DockerManagerWidget<'_> {
             _ => vec![
                 Line::from(""),
                 Line::from(Span::styled(
-                    "Docker is not available.",
+                    "Docker is not available locally.",
                     Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
                 )),
                 Line::from(""),
-                Line::from("Please ensure Docker is installed and running."),
+                Line::from("Manage Docker on a remote host, or install locally."),
                 Line::from(""),
-                Line::from(Span::styled(
-                    "[r] Retry    [Esc] Close",
-                    Style::default().fg(Color::DarkGray),
-                )),
+                Line::from(vec![
+                    Span::styled("[h] ", Style::default().fg(Color::Green)),
+                    Span::styled("Remote Host", Style::default().fg(Color::White)),
+                    Span::styled("  ", Style::default()),
+                    Span::styled("[r] ", Style::default().fg(Color::Cyan)),
+                    Span::styled("Retry", Style::default().fg(Color::White)),
+                    Span::styled("  ", Style::default()),
+                    Span::styled("[Esc] ", Style::default().fg(Color::Red)),
+                    Span::styled("Close", Style::default().fg(Color::White)),
+                ]),
             ],
         };
 
@@ -469,5 +491,40 @@ impl DockerManagerWidget<'_> {
         let style = Style::default().fg(Color::Green);
         let para = Paragraph::new(lines).style(style);
         para.render(inner, buf);
+    }
+
+    /// Renders host selection mode.
+    fn render_host_selection_mode(&self, area: Rect, buf: &mut Buffer) {
+        let current_host = self.selector.selected_host().display_name();
+        let title = format!(" Select Docker Host (current: {}) ", current_host);
+
+        let block = Block::default()
+            .title(title)
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Magenta))
+            .padding(Padding::horizontal(1));
+
+        let inner = block.inner(area);
+        block.render(area, buf);
+
+        // Render available hosts
+        super::widget_forms::render_host_selection_list(self.selector, inner, buf);
+    }
+
+    /// Renders host credentials entry mode.
+    fn render_host_credentials_mode(&self, area: Rect, buf: &mut Buffer) {
+        let host_name = self.selector.cred_host_name().unwrap_or("Host");
+        let title = format!(" Enter Credentials - {} ", host_name);
+
+        let block = Block::default()
+            .title(title)
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Yellow))
+            .padding(Padding::horizontal(1));
+
+        let inner = block.inner(area);
+        block.render(area, buf);
+
+        super::widget_forms::render_host_credentials_form(self.selector, inner, buf);
     }
 }

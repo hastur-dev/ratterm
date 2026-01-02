@@ -1,6 +1,7 @@
 //! Docker manager input handling.
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use tracing::{debug, error, info, warn};
 
 use crate::docker::DockerAvailability;
 use crate::ui::docker_manager::{DockerListSection, DockerManagerMode};
@@ -27,6 +28,12 @@ impl App {
             DockerManagerMode::Connecting => {
                 // No input during connection
             }
+            DockerManagerMode::HostSelection => {
+                self.handle_docker_host_selection_key(key);
+            }
+            DockerManagerMode::HostCredentials => {
+                self.handle_docker_host_credentials_key(key);
+            }
         }
     }
 
@@ -49,6 +56,10 @@ impl App {
                 (KeyModifiers::NONE, KeyCode::Char('r')) => {
                     self.set_status("Checking Docker availability...".to_string());
                     self.refresh_docker_discovery();
+                }
+                // Host selection - ALWAYS allow this even when local Docker unavailable
+                (KeyModifiers::NONE, KeyCode::Char('h')) => {
+                    self.docker_start_host_selection();
                 }
                 // Start/Restart Docker (for NotRunning and DaemonError states)
                 (KeyModifiers::NONE, KeyCode::Enter) => {
@@ -146,6 +157,16 @@ impl App {
             // Delete/remove
             (KeyModifiers::NONE, KeyCode::Char('d') | KeyCode::Delete) => {
                 self.docker_remove_selected();
+            }
+
+            // Host selection
+            (KeyModifiers::NONE, KeyCode::Char('h')) => {
+                self.docker_start_host_selection();
+            }
+
+            // Debug: Show current host info (Shift+D)
+            (KeyModifiers::SHIFT, KeyCode::Char('D')) => {
+                self.docker_show_host_debug();
             }
 
             _ => {}
@@ -356,13 +377,16 @@ impl App {
 
         use crate::docker::DockerDiscovery;
 
+        // Get the selected host for remote operations
+        let host = self.docker_items.selected_host.clone();
+
         match manager.section() {
             DockerListSection::RunningContainers => {
                 self.set_status("Cannot remove running container. Stop it first.".to_string());
             }
             DockerListSection::StoppedContainers => {
                 if let Some(container) = item.as_container() {
-                    match DockerDiscovery::remove_container(&container.id, false) {
+                    match DockerDiscovery::remove_container_on_host(&container.id, false, &host) {
                         Ok(()) => {
                             self.set_status(format!("Removed container {}", container.name));
                             self.refresh_docker_discovery();
@@ -375,7 +399,7 @@ impl App {
             }
             DockerListSection::Images => {
                 if let Some(image) = item.as_image() {
-                    match DockerDiscovery::remove_image(&image.id, false) {
+                    match DockerDiscovery::remove_image_on_host(&image.id, false, &host) {
                         Ok(()) => {
                             self.set_status(format!("Removed image {}", image.full_name()));
                             self.refresh_docker_discovery();
@@ -387,5 +411,390 @@ impl App {
                 }
             }
         }
+    }
+
+    /// Handles key events in Docker host selection mode.
+    fn handle_docker_host_selection_key(&mut self, key: KeyEvent) {
+        debug!("Docker host selection key: {:?}", key.code);
+
+        match (key.modifiers, key.code) {
+            // Close/cancel
+            (KeyModifiers::NONE, KeyCode::Esc) => {
+                info!("Docker host selection cancelled");
+                if let Some(ref mut manager) = self.docker_manager {
+                    manager.cancel_host_selection();
+                }
+            }
+            // Navigate up
+            (KeyModifiers::NONE, KeyCode::Char('k') | KeyCode::Up) => {
+                if let Some(ref mut manager) = self.docker_manager {
+                    manager.select_prev_host();
+                    debug!("Docker host selection: moved up to index {}", manager.host_selection_index());
+                }
+            }
+            // Navigate down
+            (KeyModifiers::NONE, KeyCode::Char('j') | KeyCode::Down) => {
+                if let Some(ref mut manager) = self.docker_manager {
+                    manager.select_next_host();
+                    debug!("Docker host selection: moved down to index {}", manager.host_selection_index());
+                }
+            }
+            // Quick-select local
+            (KeyModifiers::NONE, KeyCode::Char('l')) => {
+                info!("Docker: quick-selecting local host");
+                self.docker_select_local_host();
+            }
+            // Select host
+            (KeyModifiers::NONE, KeyCode::Enter) => {
+                // Log current selection state before confirming
+                if let Some(ref manager) = self.docker_manager {
+                    let idx = manager.host_selection_index();
+                    let host_count = manager.available_hosts().len();
+                    let selected = manager.selected_host_display();
+                    info!(
+                        "Docker: Enter pressed - selection_index={}, host_count={}, selected={:?}",
+                        idx,
+                        host_count,
+                        selected.map(|h| (&h.display_name, h.host_id, h.has_credentials))
+                    );
+                }
+                info!("Docker: confirming host selection");
+                self.docker_confirm_host_selection();
+            }
+            _ => {}
+        }
+    }
+
+    /// Handles key events in Docker host credentials entry mode.
+    fn handle_docker_host_credentials_key(&mut self, key: KeyEvent) {
+        debug!("Docker credentials key: {:?}", key.code);
+
+        match (key.modifiers, key.code) {
+            // Cancel
+            (KeyModifiers::NONE, KeyCode::Esc) => {
+                info!("Docker credential entry cancelled");
+                if let Some(ref mut manager) = self.docker_manager {
+                    manager.cancel_host_credentials();
+                }
+            }
+            // Next field
+            (KeyModifiers::NONE, KeyCode::Tab) => {
+                if let Some(ref mut manager) = self.docker_manager {
+                    manager.next_cred_field();
+                    debug!("Docker credentials: moved to field {:?}", manager.cred_field());
+                }
+            }
+            // Previous field
+            (KeyModifiers::SHIFT, KeyCode::BackTab) => {
+                if let Some(ref mut manager) = self.docker_manager {
+                    manager.prev_cred_field();
+                    debug!("Docker credentials: moved to field {:?}", manager.cred_field());
+                }
+            }
+            // Submit credentials
+            (KeyModifiers::NONE, KeyCode::Enter) => {
+                info!("Docker: submitting credentials");
+                self.docker_submit_host_credentials();
+            }
+            // Backspace
+            (KeyModifiers::NONE, KeyCode::Backspace) => {
+                if let Some(ref mut manager) = self.docker_manager {
+                    manager.cred_backspace();
+                }
+            }
+            // Toggle checkbox (space)
+            (KeyModifiers::NONE, KeyCode::Char(' ')) => {
+                if let Some(ref mut manager) = self.docker_manager {
+                    manager.toggle_save_credentials();
+                    debug!("Docker credentials: save checkbox toggled to {}", manager.cred_save());
+                }
+            }
+            // Character input
+            (KeyModifiers::NONE | KeyModifiers::SHIFT, KeyCode::Char(c)) => {
+                if let Some(ref mut manager) = self.docker_manager {
+                    manager.cred_insert_char(c);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Selects the local host for Docker management.
+    fn docker_select_local_host(&mut self) {
+        if let Some(ref mut manager) = self.docker_manager {
+            manager.select_local_host();
+        }
+        self.docker_items.set_selected_host(crate::docker::DockerHost::Local);
+        self.set_status("Switched to local Docker".to_string());
+        self.refresh_docker_discovery();
+    }
+
+    /// Confirms the selected host and switches to it.
+    fn docker_confirm_host_selection(&mut self) {
+        info!("docker_confirm_host_selection: starting");
+
+        // Extract display info first to avoid borrow issues
+        let host_info = {
+            let Some(ref manager) = self.docker_manager else {
+                error!("docker_confirm_host_selection: docker_manager is None");
+                return;
+            };
+            let Some(host_display) = manager.selected_host_display() else {
+                error!("docker_confirm_host_selection: no host selected in manager");
+                return;
+            };
+            info!(
+                "docker_confirm_host_selection: selected host_display: name={}, is_local={}, has_creds={}, host_id={:?}",
+                host_display.display_name,
+                host_display.is_local(),
+                host_display.has_credentials,
+                host_display.host_id
+            );
+            (
+                host_display.is_local(),
+                host_display.has_credentials,
+                host_display.host.clone(),
+                host_display.display_name.clone(),
+                host_display.host_id,
+            )
+        };
+
+        let (is_local, has_creds, _host, display_name, host_id) = host_info;
+
+        // Debug info
+        self.set_status(format!(
+            "Host: {} local={} has_creds={} host_id={:?}",
+            display_name, is_local, has_creds, host_id
+        ));
+
+        if is_local {
+            info!("docker_confirm_host_selection: selected local host");
+            self.docker_select_local_host();
+            return;
+        }
+
+        info!("docker_confirm_host_selection: selected remote host, has_creds={}", has_creds);
+
+        // Remote host - check if credentials are available
+        if has_creds {
+            // Use saved credentials - need to include password in DockerHost
+            let Some(hid) = host_id else {
+                // host_id is None but is_local is false - shouldn't happen
+                error!("docker_confirm_host_selection: remote host with no host_id");
+                self.set_status("Error: Remote host with no host_id".to_string());
+                return;
+            };
+
+            info!("docker_confirm_host_selection: looking up SSH host id={}", hid);
+
+            // Extract all needed data from SSH hosts first (before mutable borrow)
+            let host_data = {
+                let ssh_host = self.ssh_hosts.get_by_id(hid);
+                let creds = self.ssh_hosts.get_credentials(hid);
+
+                info!(
+                    "docker_confirm_host_selection: ssh_host found={}, creds found={}",
+                    ssh_host.is_some(),
+                    creds.is_some()
+                );
+
+                match (ssh_host, creds) {
+                    (Some(ssh), Some(cred)) => {
+                        info!(
+                            "docker_confirm_host_selection: got credentials - username='{}', has_password={}",
+                            cred.username,
+                            cred.password.is_some()
+                        );
+                        Some((
+                            ssh.hostname.clone(),
+                            ssh.port,
+                            cred.username.clone(),
+                            cred.password.clone(),
+                        ))
+                    }
+                    (None, _) => {
+                        warn!("docker_confirm_host_selection: SSH host not found for id={}", hid);
+                        None // SSH host not found
+                    }
+                    (_, None) => {
+                        warn!("docker_confirm_host_selection: No credentials for host id={}", hid);
+                        None // No credentials
+                    }
+                }
+            };
+
+            let Some((hostname, ssh_port, username, password)) = host_data else {
+                info!("docker_confirm_host_selection: host_data is None, prompting for credentials");
+                self.set_status(format!("SSH host {} or credentials not found", hid));
+                if let Some(ref mut manager) = self.docker_manager {
+                    info!("docker_confirm_host_selection: calling start_host_credentials({})", hid);
+                    manager.start_host_credentials(hid);
+                    info!("docker_confirm_host_selection: mode is now {:?}", manager.mode());
+                }
+                return;
+            };
+
+            if username.is_empty() {
+                info!("docker_confirm_host_selection: username is empty, prompting for credentials");
+                self.set_status("Username is empty - prompting for credentials".to_string());
+                if let Some(ref mut manager) = self.docker_manager {
+                    info!("docker_confirm_host_selection: calling start_host_credentials({})", hid);
+                    manager.start_host_credentials(hid);
+                    info!("docker_confirm_host_selection: mode is now {:?}", manager.mode());
+                }
+                return;
+            }
+
+            // Check if password is required but missing or empty
+            // On Windows with plink, or with sshpass, we need a password
+            // If no password or empty password, prompt for credentials
+            let password_missing = password.as_ref().is_none_or(|p| p.is_empty());
+            info!(
+                "docker_confirm_host_selection: password check - is_none={}, is_empty={}, missing={}",
+                password.is_none(),
+                password.as_ref().is_some_and(|p| p.is_empty()),
+                password_missing
+            );
+            if password_missing {
+                info!("docker_confirm_host_selection: password is None or empty, prompting for credentials");
+                self.set_status("Password is required - prompting for credentials".to_string());
+                if let Some(ref mut manager) = self.docker_manager {
+                    info!("docker_confirm_host_selection: calling start_host_credentials({})", hid);
+                    manager.start_host_credentials(hid);
+                    info!("docker_confirm_host_selection: mode is now {:?}", manager.mode());
+                }
+                return;
+            }
+
+            info!(
+                "docker_confirm_host_selection: all credentials present, creating DockerHost for {}@{}",
+                username, hostname
+            );
+
+            let docker_host = crate::docker::DockerHost::remote_with_password(
+                hid,
+                hostname.clone(),
+                ssh_port,
+                username.clone(),
+                Some(display_name.clone()),
+                password.clone(),
+            );
+
+            // Set the host in docker_items
+            self.docker_items.set_selected_host(docker_host.clone());
+            info!("docker_confirm_host_selection: set docker_items.selected_host");
+
+            // Update the manager's selected host too for display consistency
+            if let Some(ref mut manager) = self.docker_manager {
+                manager.set_selected_host(docker_host.clone());
+                manager.set_mode(DockerManagerMode::List);
+                info!("docker_confirm_host_selection: updated manager, mode is now {:?}", manager.mode());
+            }
+
+            // Debug: show the host we're switching to
+            self.set_status(format!(
+                "Switching to: {}@{} (discovering...)",
+                username,
+                hostname
+            ));
+
+            info!("docker_confirm_host_selection: calling refresh_docker_discovery");
+            self.refresh_docker_discovery();
+        } else {
+            // Need to prompt for credentials - no saved credentials for this host
+            info!("docker_confirm_host_selection: has_creds=false, prompting for credentials");
+            let Some(hid) = host_id else {
+                error!("docker_confirm_host_selection: remote host with no host_id (else branch)");
+                self.set_status("Error: Remote host with no host_id".to_string());
+                return;
+            };
+            self.set_status(format!(
+                "No credentials saved for {} - please enter credentials",
+                display_name
+            ));
+            if let Some(ref mut manager) = self.docker_manager {
+                info!("docker_confirm_host_selection: calling start_host_credentials({}) from else branch", hid);
+                manager.start_host_credentials(hid);
+                info!("docker_confirm_host_selection: mode is now {:?}", manager.mode());
+            }
+        }
+    }
+
+    /// Submits the entered credentials and connects to host.
+    fn docker_submit_host_credentials(&mut self) {
+        // Extract all needed data first to avoid borrow issues
+        let cred_info = {
+            let Some(ref manager) = self.docker_manager else {
+                return;
+            };
+
+            let (username, password, save) = manager.get_entered_credentials();
+            if username.is_empty() {
+                // Silent return - user hasn't entered username yet
+                return;
+            }
+            if password.is_empty() {
+                // Silent return - user hasn't entered password yet
+                return;
+            }
+
+            let Some(host_id) = manager.cred_host_id() else {
+                return;
+            };
+
+            let host_display = manager
+                .available_hosts()
+                .iter()
+                .find(|h| h.host_id == Some(host_id))
+                .cloned();
+
+            let Some(hd) = host_display else {
+                return;
+            };
+
+            (username, password, save, host_id, hd)
+        };
+
+        let (username, password, save, host_id, hd) = cred_info;
+
+        // Get the SSH port from the SSH host
+        let ssh_port = self
+            .ssh_hosts
+            .get_by_id(host_id)
+            .map(|h| h.port)
+            .unwrap_or(22);
+
+        // Save credentials if requested
+        if save {
+            let creds =
+                crate::ssh::SSHCredentials::new(username.clone(), Some(password.clone()));
+            self.ssh_hosts.set_credentials(host_id, creds.clone());
+            if let Err(e) = self.ssh_storage.save(&self.ssh_hosts) {
+                self.set_status(format!("Warning: failed to save credentials: {}", e));
+            }
+        }
+
+        // Create the docker host with the credentials including password
+        let docker_host = crate::docker::DockerHost::remote_with_password(
+            host_id,
+            hd.hostname.clone(),
+            ssh_port,
+            username.clone(),
+            Some(hd.display_name.clone()),
+            Some(password),
+        );
+
+        // Update both docker_items AND manager selected host to stay in sync
+        self.docker_items.set_selected_host(docker_host.clone());
+        if let Some(ref mut manager) = self.docker_manager {
+            manager.set_selected_host(docker_host);
+            manager.set_mode(DockerManagerMode::List);
+        }
+
+        self.set_status(format!(
+            "Connecting to {}@{}...",
+            username, hd.hostname
+        ));
+        self.refresh_docker_discovery();
     }
 }

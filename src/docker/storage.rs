@@ -115,7 +115,10 @@ impl DockerStorage {
 
         // Read and parse
         let content = fs::read_to_string(&self.path)?;
-        let items: DockerItemList = toml::from_str(&content)?;
+        let mut items: DockerItemList = toml::from_str(&content)?;
+
+        // Migrate legacy quick-connect array to per-host HashMap
+        items.migrate_legacy_quick_connect();
 
         self.initialized = true;
         Ok(items)

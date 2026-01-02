@@ -454,6 +454,34 @@ When the Docker Manager is open:
 | `Shift+S` | Jump to Stopped Containers section |
 | `Shift+I` | Jump to Images section |
 
+### Host Selection
+
+Manage Docker containers on remote machines via SSH. This allows you to connect to Docker on servers registered in the SSH Manager.
+
+| Hotkey | Action |
+|--------|--------|
+| `h` | Open host selection (choose local or SSH host) |
+| `Up` / `k` | Previous host |
+| `Down` / `j` | Next host |
+| `l` | Quick-select Local host |
+| `Enter` | Select host (may prompt for credentials) |
+| `Esc` | Cancel host selection |
+| `Shift+D` | Debug: Show current host configuration |
+
+**Note:** Each host has its own set of quick-connect slots. Switching hosts switches which slots are displayed and used.
+
+### Host Credential Entry
+
+When selecting a remote host without saved credentials:
+
+| Hotkey | Action |
+|--------|--------|
+| `Tab` | Next field (Username → Password → Save) |
+| `Shift+Tab` | Previous field |
+| `Space` | Toggle "Save credentials" checkbox |
+| `Enter` | Submit credentials and connect |
+| `Esc` | Cancel, return to host selection |
+
 ### Container/Image Actions
 
 | Hotkey | Action |
@@ -462,6 +490,7 @@ When the Docker Manager is open:
 | `Ctrl+O` | Run image with options (ports, volumes, env) |
 | `r` | Refresh container/image discovery |
 | `d` / `Delete` | Remove stopped container or image |
+| `h` | Select Docker host (local or remote via SSH) |
 | `1-9` | Assign to quick connect slot (Ctrl+Alt+1-9) |
 
 ### Docker Quick Connect

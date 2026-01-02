@@ -1,21 +1,74 @@
 //! Docker container connection operations.
 
-use crate::docker::DockerDiscovery;
+use crate::docker::{DockerDiscovery, DockerHost};
 
 use super::App;
 
 impl App {
+    /// Builds a command, wrapping with SSH for remote hosts.
+    fn build_command_for_host(&self, docker_cmd: &str) -> String {
+        let host = &self.docker_items.selected_host;
+        match host {
+            DockerHost::Local => docker_cmd.to_string(),
+            DockerHost::Remote { .. } => {
+                DockerDiscovery::build_remote_docker_command(host, docker_cmd)
+            }
+        }
+    }
+
     /// Executes into a running container.
+    ///
+    /// For local containers, creates a docker exec terminal directly.
+    /// For remote containers, creates an SSH session that runs docker exec.
     pub fn exec_into_container(&mut self, container_id: &str, container_name: &str) {
         assert!(!container_id.is_empty(), "container_id must not be empty");
 
         let shell = self.docker_default_shell().to_string();
-        let cmd = DockerDiscovery::build_exec_command(container_id, &shell);
+        let host = self.docker_items.selected_host.clone();
+        let host_name = self.docker_host_display_name();
 
-        self.set_status(format!("Connecting to {}...", container_name));
+        self.set_status(format!("Connecting to {} on {}...", container_name, host_name));
 
-        // Create a new terminal tab with the docker exec command
-        self.create_docker_terminal_tab(&cmd, container_id, container_name);
+        let Some(ref mut terminals) = self.terminals else {
+            self.set_status("No terminal available".to_string());
+            return;
+        };
+
+        let result = match &host {
+            DockerHost::Local => {
+                // Local container - use direct docker exec
+                terminals.add_docker_exec_tab(container_id, container_name, &shell)
+            }
+            DockerHost::Remote {
+                host_id,
+                hostname,
+                port,
+                username,
+                password,
+                ..
+            } => {
+                // Remote container - use SSH + docker exec
+                terminals.add_docker_exec_ssh_tab(
+                    container_id,
+                    container_name,
+                    &shell,
+                    hostname,
+                    *port,
+                    username,
+                    *host_id,
+                    password.as_deref(),
+                )
+            }
+        };
+
+        match result {
+            Ok(_) => {
+                self.set_status(format!("Connected to {} on {}", container_name, host_name));
+            }
+            Err(e) => {
+                self.set_status(format!("Failed to connect: {}", e));
+            }
+        }
 
         // Hide Docker manager if visible
         self.hide_docker_manager();
@@ -25,10 +78,12 @@ impl App {
     pub fn start_and_exec_container(&mut self, container_id: &str, container_name: &str) {
         assert!(!container_id.is_empty(), "container_id must not be empty");
 
-        self.set_status(format!("Starting {}...", container_name));
+        let host_name = self.docker_host_display_name();
+        self.set_status(format!("Starting {} on {}...", container_name, host_name));
 
-        // Start the container
-        match DockerDiscovery::start_container(container_id) {
+        // Start the container (handles remote via discovery)
+        let host = self.docker_items.selected_host.clone();
+        match DockerDiscovery::start_container_on_host(container_id, &host) {
             Ok(()) => {
                 self.set_status(format!("Started {}, connecting...", container_name));
                 self.exec_into_container(container_id, container_name);
@@ -44,9 +99,11 @@ impl App {
         assert!(!image_name.is_empty(), "image_name must not be empty");
 
         let shell = self.docker_default_shell().to_string();
-        let cmd = DockerDiscovery::build_run_command(image_name, &shell);
+        let docker_cmd = DockerDiscovery::build_run_command(image_name, &shell);
+        let cmd = self.build_command_for_host(&docker_cmd);
 
-        self.set_status(format!("Running {}...", display_name));
+        let host_name = self.docker_host_display_name();
+        self.set_status(format!("Running {} on {}...", display_name, host_name));
 
         // Create a new terminal tab with the docker run command
         self.create_docker_terminal_tab(&cmd, image_name, display_name);
@@ -72,9 +129,11 @@ impl App {
         };
 
         let args = options.build_args(image_name);
-        let cmd = format!("{} run {}", docker_cmd, args.join(" "));
+        let docker_run_cmd = format!("{} run {}", docker_cmd, args.join(" "));
+        let cmd = self.build_command_for_host(&docker_run_cmd);
 
-        self.set_status(format!("Running {} with options...", display_name));
+        let host_name = self.docker_host_display_name();
+        self.set_status(format!("Running {} with options on {}...", display_name, host_name));
 
         // Create a new terminal tab with the docker run command
         self.create_docker_terminal_tab(&cmd, image_name, display_name);
@@ -108,16 +167,44 @@ impl App {
                     let _ = terminal.write(b"\n");
 
                     // Store Docker context for stats/logs hotkeys
-                    terminal.set_docker_context(Some(crate::terminal::DockerContext {
-                        container_id: container_id.to_string(),
-                        container_name: container_name.to_string(),
-                    }));
+                    terminal.set_docker_context(Some(crate::terminal::DockerContext::new(
+                        container_id.to_string(),
+                        container_name.to_string(),
+                    )));
                 }
 
                 self.set_status(format!("Connected to {}", container_name));
             }
             Err(e) => {
                 self.set_status(format!("Failed to create terminal tab: {}", e));
+            }
+        }
+    }
+
+    /// Builds a command for a specific container host.
+    fn build_command_for_container_host(
+        &self,
+        docker_cmd: &str,
+        host: &crate::terminal::ContainerHost,
+    ) -> String {
+        match host {
+            crate::terminal::ContainerHost::Local => docker_cmd.to_string(),
+            crate::terminal::ContainerHost::Remote {
+                hostname,
+                port,
+                username,
+                ..
+            } => {
+                // Build SSH command to run Docker on remote host
+                let docker_host = DockerHost::Remote {
+                    host_id: 0,
+                    hostname: hostname.clone(),
+                    port: *port,
+                    username: username.clone(),
+                    password: None,
+                    display_name: None,
+                };
+                DockerDiscovery::build_remote_docker_command(&docker_host, docker_cmd)
             }
         }
     }
@@ -139,7 +226,9 @@ impl App {
             return;
         };
 
-        let cmd = DockerDiscovery::build_stats_command(&ctx.container_id);
+        let docker_cmd = DockerDiscovery::build_stats_command(&ctx.container_id);
+        // Use the host from the container context, not the currently selected host
+        let cmd = self.build_command_for_container_host(&docker_cmd, &ctx.host);
 
         // Split the terminal and run stats command
         self.split_terminal_with_command(&cmd, &format!("Stats: {}", ctx.container_name));
@@ -162,7 +251,9 @@ impl App {
             return;
         };
 
-        let cmd = DockerDiscovery::build_logs_command(&ctx.container_id);
+        let docker_cmd = DockerDiscovery::build_logs_command(&ctx.container_id);
+        // Use the host from the container context, not the currently selected host
+        let cmd = self.build_command_for_container_host(&docker_cmd, &ctx.host);
 
         // Split the terminal and run logs command
         self.split_terminal_with_command(&cmd, &format!("Logs: {}", ctx.container_name));

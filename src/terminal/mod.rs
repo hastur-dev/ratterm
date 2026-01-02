@@ -103,6 +103,55 @@ impl SSHContext {
     }
 }
 
+/// Host type for Docker containers.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ContainerHost {
+    /// Container is on the local machine.
+    Local,
+    /// Container is on a remote host accessed via SSH.
+    Remote {
+        /// SSH host ID from SSH manager.
+        host_id: u32,
+        /// Hostname or IP.
+        hostname: String,
+        /// SSH port.
+        port: u16,
+        /// Username for SSH.
+        username: String,
+    },
+}
+
+impl ContainerHost {
+    /// Creates a local host reference.
+    #[must_use]
+    pub const fn local() -> Self {
+        Self::Local
+    }
+
+    /// Creates a remote host reference.
+    #[must_use]
+    pub fn remote(host_id: u32, hostname: String, port: u16, username: String) -> Self {
+        Self::Remote {
+            host_id,
+            hostname,
+            port,
+            username,
+        }
+    }
+
+    /// Returns true if this is a local host.
+    #[must_use]
+    pub const fn is_local(&self) -> bool {
+        matches!(self, Self::Local)
+    }
+
+    /// Returns true if this is a remote host.
+    #[must_use]
+    pub const fn is_remote(&self) -> bool {
+        matches!(self, Self::Remote { .. })
+    }
+}
+
 /// Docker connection context for terminal inheritance.
 ///
 /// Stores metadata about a Docker container session so that
@@ -113,18 +162,33 @@ pub struct DockerContext {
     pub container_id: String,
     /// Container name for display.
     pub container_name: String,
+    /// Host where the container is running.
+    pub host: ContainerHost,
 }
 
 impl DockerContext {
-    /// Creates a new Docker context.
+    /// Creates a new Docker context for a local container.
     #[must_use]
     pub fn new(container_id: String, container_name: String) -> Self {
+        Self::with_host(container_id, container_name, ContainerHost::Local)
+    }
+
+    /// Creates a new Docker context with a specific host.
+    #[must_use]
+    pub fn with_host(container_id: String, container_name: String, host: ContainerHost) -> Self {
         assert!(!container_id.is_empty(), "container_id must not be empty");
 
         Self {
             container_id,
             container_name,
+            host,
         }
+    }
+
+    /// Returns true if container is on a remote host.
+    #[must_use]
+    pub fn is_remote(&self) -> bool {
+        self.host.is_remote()
     }
 }
 
@@ -238,6 +302,144 @@ impl Terminal {
         terminal.ssh_context = Some(SSHContext::new(user.to_string(), host.to_string(), port));
 
         Ok(terminal)
+    }
+
+    /// Creates a terminal running docker exec for a local container.
+    ///
+    /// # Arguments
+    /// * `cols` - Number of columns
+    /// * `rows` - Number of rows
+    /// * `container_id` - Container ID to exec into
+    /// * `container_name` - Container name for display
+    /// * `shell` - Shell to use (e.g., "/bin/sh", "/bin/bash")
+    ///
+    /// # Errors
+    /// Returns error if PTY creation fails.
+    pub fn with_docker_exec(
+        cols: u16,
+        rows: u16,
+        container_id: &str,
+        container_name: &str,
+        shell: &str,
+    ) -> Result<Self, PtyError> {
+        let docker_path = Self::find_docker_path();
+
+        let mut config = PtyConfig::default().size(cols, rows);
+        config.shell = Some(docker_path.to_string_lossy().to_string());
+        config.args = vec![
+            "exec".to_string(),
+            "-it".to_string(),
+            container_id.to_string(),
+            shell.to_string(),
+        ];
+
+        let mut terminal = Self::with_config(config)?;
+        terminal.docker_context = Some(DockerContext::new(
+            container_id.to_string(),
+            container_name.to_string(),
+        ));
+
+        Ok(terminal)
+    }
+
+    /// Creates a terminal running docker exec on a remote host via SSH.
+    ///
+    /// This first connects via SSH, then runs docker exec inside the SSH session.
+    ///
+    /// # Arguments
+    /// * `cols` - Number of columns
+    /// * `rows` - Number of rows
+    /// * `container_id` - Container ID to exec into
+    /// * `container_name` - Container name for display
+    /// * `shell` - Shell to use inside the container
+    /// * `ssh_host` - SSH hostname or IP
+    /// * `ssh_port` - SSH port
+    /// * `ssh_user` - SSH username
+    /// * `host_id` - SSH host ID from manager
+    ///
+    /// # Errors
+    /// Returns error if PTY creation fails.
+    #[allow(clippy::too_many_arguments)]
+    pub fn with_docker_exec_ssh(
+        cols: u16,
+        rows: u16,
+        container_id: &str,
+        container_name: &str,
+        shell: &str,
+        ssh_host: &str,
+        ssh_port: u16,
+        ssh_user: &str,
+        host_id: u32,
+    ) -> Result<Self, PtyError> {
+        let ssh_path = Self::find_ssh_path();
+
+        let mut config = PtyConfig::default().size(cols, rows);
+        config.shell = Some(ssh_path.to_string_lossy().to_string());
+
+        // Build SSH arguments that will run docker exec on the remote host
+        let mut args = Vec::new();
+        if ssh_port != 22 {
+            args.push("-p".to_string());
+            args.push(ssh_port.to_string());
+        }
+        // Add options to skip host key checking for convenience
+        args.push("-o".to_string());
+        args.push("StrictHostKeyChecking=no".to_string());
+        // Add the user@host
+        args.push(format!("{}@{}", ssh_user, ssh_host));
+        // Add the docker exec command to run on the remote host
+        args.push("docker".to_string());
+        args.push("exec".to_string());
+        args.push("-it".to_string());
+        args.push(container_id.to_string());
+        args.push(shell.to_string());
+
+        config.args = args;
+
+        let mut terminal = Self::with_config(config)?;
+
+        // Store both SSH and Docker context
+        terminal.ssh_context = Some(SSHContext::new(
+            ssh_user.to_string(),
+            ssh_host.to_string(),
+            ssh_port,
+        ));
+        terminal.docker_context = Some(DockerContext::with_host(
+            container_id.to_string(),
+            container_name.to_string(),
+            ContainerHost::remote(
+                host_id,
+                ssh_host.to_string(),
+                ssh_port,
+                ssh_user.to_string(),
+            ),
+        ));
+
+        Ok(terminal)
+    }
+
+    /// Finds the Docker executable path.
+    fn find_docker_path() -> PathBuf {
+        #[cfg(windows)]
+        {
+            // Try common Docker locations on Windows
+            let docker_desktop = PathBuf::from(
+                "C:\\Program Files\\Docker\\Docker\\resources\\bin\\docker.exe",
+            );
+            if docker_desktop.exists() {
+                return docker_desktop;
+            }
+            PathBuf::from("docker")
+        }
+
+        #[cfg(not(windows))]
+        {
+            let standard = PathBuf::from("/usr/bin/docker");
+            if standard.exists() {
+                return standard;
+            }
+            PathBuf::from("docker")
+        }
     }
 
     /// Finds the SSH executable path.

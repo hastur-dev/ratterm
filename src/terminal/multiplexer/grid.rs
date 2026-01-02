@@ -80,6 +80,73 @@ impl TerminalGrid {
         })
     }
 
+    /// Creates a new grid with a Docker exec terminal (local container).
+    ///
+    /// # Errors
+    /// Returns error if terminal creation fails.
+    pub fn new_docker_exec(
+        cols: u16,
+        rows: u16,
+        container_id: &str,
+        container_name: &str,
+        shell: &str,
+    ) -> Result<Self, PtyError> {
+        assert!(cols > 0, "Columns must be positive");
+        assert!(rows > 0, "Rows must be positive");
+
+        let terminal = Terminal::with_docker_exec(cols, rows, container_id, container_name, shell)?;
+
+        Ok(Self {
+            terminals: [Some(terminal), None, None, None],
+            focus: 0,
+            cols: 1,
+            rows: 1,
+            width: cols,
+            height: rows,
+        })
+    }
+
+    /// Creates a new grid with a Docker exec terminal via SSH (remote container).
+    ///
+    /// # Errors
+    /// Returns error if terminal creation fails.
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_docker_exec_ssh(
+        cols: u16,
+        rows: u16,
+        container_id: &str,
+        container_name: &str,
+        shell: &str,
+        ssh_host: &str,
+        ssh_port: u16,
+        ssh_user: &str,
+        host_id: u32,
+    ) -> Result<Self, PtyError> {
+        assert!(cols > 0, "Columns must be positive");
+        assert!(rows > 0, "Rows must be positive");
+
+        let terminal = Terminal::with_docker_exec_ssh(
+            cols,
+            rows,
+            container_id,
+            container_name,
+            shell,
+            ssh_host,
+            ssh_port,
+            ssh_user,
+            host_id,
+        )?;
+
+        Ok(Self {
+            terminals: [Some(terminal), None, None, None],
+            focus: 0,
+            cols: 1,
+            rows: 1,
+            width: cols,
+            height: rows,
+        })
+    }
+
     /// Returns the number of active terminals in the grid.
     #[must_use]
     pub fn terminal_count(&self) -> usize {
