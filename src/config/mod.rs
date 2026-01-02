@@ -3,14 +3,15 @@
 //! Handles loading and parsing the .ratrc configuration file.
 
 mod keybindings;
+pub mod platform;
 pub mod shell;
-pub mod vscode;
 
 use std::fs;
 use std::io::{self, Write};
 use std::path::PathBuf;
 
 pub use keybindings::{KeyAction, KeyBinding, KeybindingMode, Keybindings};
+pub use platform::{command_palette_hotkey, is_windows_11};
 pub use shell::{ShellDetector, ShellInfo, ShellInstallInfo, ShellInstaller, ShellType};
 
 use crate::ssh::StorageMode;
@@ -43,7 +44,7 @@ shell = system
 
 # Keybinding Mode
 # ---------------
-# Set the keybinding mode: vim, emacs, vscode, or default
+# Set the keybinding mode: vim, emacs, or default
 # mode = default
 mode = vim
 
@@ -269,7 +270,6 @@ impl Config {
                 self.mode = match value.to_lowercase().as_str() {
                     "vim" => KeybindingMode::Vim,
                     "emacs" => KeybindingMode::Emacs,
-                    "vscode" | "vs" | "code" => KeybindingMode::VsCode,
                     _ => KeybindingMode::Default,
                 };
             }

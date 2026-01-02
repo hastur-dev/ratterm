@@ -3,9 +3,13 @@
 //! Orchestrates the terminal emulator, code editor, and file browser.
 
 mod commands;
+mod docker_connect;
+mod docker_ops;
 mod extension_ops;
 mod file_ops;
 mod input;
+mod input_docker;
+mod input_docker_create;
 mod input_editor;
 mod input_mouse;
 mod input_ssh;
@@ -23,7 +27,7 @@ mod terminal_ops;
 use std::cell::Cell;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::TryRecvError;
+use std::sync::mpsc::{Receiver, TryRecvError};
 use std::time::Duration;
 
 use crossterm::event::{self, Event};
@@ -32,7 +36,9 @@ use tracing::{debug, info, warn};
 
 use crate::api::{ApiHandler, ApiServer, MAX_REQUESTS_PER_FRAME, RequestReceiver};
 use crate::clipboard::Clipboard;
+use crate::completion::CompletionHandle;
 use crate::config::{Config, KeybindingMode};
+use crate::docker::{DockerItemList, DockerStorage};
 use crate::editor::Editor;
 use crate::extension::ExtensionManager;
 use crate::filebrowser::FileBrowser;
@@ -40,6 +46,7 @@ use crate::remote::{RemoteFileBrowser, RemoteFileManager};
 use crate::ssh::{NetworkScanner, SSHHostList, SSHStorage};
 use crate::terminal::{BackgroundManager, TerminalMultiplexer, pty::PtyError};
 use crate::ui::{
+    docker_manager::DockerManagerSelector,
     editor_tabs::EditorTabInfo,
     layout::SplitLayout,
     popup::{
@@ -62,6 +69,33 @@ pub enum AppMode {
     FileBrowser,
     /// Popup dialog is active.
     Popup,
+}
+
+/// Context for file browser operations.
+///
+/// Tracks what the file browser is being used for so we can
+/// route the selection appropriately.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FileBrowserContext {
+    /// Normal file opening (default).
+    #[default]
+    OpenFile,
+    /// Selecting a volume mount path for Docker container creation.
+    DockerVolumeMount,
+}
+
+/// Result from a background Docker operation.
+#[derive(Debug, Clone)]
+pub enum DockerBackgroundResult {
+    /// Image pull completed.
+    ImagePulled {
+        /// Image name that was pulled.
+        image: String,
+        /// Whether the operation succeeded.
+        success: bool,
+        /// Error message if failed.
+        error: Option<String>,
+    },
 }
 
 /// Open file tab.
@@ -87,7 +121,7 @@ pub struct App {
     pub(crate) mode: AppMode,
     /// Popup dialog.
     pub(crate) popup: Popup,
-    /// Command palette for VSCode-style command access.
+    /// Command palette for quick command access.
     pub(crate) command_palette: CommandPalette,
     /// Mode switcher for cycling through editor keybinding modes.
     pub(crate) mode_switcher: Option<ModeSwitcher>,
@@ -141,6 +175,22 @@ pub struct App {
     pub(crate) remote_manager: RemoteFileManager,
     /// Remote file browser for SSH directory navigation (active when browsing remote).
     pub(crate) remote_file_browser: Option<RemoteFileBrowser>,
+    /// Docker manager selector state.
+    pub(crate) docker_manager: Option<DockerManagerSelector>,
+    /// Docker storage for quick-connect settings.
+    pub(crate) docker_storage: DockerStorage,
+    /// Docker items (quick connect slots and settings).
+    pub(crate) docker_items: DockerItemList,
+    /// Context for file browser operations (what the selection is for).
+    pub(crate) file_browser_context: FileBrowserContext,
+    /// Receiver for background Docker operation results.
+    pub(crate) docker_background_rx: Option<Receiver<DockerBackgroundResult>>,
+    /// Whether the Windows 11 keybinding notification has been shown.
+    pub(crate) win11_notification_shown: bool,
+    /// Completion handle for autocomplete functionality.
+    pub(crate) completion_handle: Option<CompletionHandle>,
+    /// Current completion suggestion text for rendering.
+    pub(crate) completion_suggestion: Option<String>,
 }
 
 impl App {
@@ -166,6 +216,7 @@ impl App {
 
         let editor = Editor::new(cols / 2, rows.saturating_sub(4));
         let file_browser = FileBrowser::default();
+        let cwd = file_browser.path().to_path_buf();
 
         let layout = if config.ide_always {
             SplitLayout::with_ide_visible()
@@ -218,6 +269,14 @@ impl App {
             ssh_scanner: None,
             remote_manager: RemoteFileManager::new(),
             remote_file_browser: None,
+            docker_manager: None,
+            docker_storage: DockerStorage::new(),
+            docker_items: DockerItemList::new(),
+            file_browser_context: FileBrowserContext::OpenFile,
+            docker_background_rx: None,
+            win11_notification_shown: false,
+            completion_handle: Some(CompletionHandle::new(cwd)),
+            completion_suggestion: None,
         })
     }
 
@@ -321,6 +380,90 @@ impl App {
         }
     }
 
+    /// Triggers a completion request based on current editor state.
+    pub fn trigger_completion(&mut self) {
+        use crate::completion::CompletionContext;
+        use crate::completion::lsp::detect_language;
+
+        let Some(ref handle) = self.completion_handle else {
+            return;
+        };
+
+        let cursor = self.editor.cursor_position();
+        let line_content = self.editor.buffer().line(cursor.line).unwrap_or_default();
+        let prefix = if cursor.col <= line_content.len() {
+            line_content[..cursor.col].to_string()
+        } else {
+            line_content.clone()
+        };
+
+        let language_id = self
+            .editor
+            .path()
+            .and_then(|p| detect_language(p))
+            .unwrap_or_else(|| "text".to_string());
+
+        let context = CompletionContext::new(&language_id, cursor.line, cursor.col)
+            .with_file_path(self.editor.path().cloned().unwrap_or_default())
+            .with_line_content(&line_content)
+            .with_prefix(&prefix)
+            .with_word_at_cursor(self.editor.word_at_cursor().unwrap_or_default())
+            .with_buffer_content(self.editor.buffer().text());
+
+        handle.trigger(context);
+    }
+
+    /// Accepts the current completion suggestion.
+    pub fn accept_completion(&mut self) -> bool {
+        let Some(ref handle) = self.completion_handle else {
+            return false;
+        };
+
+        if let Some(text) = handle.accept() {
+            // Get the word at cursor to determine how much to replace
+            let word = self.editor.word_at_cursor().unwrap_or_default();
+
+            // Extract just the part after the current word (case-insensitive prefix match)
+            let insert_text = if !word.is_empty()
+                && (text.starts_with(&word)
+                    || text.to_lowercase().starts_with(&word.to_lowercase()))
+            {
+                text[word.len()..].to_string()
+            } else {
+                text
+            };
+
+            if !insert_text.is_empty() {
+                self.editor.insert_str(&insert_text);
+                self.completion_suggestion = None;
+                self.set_status("Accepted completion");
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Dismisses the current completion suggestion.
+    pub fn dismiss_completion(&mut self) {
+        if let Some(ref handle) = self.completion_handle {
+            handle.dismiss();
+        }
+        self.completion_suggestion = None;
+    }
+
+    /// Updates the completion suggestion from the handle.
+    pub fn update_completion_suggestion(&mut self) {
+        if let Some(ref handle) = self.completion_handle {
+            self.completion_suggestion = handle.suggestion_text();
+        }
+    }
+
+    /// Returns the current completion suggestion text.
+    #[must_use]
+    pub fn completion_suggestion(&self) -> Option<&str> {
+        self.completion_suggestion.as_deref()
+    }
+
     /// Returns true if the app is running.
     #[must_use]
     pub const fn is_running(&self) -> bool {
@@ -384,10 +527,20 @@ impl App {
 
         if let Some(ref mut terminals) = self.terminals {
             if areas.has_terminal() {
-                let _ = terminals.resize(
-                    areas.terminal.width.saturating_sub(2),
-                    areas.terminal.height.saturating_sub(3),
+                let term_cols = areas.terminal.width.saturating_sub(2);
+                let term_rows = areas.terminal.height.saturating_sub(3);
+                tracing::debug!(
+                    "RESIZE_LAYOUT: screen={}x{}, terminal_area=({}, {}, {}x{}), resizing_grid_to={}x{}",
+                    cols,
+                    rows,
+                    areas.terminal.x,
+                    areas.terminal.y,
+                    areas.terminal.width,
+                    areas.terminal.height,
+                    term_cols,
+                    term_rows
                 );
+                let _ = terminals.resize(term_cols, term_rows);
             }
         }
 
@@ -409,6 +562,7 @@ impl App {
         self.process_api_requests();
         self.background_manager.update_counts();
         self.poll_ssh_scanner();
+        self.update_completion_suggestion();
 
         if !self.file_browser.is_visible() {
             if let Some(ref mut terminals) = self.terminals {
@@ -467,6 +621,46 @@ impl App {
 
         if let Some(ref mut terminals) = self.terminals {
             terminals.shutdown();
+        }
+    }
+
+    /// Marks the Windows 11 keybinding notification as shown.
+    pub fn mark_win11_notification_shown(&mut self) {
+        self.win11_notification_shown = true;
+        // Persist this to a marker file so it's not shown again
+        if let Some(data_dir) = dirs::data_local_dir() {
+            let marker_path = data_dir.join("ratterm").join(".win11_notification_shown");
+            if let Some(parent) = marker_path.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            let _ = std::fs::write(&marker_path, "1");
+        }
+    }
+
+    /// Checks if Windows 11 keybinding notification should be shown.
+    pub fn should_show_win11_notification(&self) -> bool {
+        use crate::config::is_windows_11;
+
+        if !is_windows_11() || self.win11_notification_shown {
+            return false;
+        }
+
+        // Check if marker file exists
+        if let Some(data_dir) = dirs::data_local_dir() {
+            let marker_path = data_dir.join("ratterm").join(".win11_notification_shown");
+            if marker_path.exists() {
+                return false;
+            }
+        }
+
+        true
+    }
+
+    /// Shows the Windows 11 keybinding notification if needed.
+    pub fn check_win11_notification(&mut self) {
+        if self.should_show_win11_notification() {
+            self.show_popup(PopupKind::KeybindingChangeNotification);
+            self.win11_notification_shown = true;
         }
     }
 }

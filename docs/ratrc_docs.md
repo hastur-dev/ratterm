@@ -100,7 +100,6 @@ Sets the editor keybinding mode.
 | `default` | Standard arrow-key navigation with common shortcuts |
 | `vim` | Modal editing with Normal/Insert/Visual/Command modes |
 | `emacs` | Emacs-style keybindings (Ctrl+key navigation) |
-| `vscode` / `vs` / `code` | VSCode-style keybindings with selection support |
 
 **Example:**
 ```
@@ -402,6 +401,29 @@ Combine modifiers with `+`: `ctrl+shift+p`
 
 ---
 
+### Autocomplete
+
+Ratterm includes an intelligent autocomplete system that provides inline suggestions as you type in the editor.
+
+**Features:**
+- **Ghost text suggestions**: Grayed-out completions appear at the cursor position
+- **Debounced triggering**: Suggestions appear after 300ms of idle typing
+- **LSP support**: Intelligent completions from language servers when available
+- **Keyword fallback**: Language keywords and buffer words when LSP is unavailable
+- **Accept with Ctrl+Space**: Press Ctrl+Space (or Tab in Insert mode) to accept
+
+**Supported Languages:**
+- Rust (rust-analyzer)
+- Python (pylsp/pyright)
+- JavaScript/TypeScript (typescript-language-server)
+- Java (jdtls)
+- C# (omnisharp-roslyn)
+- PHP (intelephense)
+- SQL (sql-language-server)
+- HTML/CSS (vscode-html-languageserver)
+
+**Note:** Autocomplete is enabled by default and requires no configuration. Language servers are started automatically when available.
+
 ---
 
 ### SSH Manager Configuration
@@ -504,6 +526,39 @@ This is useful for quickly setting up access to multiple hosts with the same cre
 
 ---
 
+### Docker Manager Configuration
+
+Ratterm includes a Docker Manager for managing Docker containers and images.
+
+#### Docker Storage Location
+
+Docker quick-connect settings are stored in:
+- **All platforms:** `~/.ratterm/docker_items.toml`
+
+---
+
+#### Docker Default Shell
+
+The Docker Manager uses `/bin/sh` by default when executing into containers. This is automatically configured and currently not customizable via `.ratrc`.
+
+---
+
+#### Docker Quick Connect
+
+Similar to SSH, you can assign containers and images to quick-connect slots:
+
+1. Open Docker Manager with `Ctrl+Shift+D`
+2. Select a container or image
+3. Press `1-9` to assign it to a slot
+4. Use `Ctrl+Alt+1-9` to quickly connect from anywhere
+
+**Container behavior:**
+- Running containers: Direct exec with `docker exec -it`
+- Stopped containers: Start first, then exec
+- Images: Run as new container with interactive shell
+
+---
+
 ## Example Configuration
 
 ```
@@ -520,8 +575,8 @@ auto_close_tabs_on_shell_change = true
 # Show IDE pane always (false = terminal-first mode)
 ide-always = false
 
-# Use VSCode keybinding mode
-mode = vscode
+# Use Vim keybinding mode
+mode = vim
 
 # Theme settings
 theme = dracula
@@ -546,6 +601,10 @@ paste = ctrl+v
 ssh_storage_mode = plaintext
 set_ssh_tab = ctrl
 ssh_number_setting = true
+
+# Docker Manager settings
+# Docker quick-connect uses Ctrl+Alt+1-9 (not configurable yet)
+# Docker settings are stored in ~/.ratterm/docker_items.toml
 ```
 
 ---

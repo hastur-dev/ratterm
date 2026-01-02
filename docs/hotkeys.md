@@ -10,9 +10,10 @@ These hotkeys work regardless of which pane is focused or what mode you're in.
 |--------|--------|
 | `Ctrl+Q` | Quit application |
 | `Ctrl+I` | Toggle IDE pane visibility |
-| `Ctrl+P` | Open Command Palette |
-| `Ctrl+Shift+P` | Open Command Palette (alternative) |
-| `Ctrl+Shift+Tab` | Switch Editor Mode (cycles Vim/Emacs/Default/VSCode) |
+| `F1` | Open Command Palette (Windows 11) |
+| `Ctrl+P` | Open Command Palette (non-Windows 11) |
+| `Ctrl+Shift+P` | Open Command Palette (non-Windows 11) |
+| `Ctrl+Shift+Tab` | Switch Editor Mode (cycles Vim/Emacs/Default) |
 | `Ctrl+O` | Open File Browser |
 | `Ctrl+Shift+C` | Copy selection |
 | `Ctrl+V` | Paste from clipboard |
@@ -103,6 +104,22 @@ These hotkeys work in the editor regardless of keybinding mode.
 | `Ctrl+Shift+E` | Search files |
 | `Ctrl+N` | Create new file |
 | `Ctrl+Shift+N` | Create new folder |
+| `Ctrl+Space` | Accept autocomplete suggestion |
+
+### Autocomplete
+
+Ratterm provides inline autocomplete suggestions that appear as grayed-out "ghost text" while typing. Suggestions are triggered automatically after a brief pause (300ms debounce) and show context-aware completions.
+
+| Hotkey | Action |
+|--------|--------|
+| `Ctrl+Space` | Accept the current suggestion (inserts the ghost text) |
+| `Esc` | Dismiss the current suggestion |
+
+**Note:** Tab only inserts spaces (4 spaces) and does not accept completions. Use `Ctrl+Space` to accept autocomplete suggestions.
+
+**Completion Sources:**
+- **LSP (Language Server Protocol)**: When available, language servers provide intelligent completions for Rust, Python, JavaScript, TypeScript, Java, C#, PHP, SQL, HTML, and CSS.
+- **Keyword Fallback**: If no LSP is available, keyword-based completions from the current buffer and language keywords are provided.
 
 ---
 
@@ -209,52 +226,6 @@ Emacs-style keybindings with Ctrl+key navigation.
 
 ---
 
-### VSCode Mode
-
-VSCode-style keybindings with selection support.
-
-#### Navigation
-
-| Hotkey | Action |
-|--------|--------|
-| `Arrow Keys` | Move cursor |
-| `Home` / `End` | Line start/end |
-| `Ctrl+Home` / `Ctrl+End` | Buffer start/end |
-| `Ctrl+Left` / `Ctrl+Right` | Word navigation |
-| `PageUp` / `PageDown` | Page navigation |
-
-#### Selection
-
-| Hotkey | Action |
-|--------|--------|
-| `Shift+Arrow` | Extend selection |
-| `Shift+Home` / `Shift+End` | Select to line start/end |
-| `Ctrl+Shift+Left` / `Ctrl+Shift+Right` | Select word |
-| `Ctrl+A` | Select all |
-| `Ctrl+L` | Select line |
-
-#### Editing
-
-| Hotkey | Action |
-|--------|--------|
-| `Ctrl+Z` | Undo |
-| `Ctrl+Y` | Redo |
-| `Ctrl+Shift+Z` | Redo (alternative) |
-| `Ctrl+S` | Save |
-| `Ctrl+D` | Duplicate line |
-| `Ctrl+Shift+K` | Delete line |
-| `Alt+Up` | Move line up |
-| `Alt+Down` | Move line down |
-| `Ctrl+/` | Toggle comment |
-| `Ctrl+]` | Indent |
-| `Ctrl+[` | Outdent |
-| `Tab` | Indent |
-| `Shift+Tab` | Outdent |
-| `Backspace` | Delete before cursor |
-| `Delete` | Delete at cursor |
-
----
-
 ## File Browser Hotkeys
 
 When the file browser is open.
@@ -276,7 +247,9 @@ When the file browser is open.
 
 ## Command Palette
 
-Press `Ctrl+P` or `Ctrl+Shift+P` to open.
+Press `F1` (Windows 11) or `Ctrl+Shift+P` (other platforms) to open.
+
+> **Note for Windows 11 users:** The command palette keybinding has been changed from `Ctrl+Shift+P` to `F1` because Windows 11 uses `Ctrl+Shift+P` for its system-wide command palette in terminals and other applications.
 
 | Hotkey | Action |
 |--------|--------|
@@ -419,3 +392,125 @@ Press `Ctrl+P` and type "ssh" to access these commands:
 | `SSH: Quick Connect #1` | Connect to saved host #1 |
 | `SSH: Quick Connect #2` | Connect to saved host #2 |
 | `SSH: Quick Connect #3` | Connect to saved host #3 |
+
+---
+
+## Docker Manager
+
+The Docker Manager provides container and image management capabilities.
+
+### Opening Docker Manager
+
+| Hotkey | Action |
+|--------|--------|
+| `Ctrl+Shift+D` | Open Docker Manager |
+
+### Docker Manager Navigation
+
+When the Docker Manager is open:
+
+| Hotkey | Action |
+|--------|--------|
+| `Esc` | Close Docker Manager |
+| `Up` / `k` | Previous container/image |
+| `Down` / `j` | Next container/image |
+| `Home` / `g` | First item |
+| `End` / `G` | Last item |
+| `Tab` | Switch section (Running → Stopped → Images) |
+| `Shift+Tab` | Previous section |
+
+### Section Quick Jump
+
+| Hotkey | Action |
+|--------|--------|
+| `Shift+R` | Jump to Running Containers section |
+| `Shift+S` | Jump to Stopped Containers section |
+| `Shift+I` | Jump to Images section |
+
+### Host Selection
+
+Manage Docker containers on remote machines via SSH. This allows you to connect to Docker on servers registered in the SSH Manager.
+
+| Hotkey | Action |
+|--------|--------|
+| `h` | Open host selection (choose local or SSH host) |
+| `Up` / `k` | Previous host |
+| `Down` / `j` | Next host |
+| `l` | Quick-select Local host |
+| `Enter` | Select host (may prompt for credentials) |
+| `Esc` | Cancel host selection |
+| `Shift+D` | Debug: Show current host configuration |
+
+**Note:** Each host has its own set of quick-connect slots. Switching hosts switches which slots are displayed and used.
+
+### Host Credential Entry
+
+When selecting a remote host without saved credentials:
+
+| Hotkey | Action |
+|--------|--------|
+| `Tab` | Next field (Username → Password → Save) |
+| `Shift+Tab` | Previous field |
+| `Space` | Toggle "Save credentials" checkbox |
+| `Enter` | Submit credentials and connect |
+| `Esc` | Cancel, return to host selection |
+
+### Container/Image Actions
+
+| Hotkey | Action |
+|--------|--------|
+| `Enter` | Connect to container / Run image |
+| `Ctrl+O` | Run image with options (ports, volumes, env) |
+| `r` | Refresh container/image discovery |
+| `d` / `Delete` | Remove stopped container or image |
+| `h` | Select Docker host (local or remote via SSH) |
+| `1-9` | Assign to quick connect slot (Ctrl+Alt+1-9) |
+
+### Docker Quick Connect
+
+Connect directly to assigned containers/images:
+
+| Hotkey | Action |
+|--------|--------|
+| `Ctrl+Alt+1` | Quick connect to slot #1 |
+| `Ctrl+Alt+2` | Quick connect to slot #2 |
+| ... | ... |
+| `Ctrl+Alt+9` | Quick connect to slot #9 |
+
+### Docker Session Hotkeys
+
+When inside a Docker session (after exec into container):
+
+| Hotkey | Action |
+|--------|--------|
+| `Ctrl+T` | Show container stats (split panel) |
+| `Ctrl+L` | Show container logs (split panel) |
+
+### Run Options Form
+
+When running an image with options (`Ctrl+O`):
+
+| Field | Description |
+|-------|-------------|
+| Name | Container name (optional) |
+| Ports | Port mappings, e.g., `8080:80` (comma-separated) |
+| Volumes | Volume mounts, e.g., `/host:/container` (comma-separated) |
+| Env Vars | Environment variables, e.g., `KEY=VALUE` (comma-separated) |
+| Shell | Shell to use (default: /bin/sh) |
+
+**Navigation:** Use `Tab` to move between fields, `Enter` to submit, `Esc` to cancel.
+
+### Docker Container Actions by Section
+
+#### Running Containers
+- `Enter` - Execute into container (`docker exec -it`)
+- `1-9` - Assign to quick connect slot
+
+#### Stopped Containers
+- `Enter` - Start container and execute into it
+- `d` - Remove container
+
+#### Images
+- `Enter` - Run image with default settings (shows confirm dialog)
+- `Ctrl+O` - Run image with custom options
+- `d` - Remove image

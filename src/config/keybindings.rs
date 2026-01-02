@@ -13,8 +13,6 @@ pub enum KeybindingMode {
     Emacs,
     /// Default/simple keybindings.
     Default,
-    /// VSCode-style keybindings.
-    VsCode,
 }
 
 /// Actions that can be bound to keys.
@@ -86,6 +84,20 @@ pub enum KeyAction {
     SSHQuickConnect7,
     SSHQuickConnect8,
     SSHQuickConnect9,
+
+    // Docker Manager
+    DockerManager,
+    DockerQuickConnect1,
+    DockerQuickConnect2,
+    DockerQuickConnect3,
+    DockerQuickConnect4,
+    DockerQuickConnect5,
+    DockerQuickConnect6,
+    DockerQuickConnect7,
+    DockerQuickConnect8,
+    DockerQuickConnect9,
+    DockerStats,
+    DockerLogs,
 }
 
 impl KeyAction {
@@ -146,6 +158,18 @@ impl KeyAction {
             "ssh_quick_connect_7" => Some(Self::SSHQuickConnect7),
             "ssh_quick_connect_8" => Some(Self::SSHQuickConnect8),
             "ssh_quick_connect_9" => Some(Self::SSHQuickConnect9),
+            "docker_manager" => Some(Self::DockerManager),
+            "docker_quick_connect_1" => Some(Self::DockerQuickConnect1),
+            "docker_quick_connect_2" => Some(Self::DockerQuickConnect2),
+            "docker_quick_connect_3" => Some(Self::DockerQuickConnect3),
+            "docker_quick_connect_4" => Some(Self::DockerQuickConnect4),
+            "docker_quick_connect_5" => Some(Self::DockerQuickConnect5),
+            "docker_quick_connect_6" => Some(Self::DockerQuickConnect6),
+            "docker_quick_connect_7" => Some(Self::DockerQuickConnect7),
+            "docker_quick_connect_8" => Some(Self::DockerQuickConnect8),
+            "docker_quick_connect_9" => Some(Self::DockerQuickConnect9),
+            "docker_stats" => Some(Self::DockerStats),
+            "docker_logs" => Some(Self::DockerLogs),
             _ => None,
         }
     }
@@ -319,7 +343,6 @@ impl Keybindings {
             KeybindingMode::Vim => kb.set_vim_bindings(),
             KeybindingMode::Emacs => kb.set_emacs_bindings(),
             KeybindingMode::Default => kb.set_default_bindings(),
-            KeybindingMode::VsCode => kb.set_vscode_bindings(),
         }
 
         kb
@@ -464,6 +487,60 @@ impl Keybindings {
         self.set(
             SSHQuickConnect9,
             KeyBinding::new(KeyModifiers::CONTROL, Char('9')),
+        );
+
+        // Docker Manager (Ctrl+Shift+D)
+        self.set(
+            DockerManager,
+            KeyBinding::new(KeyModifiers::CONTROL | KeyModifiers::SHIFT, Char('d')),
+        );
+
+        // Docker Quick Connect (Ctrl+Alt+1-9)
+        self.set(
+            DockerQuickConnect1,
+            KeyBinding::new(KeyModifiers::CONTROL | KeyModifiers::ALT, Char('1')),
+        );
+        self.set(
+            DockerQuickConnect2,
+            KeyBinding::new(KeyModifiers::CONTROL | KeyModifiers::ALT, Char('2')),
+        );
+        self.set(
+            DockerQuickConnect3,
+            KeyBinding::new(KeyModifiers::CONTROL | KeyModifiers::ALT, Char('3')),
+        );
+        self.set(
+            DockerQuickConnect4,
+            KeyBinding::new(KeyModifiers::CONTROL | KeyModifiers::ALT, Char('4')),
+        );
+        self.set(
+            DockerQuickConnect5,
+            KeyBinding::new(KeyModifiers::CONTROL | KeyModifiers::ALT, Char('5')),
+        );
+        self.set(
+            DockerQuickConnect6,
+            KeyBinding::new(KeyModifiers::CONTROL | KeyModifiers::ALT, Char('6')),
+        );
+        self.set(
+            DockerQuickConnect7,
+            KeyBinding::new(KeyModifiers::CONTROL | KeyModifiers::ALT, Char('7')),
+        );
+        self.set(
+            DockerQuickConnect8,
+            KeyBinding::new(KeyModifiers::CONTROL | KeyModifiers::ALT, Char('8')),
+        );
+        self.set(
+            DockerQuickConnect9,
+            KeyBinding::new(KeyModifiers::CONTROL | KeyModifiers::ALT, Char('9')),
+        );
+
+        // Docker Stats and Logs (when in Docker session)
+        self.set(
+            DockerStats,
+            KeyBinding::new(KeyModifiers::CONTROL, Char('t')),
+        );
+        self.set(
+            DockerLogs,
+            KeyBinding::new(KeyModifiers::CONTROL, Char('l')),
         );
     }
 
@@ -633,51 +710,6 @@ impl Keybindings {
         );
 
         // Default mode doesn't have insert/visual modes
-        self.set(EditorInsert, KeyBinding::new(KeyModifiers::NONE, Enter));
-        self.set(EditorAppend, KeyBinding::new(KeyModifiers::NONE, Enter));
-    }
-
-    /// Sets VSCode-style editor keybindings.
-    fn set_vscode_bindings(&mut self) {
-        use KeyAction::*;
-        use KeyCode::*;
-
-        // Arrow key navigation (same as default)
-        self.set(EditorLeft, KeyBinding::new(KeyModifiers::NONE, Left));
-        self.set(EditorRight, KeyBinding::new(KeyModifiers::NONE, Right));
-        self.set(EditorUp, KeyBinding::new(KeyModifiers::NONE, Up));
-        self.set(EditorDown, KeyBinding::new(KeyModifiers::NONE, Down));
-
-        // Home/End for line navigation
-        self.set(EditorLineStart, KeyBinding::new(KeyModifiers::NONE, Home));
-        self.set(EditorLineEnd, KeyBinding::new(KeyModifiers::NONE, End));
-
-        // Ctrl+arrow for word navigation
-        self.set(
-            EditorWordRight,
-            KeyBinding::new(KeyModifiers::CONTROL, Right),
-        );
-        self.set(EditorWordLeft, KeyBinding::new(KeyModifiers::CONTROL, Left));
-
-        // Ctrl+Home/End for buffer navigation
-        self.set(
-            EditorBufferStart,
-            KeyBinding::new(KeyModifiers::CONTROL, Home),
-        );
-        self.set(EditorBufferEnd, KeyBinding::new(KeyModifiers::CONTROL, End));
-
-        // VSCode standard shortcuts
-        self.set(EditorDelete, KeyBinding::new(KeyModifiers::NONE, Delete));
-        self.set(
-            EditorUndo,
-            KeyBinding::new(KeyModifiers::CONTROL, Char('z')),
-        );
-        self.set(
-            EditorRedo,
-            KeyBinding::new(KeyModifiers::CONTROL, Char('y')),
-        );
-
-        // VSCode mode doesn't have insert/visual modes - always in insert
         self.set(EditorInsert, KeyBinding::new(KeyModifiers::NONE, Enter));
         self.set(EditorAppend, KeyBinding::new(KeyModifiers::NONE, Enter));
     }

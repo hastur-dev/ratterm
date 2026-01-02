@@ -27,7 +27,6 @@ impl ModeSwitcher {
             KeybindingMode::Vim,
             KeybindingMode::Emacs,
             KeybindingMode::Default,
-            KeybindingMode::VsCode,
         ];
 
         let selected_index = modes.iter().position(|m| *m == current_mode).unwrap_or(0);
@@ -82,7 +81,6 @@ impl ModeSwitcher {
             KeybindingMode::Vim => "Vim",
             KeybindingMode::Emacs => "Emacs",
             KeybindingMode::Default => "Default",
-            KeybindingMode::VsCode => "VSCode",
         }
     }
 }
@@ -102,7 +100,7 @@ impl<'a> ModeSwitcherWidget<'a> {
     /// Calculates the popup area (centered).
     fn popup_area(&self, area: Rect) -> Rect {
         let width = 40_u16.min(area.width.saturating_sub(4));
-        let height = 8_u16.min(area.height.saturating_sub(4)); // Title + 4 modes + padding
+        let height = 7_u16.min(area.height.saturating_sub(4)); // Title + 3 modes + padding
 
         let x = (area.width.saturating_sub(width)) / 2;
         let y = (area.height.saturating_sub(height)) / 2;
@@ -141,7 +139,6 @@ impl Widget for ModeSwitcherWidget<'_> {
             .direction(Direction::Vertical)
             .margin(1)
             .constraints([
-                Constraint::Length(1),
                 Constraint::Length(1),
                 Constraint::Length(1),
                 Constraint::Length(1),

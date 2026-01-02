@@ -1,7 +1,9 @@
-//! Command palette for VSCode-style command access.
+//! Command palette for quick command access.
 
 use fuzzy_matcher::FuzzyMatcher;
 use fuzzy_matcher::skim::SkimMatcherV2;
+
+use crate::config::command_palette_hotkey;
 
 /// A command that can be executed from the command palette.
 #[derive(Debug, Clone)]
@@ -36,8 +38,15 @@ impl Command {
     /// Returns formatted display string for command palette.
     #[must_use]
     pub fn display(&self) -> String {
-        if let Some(kb) = self.keybinding {
-            format!("{}: {}  ({})", self.category, self.label, kb)
+        // Special handling for the command palette keybinding on Windows 11
+        let kb = if self.id == "app.commandPalette" {
+            Some(command_palette_hotkey())
+        } else {
+            self.keybinding
+        };
+
+        if let Some(key) = kb {
+            format!("{}: {}  ({})", self.category, self.label, key)
         } else {
             format!("{}: {}", self.category, self.label)
         }
@@ -193,6 +202,70 @@ impl CommandPalette {
             Command::new("ssh.connect1", "Quick Connect #1", "SSH", Some("Ctrl+1")),
             Command::new("ssh.connect2", "Quick Connect #2", "SSH", Some("Ctrl+2")),
             Command::new("ssh.connect3", "Quick Connect #3", "SSH", Some("Ctrl+3")),
+            // Docker commands
+            Command::new(
+                "docker.manager",
+                "Open Docker Manager",
+                "Docker",
+                Some("Ctrl+Shift+D"),
+            ),
+            Command::new("docker.refresh", "Refresh Containers", "Docker", None),
+            Command::new(
+                "docker.connect1",
+                "Quick Connect #1",
+                "Docker",
+                Some("Ctrl+Alt+1"),
+            ),
+            Command::new(
+                "docker.connect2",
+                "Quick Connect #2",
+                "Docker",
+                Some("Ctrl+Alt+2"),
+            ),
+            Command::new(
+                "docker.connect3",
+                "Quick Connect #3",
+                "Docker",
+                Some("Ctrl+Alt+3"),
+            ),
+            Command::new(
+                "docker.connect4",
+                "Quick Connect #4",
+                "Docker",
+                Some("Ctrl+Alt+4"),
+            ),
+            Command::new(
+                "docker.connect5",
+                "Quick Connect #5",
+                "Docker",
+                Some("Ctrl+Alt+5"),
+            ),
+            Command::new(
+                "docker.connect6",
+                "Quick Connect #6",
+                "Docker",
+                Some("Ctrl+Alt+6"),
+            ),
+            Command::new(
+                "docker.connect7",
+                "Quick Connect #7",
+                "Docker",
+                Some("Ctrl+Alt+7"),
+            ),
+            Command::new(
+                "docker.connect8",
+                "Quick Connect #8",
+                "Docker",
+                Some("Ctrl+Alt+8"),
+            ),
+            Command::new(
+                "docker.connect9",
+                "Quick Connect #9",
+                "Docker",
+                Some("Ctrl+Alt+9"),
+            ),
+            Command::new("docker.stats", "Show Stats Panel", "Docker", Some("Ctrl+T")),
+            Command::new("docker.logs", "Show Logs Panel", "Docker", Some("Ctrl+L")),
             // Theme commands
             Command::new("theme.select", "Select Theme", "Theme", None),
             Command::new("theme.dark", "Dark Theme", "Theme", None),

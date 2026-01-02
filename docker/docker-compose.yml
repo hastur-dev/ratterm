@@ -174,9 +174,47 @@ services:
     mem_limit: 8g
     memswap_limit: 12g
 
+  # Windows 11 compatibility testing (cross-compilation + code verification)
+  # Note: This does NOT run on actual Windows, but verifies Windows-specific code paths
+  windows-test:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.windows-test
+    environment:
+      - CARGO_TERM_COLOR=always
+      - RUSTFLAGS=-D warnings
+    volumes:
+      - cargo-cache:/usr/local/cargo/registry
+      - target-cache-windows:/app/target
+    mem_limit: 2g
+    memswap_limit: 2g
+
+  # Windows 11 specific feature tests (platform detection, keybinding changes)
+  windows-11-features:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.windows-test
+    command: >
+      sh -c "
+        echo '=== Windows 11 Feature Test Suite ===' &&
+        cargo test --all-features config::platform:: -- --nocapture &&
+        cargo test --all-features keybinding_notification:: -- --nocapture &&
+        cargo test --all-features command_palette:: -- --nocapture &&
+        echo '=== Windows 11 feature tests complete ==='
+      "
+    environment:
+      - CARGO_TERM_COLOR=always
+      - RUSTFLAGS=-D warnings
+    volumes:
+      - cargo-cache:/usr/local/cargo/registry
+      - target-cache-windows:/app/target
+    mem_limit: 2g
+    memswap_limit: 2g
+
 volumes:
   cargo-cache:
   target-cache:
   target-cache-msrv:
   cargo-cache-arm:
   target-cache-arm:
+  target-cache-windows:

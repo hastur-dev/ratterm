@@ -399,8 +399,13 @@ impl App {
             | PopupKind::SSHCredentialPrompt
             | PopupKind::SSHStorageSetup
             | PopupKind::SSHMasterPassword
-            | PopupKind::SSHSubnetEntry => {
+            | PopupKind::SSHSubnetEntry
+            | PopupKind::DockerManager => {
                 self.hide_popup();
+            }
+            PopupKind::KeybindingChangeNotification => {
+                self.hide_popup();
+                self.mark_win11_notification_shown();
             }
         }
     }
