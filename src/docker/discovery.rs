@@ -4,7 +4,7 @@
 //! Docker CLI commands and parsing JSON output. Supports both local
 //! Docker and remote Docker via SSH.
 
-use super::container::{DockerContainer, DockerHost, DockerImage};
+use super::container::{DockerContainer, DockerHost, DockerImage, DockerSearchResult};
 use std::process::{Command, Output, Stdio};
 use std::time::{Duration, Instant};
 
@@ -1393,6 +1393,254 @@ impl DockerDiscovery {
         };
 
         format!("{} logs -f {}", docker_cmd, container_id)
+    }
+
+    // =========================================================================
+    // Docker Hub Search and Image Management
+    // =========================================================================
+
+    /// Timeout for image pull operations (10 minutes).
+    const PULL_TIMEOUT_MS: u64 = 600_000;
+
+    /// Searches Docker Hub for images matching the given term.
+    ///
+    /// Executes `docker search` on the specified host (local or remote via SSH).
+    ///
+    /// # Arguments
+    /// * `host` - The Docker host (local or remote)
+    /// * `search_term` - The term to search for
+    /// * `limit` - Maximum number of results (capped at 100)
+    ///
+    /// # Returns
+    /// `Ok(Vec<DockerSearchResult>)` on success, `Err(String)` on failure.
+    pub fn search_docker_hub(
+        host: &DockerHost,
+        search_term: &str,
+        limit: usize,
+    ) -> Result<Vec<DockerSearchResult>, String> {
+        assert!(!search_term.is_empty(), "search_term must not be empty");
+
+        let limit_capped = limit.min(100);
+        let limit_arg = format!("--limit={}", limit_capped);
+        let format_arg = "--format={{json .}}";
+
+        tracing::info!(
+            "Searching Docker Hub for '{}' with limit {} on {:?}",
+            search_term,
+            limit_capped,
+            host
+        );
+
+        let output = match host {
+            DockerHost::Local => {
+                let mut cmd = Command::new(Self::docker_cmd());
+                cmd.args(["search", &limit_arg, format_arg, search_term]);
+                Self::run_with_timeout(&mut cmd, COMMAND_TIMEOUT_MS)
+            }
+            DockerHost::Remote { .. } => Self::run_remote_with_timeout(
+                host,
+                &["search", &limit_arg, format_arg, search_term],
+                REMOTE_TIMEOUT_MS,
+            ),
+        };
+
+        let output =
+            output.ok_or_else(|| "Docker search command timed out".to_string())?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            tracing::error!("docker search failed: {}", stderr);
+            return Err(format!("docker search failed: {}", stderr.trim()));
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let results = Self::parse_search_results(&stdout);
+
+        tracing::info!("Found {} search results", results.len());
+        Ok(results)
+    }
+
+    /// Parses Docker Hub search results from JSON output.
+    fn parse_search_results(output: &str) -> Vec<DockerSearchResult> {
+        let mut results = Vec::new();
+
+        for line in output.lines().take(MAX_PARSE_ITEMS) {
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+
+            if let Some(result) = Self::parse_search_line(line) {
+                results.push(result);
+            }
+        }
+
+        results
+    }
+
+    /// Parses a single search result JSON line.
+    fn parse_search_line(json_line: &str) -> Option<DockerSearchResult> {
+        // Extract fields from JSON
+        let name = Self::extract_json_field(json_line, "Name")?;
+
+        let description =
+            Self::extract_json_field(json_line, "Description").unwrap_or_default();
+
+        // StarCount can be a number or string
+        let stars_str =
+            Self::extract_json_field(json_line, "StarCount").unwrap_or_default();
+        let stars = stars_str.parse::<u32>().unwrap_or(0);
+
+        // IsOfficial can be "[OK]" or "true" or empty
+        let official = Self::extract_json_field(json_line, "IsOfficial")
+            .map(|s| s == "[OK]" || s.to_lowercase() == "true")
+            .unwrap_or(false);
+
+        Some(DockerSearchResult {
+            name,
+            description,
+            stars,
+            official,
+        })
+    }
+
+    /// Checks if an image exists on the specified host.
+    ///
+    /// Executes `docker images -q <image>` - returns true if output is non-empty.
+    ///
+    /// # Arguments
+    /// * `host` - The Docker host (local or remote)
+    /// * `image_name` - The image name to check (e.g., "nginx", "ubuntu:20.04")
+    ///
+    /// # Returns
+    /// `Ok(true)` if image exists, `Ok(false)` if not, `Err(String)` on failure.
+    pub fn image_exists_on_host(
+        host: &DockerHost,
+        image_name: &str,
+    ) -> Result<bool, String> {
+        assert!(!image_name.is_empty(), "image_name must not be empty");
+
+        tracing::info!("Checking if image '{}' exists on {:?}", image_name, host);
+
+        let output = match host {
+            DockerHost::Local => {
+                let mut cmd = Command::new(Self::docker_cmd());
+                cmd.args(["images", "-q", image_name]);
+                Self::run_with_timeout(&mut cmd, COMMAND_TIMEOUT_MS)
+            }
+            DockerHost::Remote { .. } => {
+                Self::run_remote_with_timeout(host, &["images", "-q", image_name], REMOTE_TIMEOUT_MS)
+            }
+        };
+
+        let output =
+            output.ok_or_else(|| "Docker images command timed out".to_string())?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            tracing::error!("docker images check failed: {}", stderr);
+            return Err(format!("docker images check failed: {}", stderr.trim()));
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let exists = !stdout.trim().is_empty();
+
+        tracing::info!("Image '{}' exists: {}", image_name, exists);
+        Ok(exists)
+    }
+
+    /// Pulls an image on the specified host.
+    ///
+    /// Executes `docker pull <image>` with a 10-minute timeout for large images.
+    ///
+    /// # Arguments
+    /// * `host` - The Docker host (local or remote)
+    /// * `image_name` - The image to pull (e.g., "nginx:latest", "ubuntu")
+    ///
+    /// # Returns
+    /// `Ok(())` on success, `Err(String)` on failure.
+    pub fn pull_image_on_host(
+        host: &DockerHost,
+        image_name: &str,
+    ) -> Result<(), String> {
+        assert!(!image_name.is_empty(), "image_name must not be empty");
+
+        tracing::info!("Pulling image '{}' on {:?}", image_name, host);
+
+        let output = match host {
+            DockerHost::Local => {
+                let mut cmd = Command::new(Self::docker_cmd());
+                cmd.args(["pull", image_name]);
+                Self::run_with_timeout(&mut cmd, Self::PULL_TIMEOUT_MS)
+            }
+            DockerHost::Remote { .. } => {
+                Self::run_remote_with_timeout(host, &["pull", image_name], Self::PULL_TIMEOUT_MS)
+            }
+        };
+
+        let output = output.ok_or_else(|| {
+            "Image pull timed out (10 minute limit). The image may be very large.".to_string()
+        })?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            tracing::error!("docker pull failed: {}", stderr);
+            return Err(format!("docker pull failed: {}", stderr.trim()));
+        }
+
+        tracing::info!("Successfully pulled image '{}'", image_name);
+        Ok(())
+    }
+
+    /// Builds the docker run command for container creation.
+    ///
+    /// Creates an interactive container with optional volume mounts and startup command.
+    ///
+    /// # Arguments
+    /// * `image` - The image to run
+    /// * `volume_mounts` - Volume mounts as "host:container" strings
+    /// * `startup_command` - Optional command to run (appended at end)
+    #[must_use]
+    pub fn build_create_container_command(
+        image: &str,
+        volume_mounts: &[String],
+        startup_command: Option<&str>,
+    ) -> String {
+        assert!(!image.is_empty(), "image must not be empty");
+
+        let docker_cmd = if cfg!(target_os = "windows") {
+            "docker.exe"
+        } else {
+            "docker"
+        };
+
+        let mut parts = vec![
+            docker_cmd.to_string(),
+            "run".to_string(),
+            "-it".to_string(),
+            "--rm".to_string(),
+        ];
+
+        // Add volume mounts
+        for mount in volume_mounts {
+            parts.push("-v".to_string());
+            parts.push(mount.clone());
+        }
+
+        // Add image
+        parts.push(image.to_string());
+
+        // Add startup command if provided
+        if let Some(cmd) = startup_command {
+            let cmd_trimmed = cmd.trim();
+            if !cmd_trimmed.is_empty() {
+                for arg in cmd_trimmed.split_whitespace() {
+                    parts.push(arg.to_string());
+                }
+            }
+        }
+
+        parts.join(" ")
     }
 }
 

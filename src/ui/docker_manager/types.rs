@@ -26,6 +26,73 @@ pub enum DockerManagerMode {
     HostSelection,
     /// Entering credentials for a host without saved credentials.
     HostCredentials,
+    // =========================================================================
+    // Container Creation Workflow Modes
+    // =========================================================================
+    /// Searching Docker Hub for images.
+    SearchingHub,
+    /// Viewing search results and selecting an image.
+    SearchResults,
+    /// Checking if image exists on remote host.
+    CheckingImage,
+    /// Downloading image in background.
+    DownloadingImage,
+    /// Entering host path for volume mount.
+    VolumeMountHostPath,
+    /// Entering container path for volume mount.
+    VolumeMountContainerPath,
+    /// Confirming whether to add another volume mount.
+    VolumeMountConfirm,
+    /// Entering startup command.
+    StartupCommand,
+    /// Final confirmation before creating container.
+    CreateConfirm,
+    /// Displaying an error from container creation.
+    CreationError,
+}
+
+impl DockerManagerMode {
+    /// Returns true if this is a container creation workflow mode.
+    #[must_use]
+    pub fn is_creation_mode(self) -> bool {
+        matches!(
+            self,
+            Self::SearchingHub
+                | Self::SearchResults
+                | Self::CheckingImage
+                | Self::DownloadingImage
+                | Self::VolumeMountHostPath
+                | Self::VolumeMountContainerPath
+                | Self::VolumeMountConfirm
+                | Self::StartupCommand
+                | Self::CreateConfirm
+                | Self::CreationError
+        )
+    }
+
+    /// Returns a title for the current mode (for UI display).
+    #[must_use]
+    pub fn title(self) -> &'static str {
+        match self {
+            Self::List => "Docker Manager",
+            Self::Discovering => "Discovering...",
+            Self::RunOptions => "Run Options",
+            Self::Connecting => "Connecting...",
+            Self::Confirming => "Confirm",
+            Self::HostSelection => "Select Host",
+            Self::HostCredentials => "Enter Credentials",
+            Self::SearchingHub => "Search Docker Hub",
+            Self::SearchResults => "Search Results",
+            Self::CheckingImage => "Checking Image...",
+            Self::DownloadingImage => "Downloading Image...",
+            Self::VolumeMountHostPath => "Volume Mount - Host Path",
+            Self::VolumeMountContainerPath => "Volume Mount - Container Path",
+            Self::VolumeMountConfirm => "Add Another Volume?",
+            Self::StartupCommand => "Startup Command",
+            Self::CreateConfirm => "Confirm Creation",
+            Self::CreationError => "Error",
+        }
+    }
 }
 
 /// Field being edited in host credentials mode.
@@ -68,6 +135,44 @@ impl HostCredentialField {
             Self::Username => "Username",
             Self::Password => "Password",
             Self::SaveCheckbox => "Save Credentials",
+        }
+    }
+}
+
+/// Field being edited during container creation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum CreationField {
+    /// Search term input.
+    #[default]
+    SearchTerm,
+    /// Host path for volume mount.
+    HostPath,
+    /// Container path for volume mount.
+    ContainerPath,
+    /// Startup command input.
+    StartupCommand,
+}
+
+impl CreationField {
+    /// Returns the field label.
+    #[must_use]
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::SearchTerm => "Search Term",
+            Self::HostPath => "Host Path",
+            Self::ContainerPath => "Container Path",
+            Self::StartupCommand => "Startup Command",
+        }
+    }
+
+    /// Returns placeholder text for the field.
+    #[must_use]
+    pub fn placeholder(self) -> &'static str {
+        match self {
+            Self::SearchTerm => "e.g., nginx, ubuntu, postgres",
+            Self::HostPath => "e.g., /home/user/data or press 'f' for file browser",
+            Self::ContainerPath => "e.g., /app/data",
+            Self::StartupCommand => "e.g., /bin/bash or leave empty for default",
         }
     }
 }

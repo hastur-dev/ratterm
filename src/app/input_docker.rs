@@ -34,6 +34,19 @@ impl App {
             DockerManagerMode::HostCredentials => {
                 self.handle_docker_host_credentials_key(key);
             }
+            // Container creation workflow modes
+            DockerManagerMode::SearchingHub
+            | DockerManagerMode::SearchResults
+            | DockerManagerMode::CheckingImage
+            | DockerManagerMode::DownloadingImage
+            | DockerManagerMode::VolumeMountHostPath
+            | DockerManagerMode::VolumeMountContainerPath
+            | DockerManagerMode::VolumeMountConfirm
+            | DockerManagerMode::StartupCommand
+            | DockerManagerMode::CreateConfirm
+            | DockerManagerMode::CreationError => {
+                self.handle_docker_create_key(key);
+            }
         }
     }
 
@@ -162,6 +175,11 @@ impl App {
             // Host selection
             (KeyModifiers::NONE, KeyCode::Char('h')) => {
                 self.docker_start_host_selection();
+            }
+
+            // Create new container
+            (KeyModifiers::NONE, KeyCode::Char('c')) => {
+                self.docker_start_container_creation();
             }
 
             // Debug: Show current host info (Shift+D)

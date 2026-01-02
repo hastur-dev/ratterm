@@ -418,6 +418,65 @@ impl Terminal {
         Ok(terminal)
     }
 
+    /// Creates a new terminal with an SSH connection that runs a custom command.
+    ///
+    /// This is useful for running interactive commands (like docker run) on remote hosts.
+    ///
+    /// # Errors
+    /// Returns error if PTY creation fails.
+    #[allow(clippy::too_many_arguments)]
+    pub fn with_ssh_command(
+        cols: u16,
+        rows: u16,
+        ssh_host: &str,
+        ssh_port: u16,
+        ssh_user: &str,
+        command: &str,
+        tab_name: &str,
+    ) -> Result<Self, PtyError> {
+        let ssh_path = Self::find_ssh_path();
+
+        let mut config = PtyConfig::default().size(cols, rows);
+        config.shell = Some(ssh_path.to_string_lossy().to_string());
+
+        // Build SSH arguments that will run the command on the remote host
+        let mut args = Vec::new();
+        // Request a PTY explicitly
+        args.push("-t".to_string());
+        args.push("-t".to_string()); // Double -t for force PTY allocation
+        if ssh_port != 22 {
+            args.push("-p".to_string());
+            args.push(ssh_port.to_string());
+        }
+        // Add options to skip host key checking for convenience
+        args.push("-o".to_string());
+        args.push("StrictHostKeyChecking=no".to_string());
+        // Add the user@host
+        args.push(format!("{}@{}", ssh_user, ssh_host));
+        // Add the command to run on the remote host
+        args.push(command.to_string());
+
+        config.args = args;
+
+        let mut terminal = Self::with_config(config)?;
+
+        // Store SSH context
+        terminal.ssh_context = Some(SSHContext::new(
+            ssh_user.to_string(),
+            ssh_host.to_string(),
+            ssh_port,
+        ));
+
+        // Store the tab name as docker context for display purposes
+        terminal.docker_context = Some(DockerContext::with_host(
+            tab_name.to_string(),
+            tab_name.to_string(),
+            ContainerHost::remote(0, ssh_host.to_string(), ssh_port, ssh_user.to_string()),
+        ));
+
+        Ok(terminal)
+    }
+
     /// Finds the Docker executable path.
     fn find_docker_path() -> PathBuf {
         #[cfg(windows)]

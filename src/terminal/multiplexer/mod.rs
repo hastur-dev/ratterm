@@ -270,6 +270,52 @@ impl TerminalMultiplexer {
         Ok(index)
     }
 
+    /// Adds a new terminal tab with an SSH connection that runs a custom command.
+    ///
+    /// This is useful for running interactive commands (like docker run) on remote hosts.
+    ///
+    /// # Errors
+    /// Returns error if maximum tabs reached or terminal creation fails.
+    #[allow(clippy::too_many_arguments)]
+    pub fn add_ssh_command_tab(
+        &mut self,
+        ssh_host: &str,
+        ssh_port: u16,
+        ssh_user: &str,
+        command: &str,
+        tab_name: &str,
+        password: Option<&str>,
+    ) -> Result<usize, PtyError> {
+        if self.tabs.len() >= MAX_TABS {
+            return Err(PtyError::MaxTabsReached);
+        }
+
+        let mut grid = TerminalGrid::new_ssh_command(
+            self.cols,
+            self.rows,
+            ssh_host,
+            ssh_port,
+            ssh_user,
+            command,
+            tab_name,
+        )?;
+
+        // Set password for SSH auto-login if provided
+        if let Some(pwd) = password {
+            if let Some(terminal) = grid.focused_mut() {
+                terminal.set_pending_password(pwd.to_string());
+                terminal.set_ssh_password(pwd.to_string());
+            }
+        }
+
+        let index = self.tabs.len();
+        let tab = TerminalTab::new(grid, tab_name.to_string(), index);
+
+        self.tabs.push(tab);
+        self.active_tab = index;
+        Ok(index)
+    }
+
     /// Closes the current tab.
     ///
     /// Returns false if this is the last tab (cannot close).

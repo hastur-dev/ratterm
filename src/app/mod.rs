@@ -9,6 +9,7 @@ mod extension_ops;
 mod file_ops;
 mod input;
 mod input_docker;
+mod input_docker_create;
 mod input_editor;
 mod input_mouse;
 mod input_ssh;
@@ -26,7 +27,7 @@ mod terminal_ops;
 use std::cell::Cell;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::TryRecvError;
+use std::sync::mpsc::{Receiver, TryRecvError};
 use std::time::Duration;
 
 use crossterm::event::{self, Event};
@@ -67,6 +68,33 @@ pub enum AppMode {
     FileBrowser,
     /// Popup dialog is active.
     Popup,
+}
+
+/// Context for file browser operations.
+///
+/// Tracks what the file browser is being used for so we can
+/// route the selection appropriately.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FileBrowserContext {
+    /// Normal file opening (default).
+    #[default]
+    OpenFile,
+    /// Selecting a volume mount path for Docker container creation.
+    DockerVolumeMount,
+}
+
+/// Result from a background Docker operation.
+#[derive(Debug, Clone)]
+pub enum DockerBackgroundResult {
+    /// Image pull completed.
+    ImagePulled {
+        /// Image name that was pulled.
+        image: String,
+        /// Whether the operation succeeded.
+        success: bool,
+        /// Error message if failed.
+        error: Option<String>,
+    },
 }
 
 /// Open file tab.
@@ -152,6 +180,10 @@ pub struct App {
     pub(crate) docker_storage: DockerStorage,
     /// Docker items (quick connect slots and settings).
     pub(crate) docker_items: DockerItemList,
+    /// Context for file browser operations (what the selection is for).
+    pub(crate) file_browser_context: FileBrowserContext,
+    /// Receiver for background Docker operation results.
+    pub(crate) docker_background_rx: Option<Receiver<DockerBackgroundResult>>,
 }
 
 impl App {
@@ -232,6 +264,8 @@ impl App {
             docker_manager: None,
             docker_storage: DockerStorage::new(),
             docker_items: DockerItemList::new(),
+            file_browser_context: FileBrowserContext::OpenFile,
+            docker_background_rx: None,
         })
     }
 

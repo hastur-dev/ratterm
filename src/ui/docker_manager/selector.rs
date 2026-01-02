@@ -3,8 +3,8 @@
 use tracing::info;
 
 use crate::docker::{
-    DockerAvailability, DockerContainer, DockerDiscoveryResult, DockerHost, DockerImage,
-    DockerRunOptions,
+    ContainerCreationState, DockerAvailability, DockerContainer, DockerDiscoveryResult,
+    DockerHost, DockerImage, DockerRunOptions,
 };
 
 use super::types::{
@@ -67,6 +67,9 @@ pub struct DockerManagerSelector {
     pub(super) cred_save: bool,
     /// Current credential field.
     pub(super) cred_field: HostCredentialField,
+    // --- Container creation state ---
+    /// State for container creation workflow.
+    pub(super) creation_state: ContainerCreationState,
 }
 
 impl DockerManagerSelector {
@@ -101,6 +104,8 @@ impl DockerManagerSelector {
             cred_password: String::new(),
             cred_save: false,
             cred_field: HostCredentialField::Username,
+            // Container creation
+            creation_state: ContainerCreationState::new(),
         }
     }
 
@@ -756,6 +761,238 @@ impl DockerManagerSelector {
     #[must_use]
     pub fn cred_save(&self) -> bool {
         self.cred_save
+    }
+
+    // =========================================================================
+    // Container Creation Workflow Methods
+    // =========================================================================
+
+    /// Starts the container creation workflow.
+    pub fn start_container_creation(&mut self) {
+        info!("Starting container creation workflow");
+        self.creation_state.reset();
+        self.mode = DockerManagerMode::SearchingHub;
+        self.input_buffer.clear();
+    }
+
+    /// Starts container creation with a pre-selected image.
+    pub fn start_creation_from_image(&mut self, image_name: &str) {
+        info!("Starting container creation for image: {}", image_name);
+        self.creation_state = ContainerCreationState::with_image(image_name.to_string());
+        self.creation_state.image_exists = true; // Assume exists since we came from images list
+        self.mode = DockerManagerMode::VolumeMountHostPath;
+        self.input_buffer.clear();
+    }
+
+    /// Cancels container creation and returns to list mode.
+    pub fn cancel_container_creation(&mut self) {
+        info!("Canceling container creation");
+        self.creation_state.reset();
+        self.mode = DockerManagerMode::List;
+        self.input_buffer.clear();
+    }
+
+    /// Returns a reference to the creation state.
+    #[must_use]
+    pub fn creation_state(&self) -> &ContainerCreationState {
+        &self.creation_state
+    }
+
+    /// Returns a mutable reference to the creation state.
+    pub fn creation_state_mut(&mut self) -> &mut ContainerCreationState {
+        &mut self.creation_state
+    }
+
+    /// Sets the search term and updates state.
+    pub fn set_search_term(&mut self, term: String) {
+        self.creation_state.search_term = term;
+    }
+
+    /// Inserts a character into the search term.
+    pub fn insert_char_search(&mut self, c: char) {
+        self.creation_state.search_term.push(c);
+    }
+
+    /// Deletes the last character from the search term.
+    pub fn backspace_search(&mut self) {
+        self.creation_state.search_term.pop();
+    }
+
+    /// Sets the search results and transitions to results mode.
+    pub fn set_search_results(&mut self, results: Vec<crate::docker::DockerSearchResult>) {
+        self.creation_state.set_search_results(results);
+        self.mode = DockerManagerMode::SearchResults;
+    }
+
+    /// Selects the next search result.
+    pub fn select_next_search_result(&mut self) {
+        self.creation_state.select_next_result();
+    }
+
+    /// Selects the previous search result.
+    pub fn select_prev_search_result(&mut self) {
+        self.creation_state.select_prev_result();
+    }
+
+    /// Confirms the selected search result.
+    pub fn confirm_search_selection(&mut self) {
+        self.creation_state.confirm_selection();
+        self.mode = DockerManagerMode::CheckingImage;
+    }
+
+    /// Sets whether the image exists on the host.
+    ///
+    /// If the image doesn't exist, we mark it as downloading but still proceed
+    /// to volume mount configuration. The download happens in the background
+    /// and we check completion at the final confirmation step.
+    pub fn set_image_exists(&mut self, exists: bool) {
+        self.creation_state.image_exists = exists;
+        if exists {
+            // Image exists, proceed to volume mount
+            self.mode = DockerManagerMode::VolumeMountHostPath;
+            self.input_buffer.clear();
+        } else {
+            // Image needs to be downloaded - mark as downloading but proceed
+            // The download will happen in the background
+            self.creation_state.downloading = true;
+            self.mode = DockerManagerMode::VolumeMountHostPath;
+            self.input_buffer.clear();
+        }
+    }
+
+    /// Called when image pull completes.
+    ///
+    /// Since the user may have progressed past the download step, we don't
+    /// change the mode unless there was an error. The creation confirmation
+    /// screen will check if the download is complete before allowing creation.
+    pub fn on_image_pull_complete(&mut self, success: bool, error: Option<String>) {
+        self.creation_state.downloading = false;
+        if success {
+            self.creation_state.image_exists = true;
+            // Don't change mode - user may be configuring volumes/commands
+            // The UI will update to reflect download is complete
+        } else {
+            // Only show error if we're still in the creation workflow
+            if self.mode.is_creation_mode() {
+                self.creation_state.set_error(
+                    error.unwrap_or_else(|| "Image download failed".to_string()),
+                    true,
+                );
+                self.mode = DockerManagerMode::CreationError;
+            }
+        }
+    }
+
+    /// Returns true if the image is ready (exists or download complete).
+    #[must_use]
+    pub fn is_image_ready(&self) -> bool {
+        self.creation_state.image_exists && !self.creation_state.downloading
+    }
+
+    /// Returns true if an image download is in progress.
+    #[must_use]
+    pub fn is_downloading(&self) -> bool {
+        self.creation_state.downloading
+    }
+
+    /// Inserts a character into the current host path.
+    pub fn insert_char_host_path(&mut self, c: char) {
+        self.creation_state.current_host_path.push(c);
+    }
+
+    /// Deletes the last character from the host path.
+    pub fn backspace_host_path(&mut self) {
+        self.creation_state.current_host_path.pop();
+    }
+
+    /// Sets the host path and transitions to container path input.
+    pub fn set_host_path(&mut self, path: String) {
+        self.creation_state.current_host_path = path;
+        self.mode = DockerManagerMode::VolumeMountContainerPath;
+        self.input_buffer.clear();
+    }
+
+    /// Sets the volume host path from file browser and transitions to container path.
+    pub fn set_volume_host_path(&mut self, path: &str) {
+        self.creation_state.current_host_path = path.to_string();
+        self.mode = DockerManagerMode::VolumeMountContainerPath;
+        self.input_buffer.clear();
+    }
+
+    /// Confirms the host path and moves to container path input.
+    pub fn confirm_host_path(&mut self) {
+        if self.creation_state.current_host_path.is_empty() {
+            // Skip volume mount, go to startup command
+            self.mode = DockerManagerMode::StartupCommand;
+        } else {
+            self.mode = DockerManagerMode::VolumeMountContainerPath;
+        }
+        self.input_buffer.clear();
+    }
+
+    /// Inserts a character into the current container path.
+    pub fn insert_char_container_path(&mut self, c: char) {
+        self.creation_state.current_container_path.push(c);
+    }
+
+    /// Deletes the last character from the container path.
+    pub fn backspace_container_path(&mut self) {
+        self.creation_state.current_container_path.pop();
+    }
+
+    /// Confirms the container path and adds the mount.
+    pub fn confirm_container_path(&mut self) {
+        if self.creation_state.add_current_volume_mount() {
+            self.mode = DockerManagerMode::VolumeMountConfirm;
+        } else {
+            // Both paths were empty, skip to startup command
+            self.mode = DockerManagerMode::StartupCommand;
+        }
+        self.input_buffer.clear();
+    }
+
+    /// Handles the "add another volume" confirmation.
+    pub fn confirm_add_another_volume(&mut self, add_another: bool) {
+        if add_another {
+            self.mode = DockerManagerMode::VolumeMountHostPath;
+        } else {
+            self.mode = DockerManagerMode::StartupCommand;
+        }
+        self.input_buffer.clear();
+    }
+
+    /// Inserts a character into the startup command.
+    pub fn insert_char_startup_cmd(&mut self, c: char) {
+        self.creation_state.startup_command.push(c);
+    }
+
+    /// Deletes the last character from the startup command.
+    pub fn backspace_startup_cmd(&mut self) {
+        self.creation_state.startup_command.pop();
+    }
+
+    /// Confirms the startup command and moves to final confirmation.
+    pub fn confirm_startup_command(&mut self) {
+        self.mode = DockerManagerMode::CreateConfirm;
+    }
+
+    /// Shows an error in the creation workflow.
+    pub fn show_creation_error(&mut self, error: String, suggest_log: bool) {
+        self.creation_state.set_error(error, suggest_log);
+        self.mode = DockerManagerMode::CreationError;
+    }
+
+    /// Dismisses the creation error and returns to the command form.
+    pub fn dismiss_creation_error(&mut self) {
+        self.creation_state.clear_error();
+        // Return to the startup command form to retry
+        self.mode = DockerManagerMode::StartupCommand;
+    }
+
+    /// Returns the docker run command that would be executed.
+    #[must_use]
+    pub fn get_creation_run_command(&self) -> Option<String> {
+        self.creation_state.build_run_command()
     }
 }
 

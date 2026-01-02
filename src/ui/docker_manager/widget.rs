@@ -63,6 +63,19 @@ impl Widget for DockerManagerWidget<'_> {
             DockerManagerMode::HostCredentials => {
                 self.render_host_credentials_mode(popup_area, buf);
             }
+            // Container creation workflow modes
+            DockerManagerMode::SearchingHub
+            | DockerManagerMode::SearchResults
+            | DockerManagerMode::CheckingImage
+            | DockerManagerMode::DownloadingImage
+            | DockerManagerMode::VolumeMountHostPath
+            | DockerManagerMode::VolumeMountContainerPath
+            | DockerManagerMode::VolumeMountConfirm
+            | DockerManagerMode::StartupCommand
+            | DockerManagerMode::CreateConfirm
+            | DockerManagerMode::CreationError => {
+                super::widget_create::render_creation_mode(self.selector, popup_area, buf);
+            }
         }
     }
 }
@@ -251,13 +264,13 @@ impl DockerManagerWidget<'_> {
     fn render_help_text(&self, area: Rect, buf: &mut Buffer) {
         let help = match self.selector.section() {
             super::types::DockerListSection::RunningContainers => {
-                "Enter:exec | h:host | Tab:section | r:refresh | 1-9:assign | Esc:close"
+                "Enter:exec | c:create | h:host | Tab:section | r:refresh | 1-9:assign | Esc:close"
             }
             super::types::DockerListSection::StoppedContainers => {
-                "Enter:start+exec | h:host | Tab:section | r:refresh | d:remove | Esc:close"
+                "Enter:start+exec | c:create | h:host | Tab:section | r:refresh | d:remove | Esc:close"
             }
             super::types::DockerListSection::Images => {
-                "Enter:run | h:host | Tab:section | r:refresh | d:remove | Esc:close"
+                "Enter:run | c:create | h:host | Tab:section | r:refresh | d:remove | Esc:close"
             }
         };
 

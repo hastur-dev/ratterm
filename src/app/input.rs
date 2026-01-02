@@ -258,8 +258,14 @@ impl App {
 
     /// Handles keys for the local file browser.
     fn handle_local_file_browser_key(&mut self, key: KeyEvent) {
+        use super::FileBrowserContext;
+
         match (key.modifiers, key.code) {
-            (KeyModifiers::NONE, KeyCode::Esc) => self.hide_file_browser(),
+            (KeyModifiers::NONE, KeyCode::Esc) => {
+                // Reset context when cancelling
+                self.file_browser_context = FileBrowserContext::OpenFile;
+                self.hide_file_browser();
+            }
             (KeyModifiers::NONE, KeyCode::Up)
             | (KeyModifiers::NONE, KeyCode::Char('k'))
             | (KeyModifiers::NONE, KeyCode::Char('w')) => self.file_browser.move_up(),
@@ -274,13 +280,19 @@ impl App {
             (KeyModifiers::NONE, KeyCode::Right)
             | (KeyModifiers::NONE, KeyCode::Char('l'))
             | (KeyModifiers::NONE, KeyCode::Char('d')) => {
-                if let Ok(Some(path)) = self.file_browser.enter_selected() {
-                    let _ = self.open_file(path);
-                }
+                self.handle_file_browser_selection();
             }
             (KeyModifiers::NONE, KeyCode::Enter) => {
-                if let Ok(Some(path)) = self.file_browser.enter_selected() {
-                    let _ = self.open_file(path);
+                self.handle_file_browser_selection();
+            }
+            // 'f' key to select current directory (for Docker volume mount)
+            (KeyModifiers::NONE, KeyCode::Char('f')) => {
+                if self.file_browser_context == FileBrowserContext::DockerVolumeMount {
+                    // Select current directory as volume mount path
+                    let current_dir = self.file_browser.path().to_path_buf();
+                    self.handle_docker_volume_path_selected(&current_dir);
+                    self.file_browser_context = FileBrowserContext::OpenFile;
+                    self.hide_file_browser();
                 }
             }
             (KeyModifiers::NONE, KeyCode::PageUp) => self.file_browser.page_up(),
@@ -289,6 +301,25 @@ impl App {
             (KeyModifiers::NONE, KeyCode::End) => self.file_browser.move_to_end(),
             (KeyModifiers::NONE, KeyCode::Char('/')) => self.show_popup(PopupKind::SearchFiles),
             _ => {}
+        }
+    }
+
+    /// Handles file browser selection based on context.
+    fn handle_file_browser_selection(&mut self) {
+        use super::FileBrowserContext;
+
+        if let Ok(Some(path)) = self.file_browser.enter_selected() {
+            match self.file_browser_context {
+                FileBrowserContext::OpenFile => {
+                    let _ = self.open_file(path);
+                }
+                FileBrowserContext::DockerVolumeMount => {
+                    // Selected a file/directory for Docker volume mount
+                    self.handle_docker_volume_path_selected(&path);
+                    self.file_browser_context = FileBrowserContext::OpenFile;
+                    self.hide_file_browser();
+                }
+            }
         }
     }
 

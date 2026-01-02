@@ -147,6 +147,43 @@ impl TerminalGrid {
         })
     }
 
+    /// Creates a new terminal grid with an SSH connection running a custom command.
+    ///
+    /// # Errors
+    /// Returns error if terminal creation fails.
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_ssh_command(
+        cols: u16,
+        rows: u16,
+        ssh_host: &str,
+        ssh_port: u16,
+        ssh_user: &str,
+        command: &str,
+        tab_name: &str,
+    ) -> Result<Self, PtyError> {
+        assert!(cols > 0, "Columns must be positive");
+        assert!(rows > 0, "Rows must be positive");
+
+        let terminal = Terminal::with_ssh_command(
+            cols,
+            rows,
+            ssh_host,
+            ssh_port,
+            ssh_user,
+            command,
+            tab_name,
+        )?;
+
+        Ok(Self {
+            terminals: [Some(terminal), None, None, None],
+            focus: 0,
+            cols: 1,
+            rows: 1,
+            width: cols,
+            height: rows,
+        })
+    }
+
     /// Returns the number of active terminals in the grid.
     #[must_use]
     pub fn terminal_count(&self) -> usize {

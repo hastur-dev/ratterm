@@ -23,8 +23,9 @@ pub mod storage;
 
 pub use api::{DockerApi, DockerHostManager};
 pub use container::{
-    DockerContainer, DockerHost, DockerImage, DockerItemList, DockerItemType,
-    DockerQuickConnectItem, DockerRunOptions, DockerStatus, QuickConnectSlots,
+    ContainerCreationState, DockerContainer, DockerHost, DockerImage, DockerItemList,
+    DockerItemType, DockerQuickConnectItem, DockerRunOptions, DockerSearchResult,
+    DockerStatus, QuickConnectSlots, VolumeMountConfig, MAX_SEARCH_RESULTS,
 };
 pub use discovery::{DockerAvailability, DockerDiscovery, DockerDiscoveryResult};
 pub use storage::{DockerStorage, DockerStorageError};
