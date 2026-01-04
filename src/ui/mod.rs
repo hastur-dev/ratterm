@@ -2,6 +2,7 @@
 //!
 //! Provides widgets and layout for the TUI.
 
+pub mod addon_manager;
 pub mod docker_manager;
 pub mod editor_tabs;
 pub mod editor_widget;
@@ -14,6 +15,9 @@ pub mod statusbar;
 pub mod terminal_tabs;
 pub mod terminal_widget;
 
+pub use addon_manager::{
+    AddonListSection, AddonManagerMode, AddonManagerSelector, AddonManagerWidget,
+};
 pub use docker_manager::{
     DockerListSection, DockerManagerMode, DockerManagerSelector, DockerManagerWidget,
 };

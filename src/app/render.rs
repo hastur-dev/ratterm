@@ -5,6 +5,7 @@ use ratatui::style::{Color, Style};
 use tracing::debug;
 
 use crate::ui::{
+    addon_manager::AddonManagerWidget,
     docker_manager::DockerManagerWidget,
     editor_tabs::EditorTabBar,
     editor_widget::EditorWidget,
@@ -602,6 +603,10 @@ impl App {
         } else if let Some(ref manager) = self.docker_manager {
             // Use special widget for Docker manager
             let widget = DockerManagerWidget::new(manager);
+            frame.render_widget(widget, area);
+        } else if let Some(ref manager) = self.addon_manager {
+            // Use special widget for Add-ons manager
+            let widget = AddonManagerWidget::new(manager);
             frame.render_widget(widget, area);
         } else if self.popup.kind().is_keybinding_notification() {
             // Use special widget for Windows 11 keybinding notification

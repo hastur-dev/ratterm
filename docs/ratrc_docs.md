@@ -526,6 +526,85 @@ This is useful for quickly setting up access to multiple hosts with the same cre
 
 ---
 
+### Add-ons Manager Configuration
+
+Ratterm includes an Add-ons Manager for installing and running additional technologies (like Node.js, Python, etc.) from a central repository.
+
+#### Add-ons Repository
+
+```
+addon_repository = <owner/repo>
+```
+
+Sets the GitHub repository to fetch add-ons from.
+
+| Value | Description |
+|-------|-------------|
+| `hastur-dev/ratterm-installer` | Default add-ons repository |
+| `<owner>/<repo>` | Custom GitHub repository |
+
+**Example:**
+```
+addon_repository = hastur-dev/ratterm-installer
+```
+
+---
+
+#### Add-ons Branch
+
+```
+addon_branch = <branch>
+```
+
+Sets the branch to use when fetching add-ons.
+
+| Value | Description |
+|-------|-------------|
+| `main` | Main branch (default) |
+| `<branch>` | Custom branch name |
+
+**Example:**
+```
+addon_branch = main
+```
+
+---
+
+#### Installed Add-ons Format
+
+Installed add-ons are stored in `.ratrc` using this format:
+
+```
+addon.<addon_id> = <hotkey>|<run_args>
+```
+
+| Field | Description |
+|-------|-------------|
+| `<addon_id>` | The add-on identifier (e.g., `nodejs`, `python`) |
+| `<hotkey>` | Optional hotkey to run the add-on (e.g., `ctrl+shift+1`) |
+| `<run_args>` | Optional arguments passed when running the add-on |
+
+**Examples:**
+```
+# Add-on with hotkey and no args
+addon.nodejs = ctrl+shift+n|
+
+# Add-on with hotkey and args
+addon.python = ctrl+shift+p|--version 3.12
+
+# Add-on with no hotkey, just args
+addon.rust = |stable
+```
+
+---
+
+#### Add-ons Storage Location
+
+Add-on scripts are cached in:
+- **All platforms:** `~/.ratterm/addons/`
+
+---
+
 ### Docker Manager Configuration
 
 Ratterm includes a Docker Manager for managing Docker containers and images.

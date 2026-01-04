@@ -266,6 +266,14 @@ impl CommandPalette {
             ),
             Command::new("docker.stats", "Show Stats Panel", "Docker", Some("Ctrl+T")),
             Command::new("docker.logs", "Show Logs Panel", "Docker", Some("Ctrl+L")),
+            // Add-on commands
+            Command::new(
+                "addon.manager",
+                "Open Add-ons Manager",
+                "Add-ons",
+                Some("Ctrl+Shift+A"),
+            ),
+            Command::new("addon.refresh", "Refresh Add-ons List", "Add-ons", None),
             // Theme commands
             Command::new("theme.select", "Select Theme", "Theme", None),
             Command::new("theme.dark", "Dark Theme", "Theme", None),

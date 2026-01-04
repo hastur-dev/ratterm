@@ -407,6 +407,10 @@ impl App {
                 self.hide_popup();
                 self.mark_win11_notification_shown();
             }
+            PopupKind::AddonManager => {
+                // Handled by addon_manager input handling
+                self.hide_popup();
+            }
         }
     }
 }

@@ -25,6 +25,7 @@ These hotkeys work regardless of which pane is focused or what mode you're in.
 | `Alt+]` | Expand split (move divider right) |
 | `Alt+Shift+Left` | Previous file tab |
 | `Alt+Shift+Right` | Next file tab |
+| `Ctrl+Shift+A` | Open Add-ons Manager |
 
 ---
 
@@ -514,3 +515,83 @@ When running an image with options (`Ctrl+O`):
 - `Enter` - Run image with default settings (shows confirm dialog)
 - `Ctrl+O` - Run image with custom options
 - `d` - Remove image
+
+---
+
+## Add-ons Manager
+
+The Add-ons Manager allows you to install and run additional technologies from a GitHub repository.
+
+### Opening Add-ons Manager
+
+| Hotkey | Action |
+|--------|--------|
+| `Ctrl+Shift+A` | Open Add-ons Manager |
+
+### Add-ons Manager Navigation
+
+When the Add-ons Manager is open:
+
+| Hotkey | Action |
+|--------|--------|
+| `Esc` | Close Add-ons Manager |
+| `Up` / `k` | Previous add-on |
+| `Down` / `j` | Next add-on |
+| `Home` | First add-on |
+| `End` | Last add-on |
+| `Tab` | Switch section (Available ↔ Installed) |
+| `A` | Jump to Available section |
+| `I` | Jump to Installed section |
+| `F5` | Refresh add-on list from GitHub |
+
+### Add-on Actions
+
+| Hotkey | Action |
+|--------|--------|
+| `Enter` | Install (Available) or Run (Installed) |
+| `d` / `Delete` | Uninstall selected add-on (Installed section only) |
+
+### Installation Flow
+
+When installing an add-on:
+
+1. **Install Progress** - Background installation runs automatically
+2. **Configure Hotkey** - Assign a keyboard shortcut (optional)
+3. **Configure Arguments** - Set default run arguments (optional)
+
+#### Hotkey Configuration
+
+| Hotkey | Action |
+|--------|--------|
+| `Esc` | Skip hotkey (no keyboard shortcut) |
+| `Enter` | Accept current hotkey |
+| `Backspace` | Clear hotkey input |
+| Any key combo | Sets the hotkey (e.g., `Ctrl+Shift+N`) |
+
+If the hotkey conflicts with an existing binding, you'll be prompted to choose a different one.
+
+#### Arguments Configuration
+
+| Hotkey | Action |
+|--------|--------|
+| `Enter` | Accept and complete installation |
+| `Esc` | Cancel installation |
+| `Backspace` | Delete character |
+| Type text | Enter run arguments |
+
+### Running Installed Add-ons
+
+Once installed, you can run add-ons via:
+
+1. **Hotkey** - Press the configured hotkey from anywhere
+2. **Add-ons Manager** - Select from Installed section and press `Enter`
+3. **Command Palette** - Use `Add-ons: Open Add-ons Manager`
+
+### Add-ons Commands in Command Palette
+
+Press `Ctrl+P` and type "addon" to access these commands:
+
+| Command | Description |
+|---------|-------------|
+| `Add-ons: Open Add-ons Manager` | Open the Add-ons Manager popup |
+| `Add-ons: Refresh Add-ons List` | Refresh list from GitHub |

@@ -34,6 +34,7 @@
 #![allow(clippy::similar_names)]
 #![allow(clippy::struct_excessive_bools)]
 
+pub mod addons;
 pub mod api;
 pub mod app;
 pub mod clipboard;
@@ -52,6 +53,7 @@ pub mod ui;
 pub mod updater;
 
 // Re-export main types
+pub use addons::{Addon, AddonConfig, AddonGitHubClient, AddonInstaller, AddonStorage, InstalledAddon};
 pub use app::App;
 pub use clipboard::Clipboard;
 pub use completion::{CompletionContext, CompletionHandle, CompletionItem, CompletionProvider};

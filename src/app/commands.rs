@@ -99,6 +99,10 @@ impl App {
             "docker.stats" => self.show_docker_stats(),
             "docker.logs" => self.show_docker_logs(),
 
+            // Add-on commands
+            "addon.manager" => self.show_addon_manager(),
+            "addon.refresh" => self.refresh_addon_list(true),
+
             // Theme commands
             "theme.select" => self.show_theme_selector(),
             "theme.dark" => self.set_theme(ThemePreset::Dark),

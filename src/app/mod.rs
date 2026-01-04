@@ -2,12 +2,14 @@
 //!
 //! Orchestrates the terminal emulator, code editor, and file browser.
 
+mod addon_ops;
 mod commands;
 mod docker_connect;
 mod docker_ops;
 mod extension_ops;
 mod file_ops;
 mod input;
+mod input_addon;
 mod input_docker;
 mod input_docker_create;
 mod input_editor;
@@ -34,6 +36,7 @@ use crossterm::event::{self, Event};
 use ratatui::layout::Rect;
 use tracing::{debug, info, warn};
 
+use crate::addons::{AddonConfig, AddonInstaller, AddonStorage, BackgroundFetcher};
 use crate::api::{ApiHandler, ApiServer, MAX_REQUESTS_PER_FRAME, RequestReceiver};
 use crate::clipboard::Clipboard;
 use crate::completion::CompletionHandle;
@@ -46,6 +49,7 @@ use crate::remote::{RemoteFileBrowser, RemoteFileManager};
 use crate::ssh::{NetworkScanner, SSHHostList, SSHStorage};
 use crate::terminal::{BackgroundManager, TerminalMultiplexer, pty::PtyError};
 use crate::ui::{
+    addon_manager::AddonManagerSelector,
     docker_manager::DockerManagerSelector,
     editor_tabs::EditorTabInfo,
     layout::SplitLayout,
@@ -181,6 +185,16 @@ pub struct App {
     pub(crate) docker_storage: DockerStorage,
     /// Docker items (quick connect slots and settings).
     pub(crate) docker_items: DockerItemList,
+    /// Add-on manager selector state.
+    pub(crate) addon_manager: Option<AddonManagerSelector>,
+    /// Add-on configuration.
+    pub(crate) addon_config: AddonConfig,
+    /// Add-on storage for .ratrc persistence.
+    pub(crate) addon_storage: AddonStorage,
+    /// Add-on installer for script execution.
+    pub(crate) addon_installer: AddonInstaller,
+    /// Background fetcher for non-blocking GitHub operations.
+    pub(crate) addon_fetcher: BackgroundFetcher,
     /// Context for file browser operations (what the selection is for).
     pub(crate) file_browser_context: FileBrowserContext,
     /// Receiver for background Docker operation results.
@@ -204,6 +218,10 @@ impl App {
 
         let config = Config::load().unwrap_or_default();
         let shell_path = config.shell.get_shell_path();
+
+        // Load addon configuration
+        let addon_storage = AddonStorage::new(Config::default_config_path());
+        let addon_config = addon_storage.load();
 
         let terminals =
             match TerminalMultiplexer::with_shell(cols / 2, rows.saturating_sub(4), shell_path) {
@@ -272,6 +290,14 @@ impl App {
             docker_manager: None,
             docker_storage: DockerStorage::new(),
             docker_items: DockerItemList::new(),
+            addon_manager: None,
+            addon_fetcher: BackgroundFetcher::new(
+                &addon_config.repository,
+                &addon_config.branch,
+            ),
+            addon_config,
+            addon_storage,
+            addon_installer: AddonInstaller::new(),
             file_browser_context: FileBrowserContext::OpenFile,
             docker_background_rx: None,
             win11_notification_shown: false,
@@ -562,6 +588,8 @@ impl App {
         self.process_api_requests();
         self.background_manager.update_counts();
         self.poll_ssh_scanner();
+        self.poll_addon_fetcher();
+        self.check_addon_install_progress();
         self.update_completion_suggestion();
 
         if !self.file_browser.is_visible() {

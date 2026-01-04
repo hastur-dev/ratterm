@@ -83,13 +83,13 @@ impl App {
                 self.show_file_browser();
                 true
             }
-            // Command palette: F1 on Windows 11, Ctrl+Shift+P on other platforms
+            // Command palette: F1 on Windows 11, Ctrl+Shift+P on all platforms
             (KeyModifiers::NONE, KeyCode::F(1)) if is_windows_11() => {
                 self.show_popup(PopupKind::CommandPalette);
                 true
             }
             (m, KeyCode::Char('p') | KeyCode::Char('P'))
-                if m == KeyModifiers::CONTROL | KeyModifiers::SHIFT && !is_windows_11() =>
+                if m == KeyModifiers::CONTROL | KeyModifiers::SHIFT =>
             {
                 self.show_popup(PopupKind::CommandPalette);
                 true
@@ -143,6 +143,13 @@ impl App {
                 if m == KeyModifiers::CONTROL | KeyModifiers::SHIFT =>
             {
                 self.show_ssh_manager();
+                true
+            }
+            // Add-ons manager: Ctrl+Shift+A
+            (m, KeyCode::Char('a') | KeyCode::Char('A'))
+                if m == KeyModifiers::CONTROL | KeyModifiers::SHIFT =>
+            {
+                self.show_addon_manager();
                 true
             }
             (KeyModifiers::CONTROL, KeyCode::Char(c @ '1'..='9'))
@@ -472,6 +479,10 @@ impl App {
         }
         if self.popup.kind().is_docker_manager() {
             self.handle_docker_manager_key(key);
+            return;
+        }
+        if self.popup.kind().is_addon_manager() {
+            self.handle_addon_manager_key(key);
             return;
         }
 
