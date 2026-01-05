@@ -36,19 +36,39 @@ impl App {
 
     /// Handles key events in addon list mode.
     fn handle_addon_list_key(&mut self, key: KeyEvent) {
+        // Check if there's an active search
+        let has_filter = self
+            .addon_manager
+            .as_ref()
+            .map(|m| m.has_filter())
+            .unwrap_or(false);
+
         match (key.modifiers, key.code) {
-            // Close manager
+            // Escape: clear search first, then close manager
             (KeyModifiers::NONE, KeyCode::Esc) => {
-                self.hide_addon_manager();
+                if has_filter {
+                    if let Some(ref mut manager) = self.addon_manager {
+                        manager.filter_clear();
+                    }
+                } else {
+                    self.hide_addon_manager();
+                }
             }
 
-            // Navigation
-            (KeyModifiers::NONE, KeyCode::Up | KeyCode::Char('k')) => {
+            // Backspace: remove from search
+            (KeyModifiers::NONE, KeyCode::Backspace) => {
+                if let Some(ref mut manager) = self.addon_manager {
+                    manager.filter_backspace();
+                }
+            }
+
+            // Navigation (always works)
+            (KeyModifiers::NONE, KeyCode::Up) => {
                 if let Some(ref mut manager) = self.addon_manager {
                     manager.select_prev();
                 }
             }
-            (KeyModifiers::NONE, KeyCode::Down | KeyCode::Char('j')) => {
+            (KeyModifiers::NONE, KeyCode::Down) => {
                 if let Some(ref mut manager) = self.addon_manager {
                     manager.select_next();
                 }
@@ -70,34 +90,32 @@ impl App {
                     manager.toggle_section();
                 }
             }
-            (KeyModifiers::NONE, KeyCode::Char('a')) => {
-                if let Some(ref mut manager) = self.addon_manager {
-                    if manager.section() != AddonListSection::Available {
-                        manager.toggle_section();
-                    }
-                }
-            }
-            (KeyModifiers::NONE, KeyCode::Char('i')) => {
-                if let Some(ref mut manager) = self.addon_manager {
-                    if manager.section() != AddonListSection::Installed {
-                        manager.toggle_section();
-                    }
-                }
-            }
 
             // Refresh
             (KeyModifiers::NONE, KeyCode::F(5)) => {
                 self.refresh_addon_list(true);
             }
 
-            // Install selected (from available section only)
+            // Install selected
             (KeyModifiers::NONE, KeyCode::Enter) => {
                 self.handle_addon_enter();
             }
 
-            // Uninstall
-            (KeyModifiers::NONE, KeyCode::Char('d') | KeyCode::Delete) => {
-                self.handle_addon_uninstall();
+            // Uninstall (Delete key only when not searching)
+            (KeyModifiers::NONE, KeyCode::Delete) => {
+                if !has_filter {
+                    self.handle_addon_uninstall();
+                }
+            }
+
+            // Character input: add to search filter
+            (KeyModifiers::NONE | KeyModifiers::SHIFT, KeyCode::Char(c)) => {
+                // Allow alphanumeric and common search characters
+                if c.is_alphanumeric() || c == '-' || c == '_' || c == ' ' {
+                    if let Some(ref mut manager) = self.addon_manager {
+                        manager.filter_insert_char(c);
+                    }
+                }
             }
 
             _ => {}
@@ -183,11 +201,8 @@ impl App {
                     .map(|a| a.addon.id.clone());
 
                 if let Some(id) = addon_id {
-                    self.uninstall_addon(&id);
-                }
-
-                if let Some(ref mut manager) = self.addon_manager {
-                    manager.return_to_list();
+                    // Start async uninstall - will return to list when complete
+                    self.start_addon_uninstall(&id);
                 }
             }
 

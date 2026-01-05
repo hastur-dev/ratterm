@@ -2,7 +2,7 @@
 //!
 //! Fetches addon listings from a GitHub repository.
 
-use super::types::{Addon, AddonError, AddonMetadata, ScriptType};
+use super::types::{current_os_directory, Addon, AddonError, AddonMetadata, ScriptType};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
@@ -153,14 +153,19 @@ impl AddonGitHubClient {
     }
 
     /// Fetches addons from the GitHub API.
+    ///
+    /// Uses the new directory structure: scripts/{os}/{technology}/
     fn fetch_addons_from_api(&self) -> Result<Vec<Addon>, AddonError> {
-        info!("[ADDON] fetch_addons_from_api: looking in '{}' directory", SCRIPTS_DIRECTORY);
+        let os_dir = current_os_directory();
+        let os_path = format!("{}/{}", SCRIPTS_DIRECTORY, os_dir);
 
-        // Get contents of the scripts directory
-        let entries = self.fetch_contents(SCRIPTS_DIRECTORY)?;
-        debug!("[ADDON] Found {} entries in scripts directory", entries.len());
+        info!("[ADDON] fetch_addons_from_api: looking in '{}' directory", os_path);
 
-        // Filter for directories (each directory is a potential addon)
+        // Get contents of the OS-specific scripts directory
+        let entries = self.fetch_contents(&os_path)?;
+        debug!("[ADDON] Found {} entries in {} directory", entries.len(), os_dir);
+
+        // Filter for directories (each directory is a technology/addon)
         let directories: Vec<_> = entries
             .into_iter()
             .filter(|e| e.is_directory())
@@ -174,7 +179,7 @@ impl AddonGitHubClient {
         // Check each directory for required scripts
         for dir in &directories {
             debug!("[ADDON] Checking addon directory: {}", dir.name);
-            let addon_path = format!("{}/{}", SCRIPTS_DIRECTORY, dir.name);
+            let addon_path = format!("{}/{}", os_path, dir.name);
             match self.check_addon_directory(&addon_path, &dir.name) {
                 Ok(addon) => {
                     info!("[ADDON] Found valid addon: {} (install={})",
@@ -296,10 +301,13 @@ impl AddonGitHubClient {
     }
 
     /// Fetches script content for an addon.
+    ///
+    /// Uses the new directory structure: scripts/{os}/{technology}/install.ext
     pub fn fetch_script(&self, addon_id: &str, script_type: ScriptType) -> Result<String, AddonError> {
         assert!(!addon_id.is_empty(), "Addon ID must not be empty");
 
-        let addon_path = format!("{}/{}", SCRIPTS_DIRECTORY, addon_id);
+        let os_dir = current_os_directory();
+        let addon_path = format!("{}/{}/{}", SCRIPTS_DIRECTORY, os_dir, addon_id);
         let filename = script_type.filename();
 
         info!("[ADDON] fetch_script: addon='{}', type={:?}, path='{}'",
@@ -469,8 +477,8 @@ mod tests {
         assert!(!dir_entry.is_file());
 
         let file_entry = GitHubEntry {
-            name: "install-windows.ps1".to_string(),
-            path: "nodejs/install-windows.ps1".to_string(),
+            name: "install.ps1".to_string(),
+            path: "scripts/windows/nodejs/install.ps1".to_string(),
             entry_type: "file".to_string(),
             size: 1024,
             download_url: Some("https://raw.githubusercontent.com/...".to_string()),
@@ -482,14 +490,14 @@ mod tests {
 
     #[test]
     fn test_client_creation() {
-        let client = AddonGitHubClient::new("hastur-dev/ratterm-installer", "main");
-        assert_eq!(client.repository(), "hastur-dev/ratterm-installer");
+        let client = AddonGitHubClient::new("hastur-dev/installer-repo", "main");
+        assert_eq!(client.repository(), "hastur-dev/installer-repo");
         assert_eq!(client.branch(), "main");
     }
 
     #[test]
     fn test_set_repository() {
-        let mut client = AddonGitHubClient::new("hastur-dev/ratterm-installer", "main");
+        let mut client = AddonGitHubClient::new("hastur-dev/installer-repo", "main");
         client.set_repository("other/repo", "dev");
         assert_eq!(client.repository(), "other/repo");
         assert_eq!(client.branch(), "dev");

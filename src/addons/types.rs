@@ -151,7 +151,7 @@ impl AddonConfig {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            repository: String::from("hastur-dev/ratterm-installer"),
+            repository: String::from("hastur-dev/installer-repo"),
             branch: String::from("main"),
             installed: Vec::new(),
         }
@@ -205,36 +205,48 @@ impl AddonConfig {
 pub enum ScriptType {
     /// Installation script.
     Install,
+    /// Uninstallation script.
+    Uninstall,
 }
 
 impl ScriptType {
     /// Returns the script filename for the current platform.
+    ///
+    /// With the new directory structure (scripts/{os}/{technology}/),
+    /// script files are simply named by type with platform extension.
     #[must_use]
     pub fn filename(&self) -> &'static str {
-        match self {
-            Self::Install => {
-                #[cfg(windows)]
-                {
-                    "install-windows.ps1"
-                }
-                #[cfg(target_os = "macos")]
-                {
-                    "install-macos.sh"
-                }
-                #[cfg(all(not(windows), not(target_os = "macos")))]
-                {
-                    "install-linux.sh"
-                }
+        #[cfg(windows)]
+        {
+            match self {
+                Self::Install => "install.ps1",
+                Self::Uninstall => "uninstall.ps1",
+            }
+        }
+        #[cfg(not(windows))]
+        {
+            match self {
+                Self::Install => "install.sh",
+                Self::Uninstall => "uninstall.sh",
             }
         }
     }
+}
 
-    /// Returns the script prefix.
-    #[must_use]
-    pub fn prefix(&self) -> &'static str {
-        match self {
-            Self::Install => "install-",
-        }
+/// Returns the OS-specific directory name for the current platform.
+#[must_use]
+pub fn current_os_directory() -> &'static str {
+    #[cfg(windows)]
+    {
+        "windows"
+    }
+    #[cfg(target_os = "macos")]
+    {
+        "macos"
+    }
+    #[cfg(all(not(windows), not(target_os = "macos")))]
+    {
+        "linux"
     }
 }
 
@@ -318,7 +330,7 @@ mod tests {
     #[test]
     fn test_addon_config() {
         let mut config = AddonConfig::new();
-        assert_eq!(config.repository, "hastur-dev/ratterm-installer");
+        assert_eq!(config.repository, "hastur-dev/installer-repo");
         assert_eq!(config.branch, "main");
 
         let addon = InstalledAddon::new("test".to_string(), "Test".to_string());
@@ -333,18 +345,35 @@ mod tests {
     #[test]
     fn test_script_type_filename() {
         let install = ScriptType::Install.filename();
+        let uninstall = ScriptType::Uninstall.filename();
 
         #[cfg(windows)]
         {
-            assert_eq!(install, "install-windows.ps1");
+            assert_eq!(install, "install.ps1");
+            assert_eq!(uninstall, "uninstall.ps1");
+        }
+        #[cfg(not(windows))]
+        {
+            assert_eq!(install, "install.sh");
+            assert_eq!(uninstall, "uninstall.sh");
+        }
+    }
+
+    #[test]
+    fn test_current_os_directory() {
+        let os_dir = current_os_directory();
+
+        #[cfg(windows)]
+        {
+            assert_eq!(os_dir, "windows");
         }
         #[cfg(target_os = "macos")]
         {
-            assert_eq!(install, "install-macos.sh");
+            assert_eq!(os_dir, "macos");
         }
         #[cfg(all(not(windows), not(target_os = "macos")))]
         {
-            assert_eq!(install, "install-linux.sh");
+            assert_eq!(os_dir, "linux");
         }
     }
 }

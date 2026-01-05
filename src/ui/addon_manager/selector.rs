@@ -30,8 +30,10 @@ pub struct AddonManagerSelector {
     // Installation state
     /// Current installation progress.
     install_progress: Option<InstallProgress>,
-    /// Addon being installed.
+    /// Addon being installed/uninstalled.
     pending_addon_id: Option<String>,
+    /// True if the pending operation is an uninstall.
+    is_uninstalling: bool,
 
     // Error state
     /// Error message to display.
@@ -64,8 +66,9 @@ impl AddonManagerSelector {
             filter_query: String::new(),
             install_progress: None,
             pending_addon_id: None,
+            is_uninstalling: false,
             error: None,
-            repository: String::from("hastur-dev/ratterm-installer"),
+            repository: String::from("hastur-dev/installer-repo"),
             branch: String::from("main"),
         }
     }
@@ -89,6 +92,7 @@ impl AddonManagerSelector {
     pub fn return_to_list(&mut self) {
         self.mode = AddonManagerMode::List;
         self.pending_addon_id = None;
+        self.is_uninstalling = false;
         self.error = None;
     }
 
@@ -109,7 +113,7 @@ impl AddonManagerSelector {
         self.scroll_offset = 0;
     }
 
-    /// Returns the current items for the active section.
+    /// Returns the current items for the active section (unfiltered).
     #[must_use]
     pub fn current_items(&self) -> &[AddonDisplay] {
         match self.section {
@@ -118,13 +122,40 @@ impl AddonManagerSelector {
         }
     }
 
-    /// Returns visible items with scroll applied.
-    pub fn visible_items(&self) -> impl Iterator<Item = (usize, &AddonDisplay)> {
-        self.current_items()
+    /// Returns filtered items based on the current search query.
+    #[must_use]
+    pub fn filtered_items(&self) -> Vec<&AddonDisplay> {
+        let items = self.current_items();
+
+        if self.filter_query.is_empty() {
+            return items.iter().collect();
+        }
+
+        let query = self.filter_query.to_lowercase();
+        items
             .iter()
+            .filter(|item| {
+                item.addon.id.to_lowercase().contains(&query)
+                    || item.addon.name.to_lowercase().contains(&query)
+                    || item.addon.description.to_lowercase().contains(&query)
+            })
+            .collect()
+    }
+
+    /// Returns the count of filtered items.
+    #[must_use]
+    pub fn filtered_count(&self) -> usize {
+        self.filtered_items().len()
+    }
+
+    /// Returns visible items with scroll applied (filtered).
+    pub fn visible_items(&self) -> Vec<(usize, &AddonDisplay)> {
+        self.filtered_items()
+            .into_iter()
             .enumerate()
             .skip(self.scroll_offset)
             .take(MAX_DISPLAY_ADDONS)
+            .collect()
     }
 
     /// Returns the selected index.
@@ -149,7 +180,7 @@ impl AddonManagerSelector {
 
     /// Moves selection down.
     pub fn select_next(&mut self) {
-        let max_index = self.current_items().len().saturating_sub(1);
+        let max_index = self.filtered_count().saturating_sub(1);
         if self.selected_index < max_index {
             self.selected_index += 1;
             self.update_scroll();
@@ -164,7 +195,7 @@ impl AddonManagerSelector {
 
     /// Moves selection to the last item.
     pub fn select_last(&mut self) {
-        let len = self.current_items().len();
+        let len = self.filtered_count();
         if len > 0 {
             self.selected_index = len - 1;
             self.update_scroll();
@@ -180,10 +211,10 @@ impl AddonManagerSelector {
         }
     }
 
-    /// Returns the currently selected addon display.
+    /// Returns the currently selected addon display (from filtered list).
     #[must_use]
     pub fn selected_addon(&self) -> Option<&AddonDisplay> {
-        self.current_items().get(self.selected_index)
+        self.filtered_items().get(self.selected_index).copied()
     }
 
     // =========================================================================
@@ -287,6 +318,17 @@ impl AddonManagerSelector {
         self.pending_addon_id = addon_id;
     }
 
+    /// Returns true if the pending operation is an uninstall.
+    #[must_use]
+    pub fn is_uninstalling(&self) -> bool {
+        self.is_uninstalling
+    }
+
+    /// Sets whether the pending operation is an uninstall.
+    pub fn set_uninstalling(&mut self, uninstalling: bool) {
+        self.is_uninstalling = uninstalling;
+    }
+
     // =========================================================================
     // Error Management
     // =========================================================================
@@ -321,24 +363,38 @@ impl AddonManagerSelector {
         &self.filter_query
     }
 
-    /// Sets the filter query.
+    /// Sets the filter query and resets selection.
     pub fn set_filter_query(&mut self, query: String) {
         self.filter_query = query;
+        self.selected_index = 0;
+        self.scroll_offset = 0;
     }
 
-    /// Appends a character to the filter query.
+    /// Appends a character to the filter query and resets selection.
     pub fn filter_insert_char(&mut self, c: char) {
         self.filter_query.push(c);
+        self.selected_index = 0;
+        self.scroll_offset = 0;
     }
 
-    /// Removes the last character from the filter query.
+    /// Removes the last character from the filter query and resets selection.
     pub fn filter_backspace(&mut self) {
         self.filter_query.pop();
+        self.selected_index = 0;
+        self.scroll_offset = 0;
     }
 
-    /// Clears the filter query.
+    /// Clears the filter query and resets selection.
     pub fn filter_clear(&mut self) {
         self.filter_query.clear();
+        self.selected_index = 0;
+        self.scroll_offset = 0;
+    }
+
+    /// Returns true if there's an active filter.
+    #[must_use]
+    pub fn has_filter(&self) -> bool {
+        !self.filter_query.is_empty()
     }
 
     // =========================================================================

@@ -328,8 +328,13 @@ impl AddonInstaller {
     }
 
     /// Writes a script to a temporary file.
-    fn write_temp_script(&self, addon_id: &str, content: &str) -> Result<PathBuf, AddonError> {
-        let filename = format!("{}_{}", addon_id, ScriptType::Install.filename());
+    fn write_temp_script(
+        &self,
+        addon_id: &str,
+        script_type: ScriptType,
+        content: &str,
+    ) -> Result<PathBuf, AddonError> {
+        let filename = format!("{}_{}", addon_id, script_type.filename());
         let path = self.temp_dir.join(filename);
 
         let mut file = fs::File::create(&path)
@@ -400,7 +405,7 @@ impl AddonInstaller {
         }
 
         // Write script to temp file
-        let script_path = self.write_temp_script(addon_id, script_content)?;
+        let script_path = self.write_temp_script(addon_id, ScriptType::Install, script_content)?;
         info!("[ADDON-INSTALL] Script written to: {:?}", script_path);
 
         // Build command based on platform
@@ -413,6 +418,50 @@ impl AddonInstaller {
             .map_err(AddonError::ExecutionFailed)?;
 
         info!("[ADDON-INSTALL] Background process started with ID: {}", process_id);
+        progress.set_installing(process_id);
+
+        Ok(progress)
+    }
+
+    /// Starts an addon uninstallation with pre-fetched content.
+    ///
+    /// This is the non-blocking version that receives content from the background fetcher.
+    pub fn start_uninstall_with_content(
+        &self,
+        addon_id: &str,
+        script_content: &str,
+        background_manager: &mut BackgroundManager,
+    ) -> Result<InstallProgress, AddonError> {
+        assert!(!addon_id.is_empty(), "Addon ID must not be empty");
+
+        info!("[ADDON-UNINSTALL] Starting uninstallation: '{}'", addon_id);
+
+        self.ensure_dirs()?;
+
+        let mut progress = InstallProgress::new(addon_id.to_string());
+
+        // Validate script size
+        if script_content.len() > MAX_SCRIPT_SIZE {
+            warn!("[ADDON-UNINSTALL] Script too large: {} bytes", script_content.len());
+            return Err(AddonError::ExecutionFailed(
+                "Script exceeds maximum size".to_string(),
+            ));
+        }
+
+        // Write script to temp file
+        let script_path = self.write_temp_script(addon_id, ScriptType::Uninstall, script_content)?;
+        info!("[ADDON-UNINSTALL] Script written to: {:?}", script_path);
+
+        // Build command based on platform
+        let command = self.build_command(&script_path);
+        info!("[ADDON-UNINSTALL] Executing command: {}", command);
+
+        // Start background process
+        let process_id = background_manager
+            .start(&command)
+            .map_err(AddonError::ExecutionFailed)?;
+
+        info!("[ADDON-UNINSTALL] Background process started with ID: {}", process_id);
         progress.set_installing(process_id);
 
         Ok(progress)

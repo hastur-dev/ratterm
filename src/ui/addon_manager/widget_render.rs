@@ -19,24 +19,33 @@ pub fn render_list_mode(
     buf: &mut Buffer,
     bg_color: Color,
 ) {
-    // Layout: header (tabs), list, footer (tips)
+    // Layout: header (tabs), search bar (if active), list, footer (tips)
+    let has_filter = selector.has_filter();
+    let search_height = if has_filter { 1 } else { 0 };
+
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(2), // Section tabs
-            Constraint::Min(3),    // List
-            Constraint::Length(2), // Footer tips
+            Constraint::Length(2),            // Section tabs
+            Constraint::Length(search_height), // Search bar (only if active)
+            Constraint::Min(3),               // List
+            Constraint::Length(2),            // Footer tips
         ])
         .split(area);
 
     // Render section tabs
     render_section_tabs(selector, chunks[0], buf, bg_color);
 
+    // Render search bar if filter is active
+    if has_filter {
+        render_search_bar(selector, chunks[1], buf, bg_color);
+    }
+
     // Render addon list
-    render_addon_list(selector, chunks[1], buf, bg_color);
+    render_addon_list(selector, chunks[2], buf, bg_color);
 
     // Render footer tips
-    render_footer_tips(selector, chunks[2], buf, bg_color);
+    render_footer_tips(selector, chunks[3], buf, bg_color);
 }
 
 /// Renders the section tab bar.
@@ -78,6 +87,30 @@ fn render_section_tabs(
     Paragraph::new(tabs).render(area, buf);
 }
 
+/// Renders the search bar.
+fn render_search_bar(
+    selector: &AddonManagerSelector,
+    area: Rect,
+    buf: &mut Buffer,
+    bg_color: Color,
+) {
+    let query = selector.filter_query();
+    let filtered_count = selector.filtered_count();
+    let total_count = selector.current_count();
+
+    let search_line = Line::from(vec![
+        Span::styled(" Search: ", Style::default().fg(Color::Yellow).bg(bg_color)),
+        Span::styled(query, Style::default().fg(Color::White).bg(bg_color)),
+        Span::styled("_", Style::default().fg(Color::Yellow).bg(bg_color)), // Cursor
+        Span::styled(
+            format!("  ({}/{})", filtered_count, total_count),
+            Style::default().fg(Color::DarkGray).bg(bg_color),
+        ),
+    ]);
+
+    Paragraph::new(search_line).render(area, buf);
+}
+
 /// Renders the addon list.
 fn render_addon_list(
     selector: &AddonManagerSelector,
@@ -85,12 +118,17 @@ fn render_addon_list(
     buf: &mut Buffer,
     bg_color: Color,
 ) {
-    let items = selector.current_items();
+    let filtered_count = selector.filtered_count();
+    let has_filter = selector.has_filter();
 
-    if items.is_empty() {
-        let empty_msg = match selector.section() {
-            AddonListSection::Available => "No add-ons available. Press F5 to refresh.",
-            AddonListSection::Installed => "No add-ons installed yet.",
+    if filtered_count == 0 {
+        let empty_msg = if has_filter {
+            "No matches found. Press Esc to clear search."
+        } else {
+            match selector.section() {
+                AddonListSection::Available => "No add-ons available. Press F5 to refresh.",
+                AddonListSection::Installed => "No add-ons installed yet.",
+            }
         };
 
         let para = Paragraph::new(empty_msg)
@@ -101,6 +139,7 @@ fn render_addon_list(
 
     let visible_items: Vec<Line> = selector
         .visible_items()
+        .into_iter()
         .map(|(idx, addon_display)| {
             let is_selected = selector.is_selected(idx);
 
@@ -133,14 +172,14 @@ fn render_addon_list(
     para.render(area, buf);
 
     // Render scrollbar if needed
-    if items.len() > MAX_DISPLAY_ADDONS {
+    if filtered_count > MAX_DISPLAY_ADDONS {
         render_scrollbar(selector, area, buf);
     }
 }
 
 /// Renders a simple scrollbar indicator.
 fn render_scrollbar(selector: &AddonManagerSelector, area: Rect, buf: &mut Buffer) {
-    let total = selector.current_count();
+    let total = selector.filtered_count();
     let visible = MAX_DISPLAY_ADDONS;
     let selected = selector.selected_index();
 
@@ -170,12 +209,18 @@ fn render_footer_tips(
     buf: &mut Buffer,
     bg_color: Color,
 ) {
-    let tips = match selector.section() {
-        AddonListSection::Available => {
-            "Enter: Install | Tab: Switch section | F5: Refresh | Esc: Close"
-        }
-        AddonListSection::Installed => {
-            "Enter: Run | d: Uninstall | Tab: Switch section | Esc: Close"
+    let has_filter = selector.has_filter();
+
+    let tips = if has_filter {
+        "Type to search | Esc: Clear search | Enter: Select"
+    } else {
+        match selector.section() {
+            AddonListSection::Available => {
+                "Type to search | Enter: Install | Tab: Section | Del: Uninstall | Esc: Close"
+            }
+            AddonListSection::Installed => {
+                "Type to search | Enter: Reinstall | Tab: Section | Del: Uninstall | Esc: Close"
+            }
         }
     };
 

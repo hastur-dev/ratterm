@@ -100,7 +100,7 @@ impl App {
         }
     }
 
-    /// Handles a fetched script by continuing the installation process.
+    /// Handles a fetched script by continuing the installation/uninstallation process.
     fn handle_fetched_script(&mut self, addon_id: &str, script_type: ScriptType, content: String) {
         match script_type {
             ScriptType::Install => {
@@ -126,6 +126,29 @@ impl App {
                     }
                 }
             }
+            ScriptType::Uninstall => {
+                // Write script and start background process
+                match self.addon_installer.start_uninstall_with_content(
+                    addon_id,
+                    &content,
+                    &mut self.background_manager,
+                ) {
+                    Ok(progress) => {
+                        if let Some(ref mut manager) = self.addon_manager {
+                            manager.set_install_progress(Some(progress));
+                        }
+                        self.set_status(format!("Uninstalling {}...", addon_id));
+                    }
+                    Err(e) => {
+                        warn!("[ADDON-OPS] handle_fetched_script: uninstall error: {}", e);
+                        self.set_status(format!("Failed to uninstall: {}", e));
+
+                        if let Some(ref mut manager) = self.addon_manager {
+                            manager.install_failed(e.to_string());
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -139,6 +162,7 @@ impl App {
         // Set the pending addon in manager
         if let Some(ref mut manager) = self.addon_manager {
             manager.set_pending_addon_id(Some(addon_id.to_string()));
+            manager.set_uninstalling(false);
             manager.set_mode(AddonManagerMode::Installing);
         }
 
@@ -147,10 +171,10 @@ impl App {
         self.set_status(format!("Downloading {}...", addon_id));
     }
 
-    /// Checks and updates addon install progress.
+    /// Checks and updates addon install/uninstall progress.
     pub fn check_addon_install_progress(&mut self) {
-        let progress = match self.addon_manager.as_ref() {
-            Some(m) => m.install_progress().cloned(),
+        let (progress, is_uninstalling) = match self.addon_manager.as_ref() {
+            Some(m) => (m.install_progress().cloned(), m.is_uninstalling()),
             None => return,
         };
 
@@ -173,8 +197,13 @@ impl App {
                 if let Some(ref mut manager) = self.addon_manager {
                     manager.install_failed(error);
                 }
+            } else if is_uninstalling {
+                info!("check_addon_install_progress: uninstall complete: {}", addon_id);
+
+                // Uninstall complete - remove from config
+                self.complete_addon_uninstall(&addon_id);
             } else {
-                info!("check_addon_install_progress: complete: {}", addon_id);
+                info!("check_addon_install_progress: install complete: {}", addon_id);
 
                 // Installation complete - save to config and return to list
                 self.complete_addon_install(&addon_id);
@@ -226,24 +255,47 @@ impl App {
         self.refresh_addon_list(false);
     }
 
-    /// Uninstalls an addon.
-    pub fn uninstall_addon(&mut self, addon_id: &str) {
-        info!("uninstall_addon: {}", addon_id);
+    /// Starts uninstalling an addon (non-blocking).
+    ///
+    /// This sends a request to fetch the uninstall script. The actual uninstallation
+    /// happens when the script is received via `poll_addon_fetcher()`.
+    pub fn start_addon_uninstall(&mut self, addon_id: &str) {
+        info!("[ADDON-OPS] start_addon_uninstall: {}", addon_id);
+
+        // Set the pending addon in manager
+        if let Some(ref mut manager) = self.addon_manager {
+            manager.set_pending_addon_id(Some(addon_id.to_string()));
+            manager.set_uninstalling(true);
+            manager.set_mode(AddonManagerMode::Installing);
+        }
+
+        // Request uninstall script fetch (non-blocking)
+        self.addon_fetcher.request_script(addon_id, ScriptType::Uninstall);
+        self.set_status(format!("Downloading uninstall script for {}...", addon_id));
+    }
+
+    /// Completes addon uninstallation by removing from config.
+    fn complete_addon_uninstall(&mut self, addon_id: &str) {
+        info!("complete_addon_uninstall: {}", addon_id);
 
         // Remove from config
         self.addon_config.remove_installed(addon_id);
 
         // Remove from storage
         if let Err(e) = self.addon_storage.remove_addon(addon_id) {
-            warn!("uninstall_addon: storage error: {}", e);
+            warn!("complete_addon_uninstall: storage error: {}", e);
             self.set_status(format!("Warning: Failed to update config: {}", e));
         }
 
-        // Update manager
+        // Update manager and return to list
         if let Some(ref mut manager) = self.addon_manager {
             manager.set_installed_addons(self.addon_config.installed.clone());
+            manager.return_to_list();
         }
 
         self.set_status(format!("Uninstalled: {}", addon_id));
+
+        // Refresh the list to show updated status
+        self.refresh_addon_list(false);
     }
 }
