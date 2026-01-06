@@ -42,6 +42,10 @@ pub struct SSHManagerSelector {
     add_host_password: String,
     /// Current field in add host mode.
     add_host_field: AddHostField,
+    /// Selected jump host ID for add host mode (None = no jump host).
+    add_host_jump_host_id: Option<u32>,
+    /// Index in the jump host selection list (for cycling).
+    add_host_jump_host_index: usize,
     /// Error message to display.
     error: Option<String>,
     /// Scroll offset for long lists.
@@ -85,6 +89,8 @@ impl SSHManagerSelector {
             add_host_username: String::new(),
             add_host_password: String::new(),
             add_host_field: AddHostField::Hostname,
+            add_host_jump_host_id: None,
+            add_host_jump_host_index: 0,
             error: None,
             scroll_offset: 0,
             scan_credential_field: ScanCredentialField::Username,
@@ -396,6 +402,72 @@ impl SSHManagerSelector {
         self.add_host_username.clear();
         self.add_host_password.clear();
         self.add_host_field = AddHostField::Hostname;
+        self.add_host_jump_host_id = None;
+        self.add_host_jump_host_index = 0;
+    }
+
+    /// Returns the selected jump host ID for add host.
+    #[must_use]
+    pub fn add_host_jump_host_id(&self) -> Option<u32> {
+        self.add_host_jump_host_id
+    }
+
+    /// Returns the display name of the selected jump host.
+    #[must_use]
+    pub fn add_host_jump_host_display(&self) -> &str {
+        match self.add_host_jump_host_id {
+            None => "(none)",
+            Some(id) => self
+                .hosts
+                .iter()
+                .find(|h| h.host.id == id)
+                .map(|h| h.host.display())
+                .unwrap_or("(unknown)"),
+        }
+    }
+
+    /// Cycles to the next available jump host.
+    pub fn next_jump_host(&mut self) {
+        if self.hosts.is_empty() {
+            self.add_host_jump_host_id = None;
+            return;
+        }
+
+        // Options: None, then each host
+        let total_options = self.hosts.len() + 1;
+        self.add_host_jump_host_index = (self.add_host_jump_host_index + 1) % total_options;
+
+        self.add_host_jump_host_id = if self.add_host_jump_host_index == 0 {
+            None
+        } else {
+            self.hosts
+                .get(self.add_host_jump_host_index - 1)
+                .map(|h| h.host.id)
+        };
+    }
+
+    /// Cycles to the previous available jump host.
+    pub fn prev_jump_host(&mut self) {
+        if self.hosts.is_empty() {
+            self.add_host_jump_host_id = None;
+            return;
+        }
+
+        // Options: None, then each host
+        let total_options = self.hosts.len() + 1;
+        self.add_host_jump_host_index = if self.add_host_jump_host_index == 0 {
+            total_options - 1
+        } else {
+            self.add_host_jump_host_index - 1
+        };
+
+        self.add_host_jump_host_id = if self.add_host_jump_host_index == 0 {
+            None
+        } else {
+            self.hosts
+                .get(self.add_host_jump_host_index - 1)
+                .map(|h| h.host.id)
+        };
     }
 
     /// Starts the add host mode.
@@ -432,6 +504,13 @@ impl SSHManagerSelector {
             AddHostField::DisplayName => self.add_host_display_name.push(c),
             AddHostField::Username => self.add_host_username.push(c),
             AddHostField::Password => self.add_host_password.push(c),
+            AddHostField::JumpHost => {
+                // JumpHost uses left/right arrows to cycle, not text input
+                // For convenience, treat space or enter as "next"
+                if c == ' ' {
+                    self.next_jump_host();
+                }
+            }
         }
     }
 
@@ -452,6 +531,11 @@ impl SSHManagerSelector {
             }
             AddHostField::Password => {
                 self.add_host_password.pop();
+            }
+            AddHostField::JumpHost => {
+                // Clear jump host selection on backspace
+                self.add_host_jump_host_id = None;
+                self.add_host_jump_host_index = 0;
             }
         }
     }

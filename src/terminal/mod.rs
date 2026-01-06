@@ -51,6 +51,8 @@ pub struct SSHContext {
     pub key_path: Option<String>,
     /// Host ID from SSHHostList (for credential lookup).
     pub host_id: Option<u32>,
+    /// ProxyJump string for SSH hopping (e.g., "user@bastion:22").
+    pub jump_host: Option<String>,
 }
 
 impl SSHContext {
@@ -68,7 +70,15 @@ impl SSHContext {
             password: None,
             key_path: None,
             host_id: None,
+            jump_host: None,
         }
+    }
+
+    /// Sets the jump host for this context.
+    #[must_use]
+    pub fn with_jump_host(mut self, jump_host: String) -> Self {
+        self.jump_host = Some(jump_host);
+        self
     }
 
     /// Sets the password for this context.
@@ -212,8 +222,9 @@ pub struct Terminal {
     cwd: Option<PathBuf>,
     /// Initial working directory (set at creation).
     initial_cwd: PathBuf,
-    /// Pending password for SSH auto-login.
-    pending_password: Option<String>,
+    /// Queue of pending passwords for SSH auto-login (supports multi-hop).
+    /// Passwords are consumed in order: first jump hosts, then final destination.
+    pending_passwords: std::collections::VecDeque<String>,
     /// Buffer to detect password prompt.
     output_buffer: String,
     /// SSH connection context (None for local terminals).
@@ -281,6 +292,29 @@ impl Terminal {
         host: &str,
         port: u16,
     ) -> Result<Self, PtyError> {
+        Self::with_ssh_jump(cols, rows, user, host, port, None)
+    }
+
+    /// Creates a new terminal running an SSH session with optional jump host.
+    ///
+    /// # Arguments
+    /// * `cols` - Number of columns
+    /// * `rows` - Number of rows
+    /// * `user` - SSH username
+    /// * `host` - SSH hostname or IP
+    /// * `port` - SSH port (22 is default)
+    /// * `jump_host` - Optional ProxyJump string (e.g., "user@bastion:22")
+    ///
+    /// # Errors
+    /// Returns error if PTY creation fails.
+    pub fn with_ssh_jump(
+        cols: u16,
+        rows: u16,
+        user: &str,
+        host: &str,
+        port: u16,
+        jump_host: Option<&str>,
+    ) -> Result<Self, PtyError> {
         // Find SSH executable
         let ssh_path = Self::find_ssh_path();
 
@@ -289,17 +323,31 @@ impl Terminal {
 
         // Build SSH arguments
         let mut args = Vec::new();
+
+        // Add ProxyJump if specified
+        if let Some(jump) = jump_host {
+            args.push("-J".to_string());
+            args.push(jump.to_string());
+        }
+
+        // Add port if non-standard
         if port != 22 {
             args.push("-p".to_string());
             args.push(port.to_string());
         }
+
+        // Add user@host
         args.push(format!("{}@{}", user, host));
         config.args = args;
 
         let mut terminal = Self::with_config(config)?;
 
         // Store SSH context for split inheritance
-        terminal.ssh_context = Some(SSHContext::new(user.to_string(), host.to_string(), port));
+        let mut ctx = SSHContext::new(user.to_string(), host.to_string(), port);
+        if let Some(jump) = jump_host {
+            ctx.jump_host = Some(jump.to_string());
+        }
+        terminal.ssh_context = Some(ctx);
 
         Ok(terminal)
     }
@@ -559,17 +607,34 @@ impl Terminal {
             input_buffer: String::new(),
             cwd: None,
             initial_cwd,
-            pending_password: None,
+            pending_passwords: std::collections::VecDeque::new(),
             output_buffer: String::new(),
             ssh_context: None,
             docker_context: None,
         })
     }
 
-    /// Sets a pending password for SSH auto-login.
-    /// The password will be sent when a password prompt is detected.
+    /// Adds a pending password to the queue for SSH auto-login.
+    /// Passwords are sent in order when password prompts are detected.
+    /// For SSH hopping, add jump host passwords first, then the final destination password.
     pub fn set_pending_password(&mut self, password: String) {
-        self.pending_password = Some(password);
+        self.pending_passwords.push_back(password);
+        self.output_buffer.clear();
+    }
+
+    /// Sets multiple pending passwords at once (for SSH hopping).
+    /// The passwords should be in order: jump host passwords first, then final destination.
+    pub fn set_pending_passwords(&mut self, passwords: Vec<String>) {
+        self.pending_passwords.clear();
+        for pwd in passwords {
+            self.pending_passwords.push_back(pwd);
+        }
+        self.output_buffer.clear();
+    }
+
+    /// Clears all pending passwords.
+    pub fn clear_pending_passwords(&mut self) {
+        self.pending_passwords.clear();
         self.output_buffer.clear();
     }
 
@@ -696,8 +761,8 @@ impl Terminal {
             return Ok(());
         }
 
-        // Check for password prompt if we have a pending password
-        if self.pending_password.is_some() {
+        // Check for password prompt if we have pending passwords
+        if !self.pending_passwords.is_empty() {
             // Append printable characters to output buffer for prompt detection
             for &byte in &data {
                 if byte.is_ascii_graphic() || byte == b' ' || byte == b':' {
@@ -712,7 +777,8 @@ impl Terminal {
             // Check for password prompt patterns
             let lower = self.output_buffer.to_lowercase();
             if lower.contains("password:") || lower.contains("password for") {
-                if let Some(password) = self.pending_password.take() {
+                // Pop the next password from the queue
+                if let Some(password) = self.pending_passwords.pop_front() {
                     // Send password followed by Enter
                     let _ = self.pty.write(password.as_bytes());
                     let _ = self.pty.write(b"\r");

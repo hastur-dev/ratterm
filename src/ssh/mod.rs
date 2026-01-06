@@ -15,6 +15,6 @@ pub mod host;
 pub mod scanner;
 pub mod storage;
 
-pub use host::{ConnectionStatus, SSHCredentials, SSHHost, SSHHostList};
+pub use host::{ConnectionStatus, JumpHostInfo, SSHCredentials, SSHHost, SSHHostList};
 pub use scanner::{NetworkInterface, NetworkScanner, ScanResult};
 pub use storage::{SSHStorage, StorageError, StorageMode};

@@ -65,10 +65,25 @@ impl TerminalGrid {
         host: &str,
         port: u16,
     ) -> Result<Self, PtyError> {
+        Self::new_ssh_with_jump(cols, rows, user, host, port, None)
+    }
+
+    /// Creates a new grid with an SSH terminal using a jump host.
+    ///
+    /// # Errors
+    /// Returns error if terminal creation fails.
+    pub fn new_ssh_with_jump(
+        cols: u16,
+        rows: u16,
+        user: &str,
+        host: &str,
+        port: u16,
+        jump_host: Option<&str>,
+    ) -> Result<Self, PtyError> {
         assert!(cols > 0, "Columns must be positive");
         assert!(rows > 0, "Rows must be positive");
 
-        let terminal = Terminal::with_ssh(cols, rows, user, host, port)?;
+        let terminal = Terminal::with_ssh_jump(cols, rows, user, host, port, jump_host)?;
 
         Ok(Self {
             terminals: [Some(terminal), None, None, None],
