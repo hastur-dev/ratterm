@@ -162,22 +162,86 @@ impl TerminalMultiplexer {
         port: u16,
         password: Option<&str>,
     ) -> Result<usize, PtyError> {
+        self.add_ssh_tab_with_jump(user, host, port, password, None)
+    }
+
+    /// Adds a new SSH terminal tab with optional password and jump host.
+    ///
+    /// # Arguments
+    /// * `user` - SSH username
+    /// * `host` - SSH hostname or IP
+    /// * `port` - SSH port
+    /// * `password` - Optional password for auto-login
+    /// * `jump_host` - Optional ProxyJump string (e.g., "user@bastion:22")
+    ///
+    /// # Errors
+    /// Returns error if maximum tabs reached or SSH session creation fails.
+    pub fn add_ssh_tab_with_jump(
+        &mut self,
+        user: &str,
+        host: &str,
+        port: u16,
+        password: Option<&str>,
+        jump_host: Option<&str>,
+    ) -> Result<usize, PtyError> {
+        self.add_ssh_tab_with_hop_passwords(user, host, port, password, jump_host, Vec::new())
+    }
+
+    /// Adds a new SSH terminal tab with passwords for both jump hosts and destination.
+    ///
+    /// # Arguments
+    /// * `user` - SSH username for final destination
+    /// * `host` - SSH hostname or IP of final destination
+    /// * `port` - SSH port of final destination
+    /// * `password` - Optional password for final destination auto-login
+    /// * `jump_host` - Optional ProxyJump string (e.g., "user@bastion:22")
+    /// * `jump_passwords` - Passwords for jump hosts (in order, outermost first)
+    ///
+    /// # Errors
+    /// Returns error if maximum tabs reached or SSH session creation fails.
+    pub fn add_ssh_tab_with_hop_passwords(
+        &mut self,
+        user: &str,
+        host: &str,
+        port: u16,
+        password: Option<&str>,
+        jump_host: Option<&str>,
+        jump_passwords: Vec<String>,
+    ) -> Result<usize, PtyError> {
         if self.tabs.len() >= MAX_TABS {
             return Err(PtyError::MaxTabsReached);
         }
 
-        let mut grid = TerminalGrid::new_ssh(self.cols, self.rows, user, host, port)?;
+        let mut grid =
+            TerminalGrid::new_ssh_with_jump(self.cols, self.rows, user, host, port, jump_host)?;
 
-        if let Some(pwd) = password {
-            if let Some(terminal) = grid.focused_mut() {
-                terminal.set_pending_password(pwd.to_string());
+        if let Some(terminal) = grid.focused_mut() {
+            // Build the complete password queue: jump host passwords first, then destination
+            let mut all_passwords = jump_passwords;
+            if let Some(pwd) = password {
+                all_passwords.push(pwd.to_string());
+            }
+
+            if !all_passwords.is_empty() {
+                terminal.set_pending_passwords(all_passwords);
+            }
+
+            // Store the destination password in SSH context for split inheritance
+            if let Some(pwd) = password {
                 terminal.set_ssh_password(pwd.to_string());
             }
         }
 
         let index = self.tabs.len();
 
-        let tab_name = if port == 22 {
+        // Include hop indicator in tab name
+        let tab_name = if jump_host.is_some() {
+            if port == 22 {
+                format!("SSH: {}@{} (via hop)", user, host)
+            } else {
+                format!("SSH: {}@{}:{} (via hop)", user, host, port)
+            }
+        } else if port == 22 {
             format!("SSH: {}@{}", user, host)
         } else {
             format!("SSH: {}@{}:{}", user, host, port)

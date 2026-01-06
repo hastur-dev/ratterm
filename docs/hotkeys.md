@@ -349,8 +349,11 @@ When adding a host manually (`A`), fill in these fields:
 | Display Name | Friendly name shown in list (optional, uses hostname if blank) |
 | Username | SSH username (optional, prompted on connect if not saved) |
 | Password | SSH password (optional, auto-entered on connect if saved) |
+| Jump Host | Select a registered SSH host to use as a bastion/jump host (optional) |
 
 **Navigation:** Use `Tab` to move between fields, `Enter` to submit, `Esc` to cancel.
+
+**Jump Host (SSH Hopping):** Use `Left`/`Right` arrows to cycle through available hosts when on the Jump Host field. This allows you to connect to internal servers via a bastion/head node using SSH's ProxyJump feature.
 
 ### Edit Display Name
 

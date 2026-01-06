@@ -57,6 +57,10 @@ pub struct SSHHost {
     pub last_connected: Option<String>,
     /// Number of successful connections.
     pub connection_count: u32,
+    /// Optional jump host ID for SSH hopping (ProxyJump).
+    /// When set, connections will first hop through the referenced host.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub jump_host_id: Option<u32>,
 }
 
 impl SSHHost {
@@ -79,6 +83,7 @@ impl SSHHost {
             display_name: None,
             last_connected: None,
             connection_count: 0,
+            jump_host_id: None,
         }
     }
 
@@ -100,7 +105,21 @@ impl SSHHost {
             display_name,
             last_connected: None,
             connection_count: 0,
+            jump_host_id: None,
         }
+    }
+
+    /// Sets the jump host for SSH hopping.
+    #[must_use]
+    pub fn with_jump_host(mut self, jump_host_id: u32) -> Self {
+        self.jump_host_id = Some(jump_host_id);
+        self
+    }
+
+    /// Returns true if this host uses a jump host for connection.
+    #[must_use]
+    pub fn has_jump_host(&self) -> bool {
+        self.jump_host_id.is_some()
     }
 
     /// Returns the display name or hostname if no display name is set.
@@ -143,6 +162,7 @@ impl Default for SSHHost {
             display_name: None,
             last_connected: None,
             connection_count: 0,
+            jump_host_id: None,
         }
     }
 }
@@ -228,6 +248,119 @@ impl Default for SSHCredentials {
         }
     }
 }
+
+/// Information about a jump host for SSH ProxyJump.
+///
+/// This struct contains all the information needed to construct
+/// the `-J` argument for SSH connections.
+#[derive(Debug, Clone)]
+pub struct JumpHostInfo {
+    /// Username for the jump host.
+    pub username: String,
+    /// Hostname or IP of the jump host.
+    pub hostname: String,
+    /// SSH port of the jump host.
+    pub port: u16,
+    /// Optional password for the jump host (for auto-login).
+    pub password: Option<String>,
+    /// Optional key path for the jump host.
+    pub key_path: Option<String>,
+    /// Nested jump host (for multi-hop chains).
+    pub next_jump: Option<Box<JumpHostInfo>>,
+}
+
+impl JumpHostInfo {
+    /// Creates a new jump host info.
+    #[must_use]
+    pub fn new(username: String, hostname: String, port: u16) -> Self {
+        assert!(!username.is_empty(), "username must not be empty");
+        assert!(!hostname.is_empty(), "hostname must not be empty");
+        assert!(port > 0, "port must be positive");
+
+        Self {
+            username,
+            hostname,
+            port,
+            password: None,
+            key_path: None,
+            next_jump: None,
+        }
+    }
+
+    /// Sets the password for this jump host.
+    #[must_use]
+    pub fn with_password(mut self, password: String) -> Self {
+        self.password = Some(password);
+        self
+    }
+
+    /// Sets the key path for this jump host.
+    #[must_use]
+    pub fn with_key(mut self, key_path: String) -> Self {
+        self.key_path = Some(key_path);
+        self
+    }
+
+    /// Chains another jump host (for multi-hop).
+    #[must_use]
+    pub fn with_next_jump(mut self, next: JumpHostInfo) -> Self {
+        self.next_jump = Some(Box::new(next));
+        self
+    }
+
+    /// Returns the ProxyJump string for this hop chain.
+    ///
+    /// Format: `user@host:port` or `user@host` if port is 22.
+    /// For multi-hop: `user1@host1:port1,user2@host2:port2`
+    #[must_use]
+    pub fn proxy_jump_string(&self) -> String {
+        let mut result = if self.port == 22 {
+            format!("{}@{}", self.username, self.hostname)
+        } else {
+            format!("{}@{}:{}", self.username, self.hostname, self.port)
+        };
+
+        // Append nested jumps (recursive chain)
+        if let Some(ref next) = self.next_jump {
+            result.push(',');
+            result.push_str(&next.proxy_jump_string());
+        }
+
+        result
+    }
+
+    /// Returns the depth of this hop chain (1 for single hop).
+    #[must_use]
+    pub fn chain_depth(&self) -> usize {
+        match &self.next_jump {
+            Some(next) => 1 + next.chain_depth(),
+            None => 1,
+        }
+    }
+
+    /// Collects all passwords in the chain in order (for multi-hop auto-login).
+    /// Returns passwords from outermost jump host to innermost.
+    /// Passwords that are None are skipped.
+    #[must_use]
+    pub fn collect_passwords(&self) -> Vec<String> {
+        let mut passwords = Vec::new();
+
+        // First, collect passwords from nested jumps (they get prompted first)
+        if let Some(ref next) = self.next_jump {
+            passwords.extend(next.collect_passwords());
+        }
+
+        // Then add this jump's password
+        if let Some(ref pwd) = self.password {
+            passwords.push(pwd.clone());
+        }
+
+        passwords
+    }
+}
+
+/// Maximum depth for jump host chains to prevent infinite loops.
+const MAX_JUMP_CHAIN_DEPTH: usize = 10;
 
 /// Collection of saved SSH hosts with their credentials.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -392,6 +525,151 @@ impl SSHHostList {
     pub fn contains_hostname(&self, hostname: &str) -> bool {
         self.hosts.iter().any(|h| h.hostname == hostname)
     }
+
+    /// Sets the jump host for a target host.
+    ///
+    /// Returns true if successful, false if target or jump host doesn't exist,
+    /// or if setting would create a circular reference.
+    pub fn set_jump_host(&mut self, target_id: u32, jump_host_id: Option<u32>) -> bool {
+        // Check target exists
+        let target_exists = self.hosts.iter().any(|h| h.id == target_id);
+        if !target_exists {
+            return false;
+        }
+
+        // If setting a jump host, validate it
+        if let Some(jump_id) = jump_host_id {
+            // Check jump host exists
+            if !self.hosts.iter().any(|h| h.id == jump_id) {
+                return false;
+            }
+
+            // Prevent self-reference
+            if target_id == jump_id {
+                return false;
+            }
+
+            // Prevent circular references
+            if self.would_create_cycle(target_id, jump_id) {
+                return false;
+            }
+        }
+
+        // Set the jump host
+        if let Some(host) = self.hosts.iter_mut().find(|h| h.id == target_id) {
+            host.jump_host_id = jump_host_id;
+        }
+
+        true
+    }
+
+    /// Checks if setting a jump host would create a circular reference.
+    fn would_create_cycle(&self, target_id: u32, proposed_jump_id: u32) -> bool {
+        let mut current_id = proposed_jump_id;
+        let mut visited = std::collections::HashSet::new();
+        visited.insert(target_id);
+
+        // Walk the chain from proposed jump host
+        for _ in 0..MAX_JUMP_CHAIN_DEPTH {
+            if visited.contains(&current_id) {
+                return true; // Cycle detected
+            }
+            visited.insert(current_id);
+
+            // Get the next hop
+            let next_hop = self
+                .hosts
+                .iter()
+                .find(|h| h.id == current_id)
+                .and_then(|h| h.jump_host_id);
+
+            match next_hop {
+                Some(next_id) => current_id = next_id,
+                None => return false, // End of chain, no cycle
+            }
+        }
+
+        // Chain too deep, treat as potential cycle
+        true
+    }
+
+    /// Builds the complete jump host chain for a host.
+    ///
+    /// Returns None if the host has no jump host configured.
+    /// Returns an error message if the chain is invalid (missing hosts, cycles, etc.).
+    pub fn build_jump_chain(&self, host_id: u32) -> Result<Option<JumpHostInfo>, String> {
+        let host = self
+            .hosts
+            .iter()
+            .find(|h| h.id == host_id)
+            .ok_or_else(|| "Host not found".to_string())?;
+
+        let jump_id = match host.jump_host_id {
+            Some(id) => id,
+            None => return Ok(None),
+        };
+
+        self.build_jump_chain_recursive(jump_id, 0).map(Some)
+    }
+
+    /// Recursively builds the jump chain.
+    fn build_jump_chain_recursive(
+        &self,
+        host_id: u32,
+        depth: usize,
+    ) -> Result<JumpHostInfo, String> {
+        if depth >= MAX_JUMP_CHAIN_DEPTH {
+            return Err("Jump chain too deep (max 10 hops)".to_string());
+        }
+
+        let host = self
+            .hosts
+            .iter()
+            .find(|h| h.id == host_id)
+            .ok_or_else(|| format!("Jump host {} not found", host_id))?;
+
+        let creds = self.get_credentials(host_id);
+
+        let username = creds
+            .map(|c| c.username.clone())
+            .unwrap_or_else(|| "root".to_string());
+
+        let mut info = JumpHostInfo::new(username, host.hostname.clone(), host.port);
+
+        // Add credentials if available
+        if let Some(c) = creds {
+            if let Some(ref pwd) = c.password {
+                info = info.with_password(pwd.clone());
+            }
+            if let Some(ref key) = c.key_path {
+                info = info.with_key(key.clone());
+            }
+        }
+
+        // Recursively build nested jumps
+        if let Some(next_jump_id) = host.jump_host_id {
+            let next_info = self.build_jump_chain_recursive(next_jump_id, depth + 1)?;
+            info = info.with_next_jump(next_info);
+        }
+
+        Ok(info)
+    }
+
+    /// Returns all hosts that can be used as jump hosts for the given target.
+    ///
+    /// Excludes the target itself and any hosts that would create a cycle.
+    #[must_use]
+    pub fn available_jump_hosts(&self, target_id: u32) -> Vec<&SSHHost> {
+        self.hosts
+            .iter()
+            .filter(|h| h.id != target_id && !self.would_create_cycle(target_id, h.id))
+            .collect()
+    }
+
+    /// Returns a mutable reference to a host by ID.
+    pub fn get_by_id_mut(&mut self, id: u32) -> Option<&mut SSHHost> {
+        self.hosts.iter_mut().find(|h| h.id == id)
+    }
 }
 
 #[cfg(test)]
@@ -473,5 +751,327 @@ mod tests {
 
         assert!(list.contains_hostname("existing.com"));
         assert!(!list.contains_hostname("new.com"));
+    }
+
+    // ==================== Jump Host Tests ====================
+
+    #[test]
+    fn test_ssh_host_with_jump_host() {
+        let host = SSHHost::new(1, "internal.server.com".to_string()).with_jump_host(2);
+
+        assert!(host.has_jump_host());
+        assert_eq!(host.jump_host_id, Some(2));
+    }
+
+    #[test]
+    fn test_ssh_host_default_no_jump() {
+        let host = SSHHost::new(1, "server.com".to_string());
+
+        assert!(!host.has_jump_host());
+        assert!(host.jump_host_id.is_none());
+    }
+
+    #[test]
+    fn test_jump_host_info_creation() {
+        let info = JumpHostInfo::new("admin".to_string(), "bastion.example.com".to_string(), 22);
+
+        assert_eq!(info.username, "admin");
+        assert_eq!(info.hostname, "bastion.example.com");
+        assert_eq!(info.port, 22);
+        assert!(info.password.is_none());
+        assert!(info.key_path.is_none());
+        assert!(info.next_jump.is_none());
+    }
+
+    #[test]
+    fn test_jump_host_info_with_password() {
+        let info = JumpHostInfo::new("admin".to_string(), "bastion.com".to_string(), 22)
+            .with_password("secret123".to_string());
+
+        assert_eq!(info.password, Some("secret123".to_string()));
+    }
+
+    #[test]
+    fn test_jump_host_info_with_key() {
+        let info = JumpHostInfo::new("admin".to_string(), "bastion.com".to_string(), 22)
+            .with_key("/home/user/.ssh/id_rsa".to_string());
+
+        assert_eq!(info.key_path, Some("/home/user/.ssh/id_rsa".to_string()));
+    }
+
+    #[test]
+    fn test_proxy_jump_string_standard_port() {
+        let info = JumpHostInfo::new("admin".to_string(), "bastion.example.com".to_string(), 22);
+
+        assert_eq!(info.proxy_jump_string(), "admin@bastion.example.com");
+    }
+
+    #[test]
+    fn test_proxy_jump_string_non_standard_port() {
+        let info = JumpHostInfo::new("admin".to_string(), "bastion.example.com".to_string(), 2222);
+
+        assert_eq!(info.proxy_jump_string(), "admin@bastion.example.com:2222");
+    }
+
+    #[test]
+    fn test_proxy_jump_string_multi_hop() {
+        let jump2 = JumpHostInfo::new("user2".to_string(), "hop2.com".to_string(), 22);
+        let jump1 = JumpHostInfo::new("user1".to_string(), "hop1.com".to_string(), 2222)
+            .with_next_jump(jump2);
+
+        assert_eq!(
+            jump1.proxy_jump_string(),
+            "user1@hop1.com:2222,user2@hop2.com"
+        );
+    }
+
+    #[test]
+    fn test_chain_depth_single() {
+        let info = JumpHostInfo::new("admin".to_string(), "bastion.com".to_string(), 22);
+
+        assert_eq!(info.chain_depth(), 1);
+    }
+
+    #[test]
+    fn test_chain_depth_multi_hop() {
+        let jump3 = JumpHostInfo::new("user3".to_string(), "hop3.com".to_string(), 22);
+        let jump2 = JumpHostInfo::new("user2".to_string(), "hop2.com".to_string(), 22)
+            .with_next_jump(jump3);
+        let jump1 = JumpHostInfo::new("user1".to_string(), "hop1.com".to_string(), 22)
+            .with_next_jump(jump2);
+
+        assert_eq!(jump1.chain_depth(), 3);
+    }
+
+    #[test]
+    fn test_set_jump_host_success() {
+        let mut list = SSHHostList::new();
+        let bastion_id = list.add_host("bastion.com".to_string(), 22).unwrap();
+        let internal_id = list
+            .add_host("internal.server.com".to_string(), 22)
+            .unwrap();
+
+        // Set bastion as jump host for internal
+        assert!(list.set_jump_host(internal_id, Some(bastion_id)));
+
+        // Verify it was set
+        let host = list.get_by_id(internal_id).unwrap();
+        assert_eq!(host.jump_host_id, Some(bastion_id));
+    }
+
+    #[test]
+    fn test_set_jump_host_clear() {
+        let mut list = SSHHostList::new();
+        let bastion_id = list.add_host("bastion.com".to_string(), 22).unwrap();
+        let internal_id = list.add_host("internal.com".to_string(), 22).unwrap();
+
+        // Set then clear
+        list.set_jump_host(internal_id, Some(bastion_id));
+        assert!(list.set_jump_host(internal_id, None));
+
+        let host = list.get_by_id(internal_id).unwrap();
+        assert!(host.jump_host_id.is_none());
+    }
+
+    #[test]
+    fn test_set_jump_host_self_reference_fails() {
+        let mut list = SSHHostList::new();
+        let host_id = list.add_host("server.com".to_string(), 22).unwrap();
+
+        // Trying to set a host as its own jump host should fail
+        assert!(!list.set_jump_host(host_id, Some(host_id)));
+    }
+
+    #[test]
+    fn test_set_jump_host_circular_fails() {
+        let mut list = SSHHostList::new();
+        let host_a = list.add_host("host-a.com".to_string(), 22).unwrap();
+        let host_b = list.add_host("host-b.com".to_string(), 22).unwrap();
+        let host_c = list.add_host("host-c.com".to_string(), 22).unwrap();
+
+        // A -> B (ok)
+        assert!(list.set_jump_host(host_a, Some(host_b)));
+        // B -> C (ok)
+        assert!(list.set_jump_host(host_b, Some(host_c)));
+        // C -> A would create cycle (fail)
+        assert!(!list.set_jump_host(host_c, Some(host_a)));
+    }
+
+    #[test]
+    fn test_set_jump_host_nonexistent_target_fails() {
+        let mut list = SSHHostList::new();
+        let bastion_id = list.add_host("bastion.com".to_string(), 22).unwrap();
+
+        // Target doesn't exist
+        assert!(!list.set_jump_host(999, Some(bastion_id)));
+    }
+
+    #[test]
+    fn test_set_jump_host_nonexistent_jump_fails() {
+        let mut list = SSHHostList::new();
+        let internal_id = list.add_host("internal.com".to_string(), 22).unwrap();
+
+        // Jump host doesn't exist
+        assert!(!list.set_jump_host(internal_id, Some(999)));
+    }
+
+    #[test]
+    fn test_build_jump_chain_no_jump() {
+        let mut list = SSHHostList::new();
+        let host_id = list.add_host("server.com".to_string(), 22).unwrap();
+
+        let chain = list.build_jump_chain(host_id).unwrap();
+        assert!(chain.is_none());
+    }
+
+    #[test]
+    fn test_build_jump_chain_single_hop() {
+        let mut list = SSHHostList::new();
+        let bastion_id = list
+            .add_host("bastion.example.com".to_string(), 22)
+            .unwrap();
+        let internal_id = list
+            .add_host("internal.server.com".to_string(), 22)
+            .unwrap();
+
+        // Set credentials for bastion
+        list.set_credentials(
+            bastion_id,
+            SSHCredentials::new("bastionuser".to_string(), None),
+        );
+
+        // Set bastion as jump for internal
+        list.set_jump_host(internal_id, Some(bastion_id));
+
+        let chain = list.build_jump_chain(internal_id).unwrap().unwrap();
+        assert_eq!(chain.username, "bastionuser");
+        assert_eq!(chain.hostname, "bastion.example.com");
+        assert_eq!(chain.port, 22);
+        assert!(chain.next_jump.is_none());
+        assert_eq!(chain.proxy_jump_string(), "bastionuser@bastion.example.com");
+    }
+
+    #[test]
+    fn test_build_jump_chain_multi_hop() {
+        let mut list = SSHHostList::new();
+        let hop1_id = list.add_host("hop1.example.com".to_string(), 22).unwrap();
+        let hop2_id = list.add_host("hop2.example.com".to_string(), 2222).unwrap();
+        let internal_id = list
+            .add_host("internal.server.com".to_string(), 22)
+            .unwrap();
+
+        // Set credentials
+        list.set_credentials(hop1_id, SSHCredentials::new("user1".to_string(), None));
+        list.set_credentials(hop2_id, SSHCredentials::new("user2".to_string(), None));
+
+        // Create chain: internal -> hop2 -> hop1
+        list.set_jump_host(hop2_id, Some(hop1_id));
+        list.set_jump_host(internal_id, Some(hop2_id));
+
+        let chain = list.build_jump_chain(internal_id).unwrap().unwrap();
+        assert_eq!(chain.chain_depth(), 2);
+        assert_eq!(
+            chain.proxy_jump_string(),
+            "user2@hop2.example.com:2222,user1@hop1.example.com"
+        );
+    }
+
+    #[test]
+    fn test_build_jump_chain_missing_jump_host_fails() {
+        let mut list = SSHHostList::new();
+        let internal_id = list.add_host("internal.com".to_string(), 22).unwrap();
+
+        // Manually set an invalid jump host ID
+        if let Some(host) = list.get_by_id_mut(internal_id) {
+            host.jump_host_id = Some(999);
+        }
+
+        let result = list.build_jump_chain(internal_id);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("not found"));
+    }
+
+    #[test]
+    fn test_available_jump_hosts() {
+        let mut list = SSHHostList::new();
+        let bastion_id = list.add_host("bastion.com".to_string(), 22).unwrap();
+        let internal_id = list.add_host("internal.com".to_string(), 22).unwrap();
+        let other_id = list.add_host("other.com".to_string(), 22).unwrap();
+
+        let available = list.available_jump_hosts(internal_id);
+        assert_eq!(available.len(), 2);
+
+        // Should not include itself
+        assert!(!available.iter().any(|h| h.id == internal_id));
+
+        // Should include bastion and other
+        assert!(available.iter().any(|h| h.id == bastion_id));
+        assert!(available.iter().any(|h| h.id == other_id));
+    }
+
+    #[test]
+    fn test_available_jump_hosts_excludes_cycles() {
+        let mut list = SSHHostList::new();
+        let host_a = list.add_host("a.com".to_string(), 22).unwrap();
+        let host_b = list.add_host("b.com".to_string(), 22).unwrap();
+        let host_c = list.add_host("c.com".to_string(), 22).unwrap();
+
+        // A -> B
+        list.set_jump_host(host_a, Some(host_b));
+
+        // Available for B should not include A (would create cycle)
+        let available = list.available_jump_hosts(host_b);
+        assert!(!available.iter().any(|h| h.id == host_a));
+        assert!(available.iter().any(|h| h.id == host_c));
+    }
+
+    // ==================== Password Collection Tests ====================
+
+    #[test]
+    fn test_collect_passwords_single_hop() {
+        let info = JumpHostInfo::new("user".to_string(), "bastion.com".to_string(), 22)
+            .with_password("secret123".to_string());
+
+        let passwords = info.collect_passwords();
+        assert_eq!(passwords.len(), 1);
+        assert_eq!(passwords[0], "secret123");
+    }
+
+    #[test]
+    fn test_collect_passwords_no_password() {
+        let info = JumpHostInfo::new("user".to_string(), "bastion.com".to_string(), 22);
+
+        let passwords = info.collect_passwords();
+        assert!(passwords.is_empty());
+    }
+
+    #[test]
+    fn test_collect_passwords_multi_hop() {
+        // Chain: hop1 (password1) -> hop2 (password2)
+        let hop2 = JumpHostInfo::new("user2".to_string(), "hop2.com".to_string(), 22)
+            .with_password("password2".to_string());
+        let hop1 = JumpHostInfo::new("user1".to_string(), "hop1.com".to_string(), 22)
+            .with_password("password1".to_string())
+            .with_next_jump(hop2);
+
+        let passwords = hop1.collect_passwords();
+        // Should be in order: hop2 password first (outermost), then hop1
+        assert_eq!(passwords.len(), 2);
+        assert_eq!(passwords[0], "password2");
+        assert_eq!(passwords[1], "password1");
+    }
+
+    #[test]
+    fn test_collect_passwords_partial_chain() {
+        // Chain: hop1 (password) -> hop2 (no password)
+        let hop2 = JumpHostInfo::new("user2".to_string(), "hop2.com".to_string(), 22);
+        let hop1 = JumpHostInfo::new("user1".to_string(), "hop1.com".to_string(), 22)
+            .with_password("password1".to_string())
+            .with_next_jump(hop2);
+
+        let passwords = hop1.collect_passwords();
+        // Only hop1 has a password
+        assert_eq!(passwords.len(), 1);
+        assert_eq!(passwords[0], "password1");
     }
 }

@@ -109,6 +109,8 @@ pub enum AddHostField {
     DisplayName,
     Username,
     Password,
+    /// Jump host selection (cycles through available hosts).
+    JumpHost,
 }
 
 impl AddHostField {
@@ -120,7 +122,8 @@ impl AddHostField {
             Self::Port => Self::DisplayName,
             Self::DisplayName => Self::Username,
             Self::Username => Self::Password,
-            Self::Password => Self::Hostname,
+            Self::Password => Self::JumpHost,
+            Self::JumpHost => Self::Hostname,
         }
     }
 
@@ -128,11 +131,12 @@ impl AddHostField {
     #[must_use]
     pub fn prev(self) -> Self {
         match self {
-            Self::Hostname => Self::Password,
+            Self::Hostname => Self::JumpHost,
             Self::Port => Self::Hostname,
             Self::DisplayName => Self::Port,
             Self::Username => Self::DisplayName,
             Self::Password => Self::Username,
+            Self::JumpHost => Self::Password,
         }
     }
 }

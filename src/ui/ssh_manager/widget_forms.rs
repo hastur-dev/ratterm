@@ -16,21 +16,23 @@ pub fn render_add_host(selector: &SSHManagerSelector, area: Rect, buf: &mut Buff
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(1),
-            Constraint::Length(1),
-            Constraint::Length(1),
-            Constraint::Length(1),
-            Constraint::Length(1),
-            Constraint::Length(1),
-            Constraint::Length(1),
-            Constraint::Length(1),
-            Constraint::Length(1),
-            Constraint::Length(1),
-            Constraint::Length(1),
-            Constraint::Length(1),
-            Constraint::Length(1),
-            Constraint::Min(1),
-            Constraint::Length(1),
+            Constraint::Length(1), // 0: title
+            Constraint::Length(1), // 1: description
+            Constraint::Length(1), // 2: blank
+            Constraint::Length(1), // 3: hostname label
+            Constraint::Length(1), // 4: hostname input
+            Constraint::Length(1), // 5: port label
+            Constraint::Length(1), // 6: port input
+            Constraint::Length(1), // 7: display name label
+            Constraint::Length(1), // 8: display name input
+            Constraint::Length(1), // 9: username label
+            Constraint::Length(1), // 10: username input
+            Constraint::Length(1), // 11: password label
+            Constraint::Length(1), // 12: password input
+            Constraint::Length(1), // 13: jump host label
+            Constraint::Length(1), // 14: jump host value
+            Constraint::Min(1),    // 15: spacer
+            Constraint::Length(1), // 16: footer
         ])
         .split(area);
 
@@ -90,6 +92,34 @@ pub fn render_add_host(selector: &SSHManagerSelector, area: Rect, buf: &mut Buff
         current_field == AddHostField::Password,
     );
 
+    // Jump host field (uses left/right to cycle through available hosts)
+    let is_jump_active = current_field == AddHostField::JumpHost;
+    let jump_label_style = if is_jump_active {
+        Style::default()
+            .fg(Color::Yellow)
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(Color::White)
+    };
+    Paragraph::new("Jump Host (← → to cycle):")
+        .style(jump_label_style)
+        .render(chunks[13], buf);
+
+    let jump_display = selector.add_host_jump_host_display();
+    let jump_text = if is_jump_active {
+        format!("< {} >", jump_display)
+    } else {
+        jump_display.to_string()
+    };
+    let jump_style = if is_jump_active {
+        Style::default().bg(Color::DarkGray).fg(Color::Cyan)
+    } else {
+        Style::default().fg(Color::DarkGray)
+    };
+    Paragraph::new(jump_text)
+        .style(jump_style)
+        .render(chunks[14], buf);
+
     let footer = Line::from(vec![
         Span::styled("[Tab]", Style::default().fg(Color::Cyan)),
         Span::raw(" Next Field "),
@@ -99,7 +129,7 @@ pub fn render_add_host(selector: &SSHManagerSelector, area: Rect, buf: &mut Buff
         Span::raw(" Cancel"),
     ]);
     let footer_para = Paragraph::new(footer).alignment(Alignment::Center);
-    footer_para.render(chunks[14], buf);
+    footer_para.render(chunks[16], buf);
 }
 
 /// Helper to render an add host field.

@@ -90,9 +90,14 @@ impl App {
 
     /// Handles SSH add host input.
     fn handle_ssh_add_host_input(&mut self, key: KeyEvent) {
+        use crate::ui::ssh_manager::AddHostField;
+
         let Some(ref mut manager) = self.ssh_manager else {
             return;
         };
+
+        // Check if we're on the JumpHost field for special handling
+        let is_jump_host_field = manager.add_host_field() == AddHostField::JumpHost;
 
         match (key.modifiers, key.code) {
             (KeyModifiers::NONE, KeyCode::Esc) => manager.cancel_add_host(),
@@ -102,6 +107,13 @@ impl App {
             }
             (KeyModifiers::NONE, KeyCode::Enter) => self.submit_add_ssh_host(),
             (KeyModifiers::NONE, KeyCode::Backspace) => manager.add_host_backspace(),
+            // Left/Right arrows cycle through jump hosts when on JumpHost field
+            (KeyModifiers::NONE, KeyCode::Left) if is_jump_host_field => {
+                manager.prev_jump_host();
+            }
+            (KeyModifiers::NONE, KeyCode::Right) if is_jump_host_field => {
+                manager.next_jump_host();
+            }
             (KeyModifiers::NONE, KeyCode::Char(c)) | (KeyModifiers::SHIFT, KeyCode::Char(c)) => {
                 manager.add_host_insert(c);
             }
