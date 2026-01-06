@@ -609,8 +609,7 @@ impl SSHHostList {
             None => return Ok(None),
         };
 
-        self.build_jump_chain_recursive(jump_id, 0)
-            .map(Some)
+        self.build_jump_chain_recursive(jump_id, 0).map(Some)
     }
 
     /// Recursively builds the jump chain.
@@ -663,9 +662,7 @@ impl SSHHostList {
     pub fn available_jump_hosts(&self, target_id: u32) -> Vec<&SSHHost> {
         self.hosts
             .iter()
-            .filter(|h| {
-                h.id != target_id && !self.would_create_cycle(target_id, h.id)
-            })
+            .filter(|h| h.id != target_id && !self.would_create_cycle(target_id, h.id))
             .collect()
     }
 
@@ -813,10 +810,7 @@ mod tests {
     fn test_proxy_jump_string_non_standard_port() {
         let info = JumpHostInfo::new("admin".to_string(), "bastion.example.com".to_string(), 2222);
 
-        assert_eq!(
-            info.proxy_jump_string(),
-            "admin@bastion.example.com:2222"
-        );
+        assert_eq!(info.proxy_jump_string(), "admin@bastion.example.com:2222");
     }
 
     #[test]
@@ -841,10 +835,10 @@ mod tests {
     #[test]
     fn test_chain_depth_multi_hop() {
         let jump3 = JumpHostInfo::new("user3".to_string(), "hop3.com".to_string(), 22);
-        let jump2 =
-            JumpHostInfo::new("user2".to_string(), "hop2.com".to_string(), 22).with_next_jump(jump3);
-        let jump1 =
-            JumpHostInfo::new("user1".to_string(), "hop1.com".to_string(), 22).with_next_jump(jump2);
+        let jump2 = JumpHostInfo::new("user2".to_string(), "hop2.com".to_string(), 22)
+            .with_next_jump(jump3);
+        let jump1 = JumpHostInfo::new("user1".to_string(), "hop1.com".to_string(), 22)
+            .with_next_jump(jump2);
 
         assert_eq!(jump1.chain_depth(), 3);
     }
@@ -853,7 +847,9 @@ mod tests {
     fn test_set_jump_host_success() {
         let mut list = SSHHostList::new();
         let bastion_id = list.add_host("bastion.com".to_string(), 22).unwrap();
-        let internal_id = list.add_host("internal.server.com".to_string(), 22).unwrap();
+        let internal_id = list
+            .add_host("internal.server.com".to_string(), 22)
+            .unwrap();
 
         // Set bastion as jump host for internal
         assert!(list.set_jump_host(internal_id, Some(bastion_id)));
@@ -931,8 +927,12 @@ mod tests {
     #[test]
     fn test_build_jump_chain_single_hop() {
         let mut list = SSHHostList::new();
-        let bastion_id = list.add_host("bastion.example.com".to_string(), 22).unwrap();
-        let internal_id = list.add_host("internal.server.com".to_string(), 22).unwrap();
+        let bastion_id = list
+            .add_host("bastion.example.com".to_string(), 22)
+            .unwrap();
+        let internal_id = list
+            .add_host("internal.server.com".to_string(), 22)
+            .unwrap();
 
         // Set credentials for bastion
         list.set_credentials(
@@ -956,7 +956,9 @@ mod tests {
         let mut list = SSHHostList::new();
         let hop1_id = list.add_host("hop1.example.com".to_string(), 22).unwrap();
         let hop2_id = list.add_host("hop2.example.com".to_string(), 2222).unwrap();
-        let internal_id = list.add_host("internal.server.com".to_string(), 22).unwrap();
+        let internal_id = list
+            .add_host("internal.server.com".to_string(), 22)
+            .unwrap();
 
         // Set credentials
         list.set_credentials(hop1_id, SSHCredentials::new("user1".to_string(), None));

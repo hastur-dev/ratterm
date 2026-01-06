@@ -499,8 +499,11 @@ impl App {
             } else {
                 ""
             };
-            self.set_status(format!("Added host: {} (id={}){}",hostname, id, jump_info));
-            info!("Successfully added SSH host: {} (id={}){}", hostname, id, jump_info);
+            self.set_status(format!("Added host: {} (id={}){}", hostname, id, jump_info));
+            info!(
+                "Successfully added SSH host: {} (id={}){}",
+                hostname, id, jump_info
+            );
         } else if let Some(ref mut manager) = self.ssh_manager {
             manager.set_error("Maximum hosts reached".to_string());
             warn!("Failed to add host: maximum hosts reached");
