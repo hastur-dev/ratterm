@@ -337,6 +337,7 @@ When the SSH Manager is open:
 | `A` | Add host manually (with display name, credentials) |
 | `E` | Edit display name of selected host |
 | `D` / `Delete` | Delete selected host |
+| `H` | Open SSH Health Dashboard |
 
 ### Add Host Form
 
@@ -395,6 +396,49 @@ Press `Ctrl+P` and type "ssh" to access these commands:
 | `SSH: Quick Connect #1` | Connect to saved host #1 |
 | `SSH: Quick Connect #2` | Connect to saved host #2 |
 | `SSH: Quick Connect #3` | Connect to saved host #3 |
+
+---
+
+## SSH Health Dashboard
+
+The SSH Health Dashboard displays live system metrics (CPU, RAM, Disk, GPU) for all registered SSH hosts.
+
+### Opening Health Dashboard
+
+| Method | How |
+|--------|-----|
+| From SSH Manager | Press `H` when SSH Manager is open |
+
+### Overview Mode (Default)
+
+Shows all hosts with their current metrics:
+
+| Hotkey | Action |
+|--------|--------|
+| `Esc` / `q` | Close dashboard |
+| `Up` / `k` | Previous host |
+| `Down` / `j` | Next host |
+| `Enter` | View detailed metrics for selected host |
+| `r` | Manual refresh (collect fresh metrics) |
+| `Space` | Toggle auto-refresh (1 second interval) |
+
+### Detail Mode
+
+Shows full metrics for a single host:
+
+| Hotkey | Action |
+|--------|--------|
+| `Esc` / `q` | Close dashboard |
+| `Backspace` | Return to overview |
+| `r` | Manual refresh |
+| `Space` | Toggle auto-refresh |
+
+### Dashboard Features
+
+- **Auto-refresh**: Updates every 1 second when enabled (toggle with `Space`)
+- **Progress bars**: Visual CPU, RAM, Disk, and GPU usage bars
+- **Status indicators**: Shows Online, Offline, Collecting, or Error state per host
+- **GPU detection**: Automatically detects NVIDIA (nvidia-smi) and AMD (rocm-smi) GPUs
 
 ---
 

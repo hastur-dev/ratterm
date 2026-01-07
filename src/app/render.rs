@@ -9,6 +9,7 @@ use crate::ui::{
     editor_tabs::EditorTabBar,
     editor_widget::EditorWidget,
     file_picker::{FilePickerWidget, RemoteFilePickerWidget},
+    health_dashboard::HealthDashboardWidget,
     layout::FocusedPane,
     popup::{
         KeybindingNotificationWidget, ModeSwitcherWidget, PopupWidget, ShellInstallPromptWidget,
@@ -80,10 +81,15 @@ impl App {
             }
         }
 
-        // Render terminal pane (with split support)
+        // Render terminal pane or health dashboard (with split support)
         if areas.has_terminal() {
-            debug!("RENDER: terminal pane");
-            self.render_terminal_pane(frame, &areas);
+            if self.is_health_dashboard_open() {
+                debug!("RENDER: health dashboard");
+                self.render_health_dashboard(frame, &areas);
+            } else {
+                debug!("RENDER: terminal pane");
+                self.render_terminal_pane(frame, &areas);
+            }
         }
 
         // Log boundary cells AFTER terminal render, BEFORE editor render
@@ -330,6 +336,35 @@ impl App {
                     }
                 }
             }
+        }
+    }
+
+    /// Renders the health dashboard in the terminal pane area.
+    fn render_health_dashboard(
+        &self,
+        frame: &mut ratatui::Frame,
+        areas: &crate::ui::layout::LayoutAreas,
+    ) {
+        if let Some(ref dashboard) = self.health_dashboard {
+            // Clear the background first
+            let terminal_theme = &self.config.theme_manager.current().terminal;
+            let clear_style = Style::default()
+                .bg(terminal_theme.background)
+                .fg(Color::Reset);
+            let buf = frame.buffer_mut();
+            for y in areas.terminal.y..areas.terminal.y + areas.terminal.height {
+                for x in areas.terminal.x..areas.terminal.x + areas.terminal.width {
+                    if let Some(cell) = buf.cell_mut((x, y)) {
+                        cell.reset();
+                        cell.set_char(' ');
+                        cell.set_style(clear_style);
+                    }
+                }
+            }
+
+            // Render the dashboard widget
+            let widget = HealthDashboardWidget::new(dashboard).focused(true);
+            frame.render_widget(widget, areas.terminal);
         }
     }
 

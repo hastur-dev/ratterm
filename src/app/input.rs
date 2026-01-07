@@ -26,6 +26,13 @@ impl App {
 
     /// Handles keys in normal mode.
     fn handle_normal_key(&mut self, key: KeyEvent) {
+        // Health dashboard takes priority when open
+        if self.is_health_dashboard_open() {
+            if self.handle_health_dashboard_key(key) {
+                return;
+            }
+        }
+
         if self.handle_global_key(key) {
             return;
         }

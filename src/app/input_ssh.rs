@@ -58,6 +58,10 @@ impl App {
                     m.start_edit_name();
                 }
             }
+            // Open health dashboard
+            (KeyModifiers::NONE, KeyCode::Char('h')) => {
+                self.open_health_dashboard();
+            }
             _ => {}
         }
     }
