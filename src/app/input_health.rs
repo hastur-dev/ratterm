@@ -1,6 +1,7 @@
 //! Health Dashboard input handling for the App.
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use tracing::{debug, info};
 
 use crate::ui::health_dashboard::DashboardMode;
 
@@ -73,11 +74,22 @@ impl App {
 
             // Close dashboard
             (KeyModifiers::NONE, KeyCode::Esc | KeyCode::Char('q')) => {
+                info!(
+                    "Dashboard close requested (overview mode) - key: {:?}",
+                    key.code
+                );
                 self.close_health_dashboard();
+                info!(
+                    "Dashboard closed, health_dashboard is_some: {}",
+                    self.health_dashboard.is_some()
+                );
                 true
             }
 
-            _ => false,
+            _ => {
+                debug!("Unhandled key in dashboard overview: {:?}", key);
+                false
+            }
         }
     }
 
@@ -100,11 +112,22 @@ impl App {
 
             // Close dashboard
             (KeyModifiers::NONE, KeyCode::Esc | KeyCode::Char('q')) => {
+                info!(
+                    "Dashboard close requested (detail mode) - key: {:?}",
+                    key.code
+                );
                 self.close_health_dashboard();
+                info!(
+                    "Dashboard closed, health_dashboard is_some: {}",
+                    self.health_dashboard.is_some()
+                );
                 true
             }
 
-            _ => false,
+            _ => {
+                debug!("Unhandled key in dashboard detail: {:?}", key);
+                false
+            }
         }
     }
 }

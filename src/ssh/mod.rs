@@ -18,7 +18,7 @@ pub mod metrics;
 pub mod scanner;
 pub mod storage;
 
-pub use collector::{build_collection_info, HostCollectionInfo, MetricsCollector};
+pub use collector::{HostCollectionInfo, MetricsCollector, build_collection_info};
 pub use host::{ConnectionStatus, JumpHostInfo, SSHCredentials, SSHHost, SSHHostList};
 pub use metrics::{DeviceMetrics, GpuMetrics, GpuType, MetricStatus};
 pub use scanner::{NetworkInterface, NetworkScanner, ScanResult};

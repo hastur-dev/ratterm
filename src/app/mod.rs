@@ -46,8 +46,8 @@ use crate::extension::ExtensionManager;
 use crate::filebrowser::FileBrowser;
 use crate::remote::{RemoteFileBrowser, RemoteFileManager};
 use crate::ssh::{NetworkScanner, SSHHostList, SSHStorage};
-use crate::ui::health_dashboard::HealthDashboard;
 use crate::terminal::{BackgroundManager, TerminalMultiplexer, pty::PtyError};
+use crate::ui::health_dashboard::HealthDashboard;
 use crate::ui::{
     docker_manager::DockerManagerSelector,
     editor_tabs::EditorTabInfo,

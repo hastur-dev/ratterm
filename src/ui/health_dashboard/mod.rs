@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use std::time::Instant;
 
 use crate::ssh::{
-    build_collection_info, DeviceMetrics, MetricStatus, MetricsCollector, SSHHost, SSHHostList,
+    DeviceMetrics, MetricStatus, MetricsCollector, SSHHost, SSHHostList, build_collection_info,
 };
 
 /// Maximum hosts displayed in dashboard.
@@ -50,7 +50,10 @@ impl DashboardHost {
     pub fn from_ssh_host(host: &SSHHost) -> Self {
         Self {
             host_id: host.id,
-            display_name: host.display_name.clone().unwrap_or_else(|| host.hostname.clone()),
+            display_name: host
+                .display_name
+                .clone()
+                .unwrap_or_else(|| host.hostname.clone()),
             hostname: host.hostname.clone(),
             port: host.port,
             metrics: DeviceMetrics::new(host.id),
@@ -59,10 +62,7 @@ impl DashboardHost {
 
     /// Updates this host's metrics.
     pub fn update_metrics(&mut self, metrics: DeviceMetrics) {
-        assert_eq!(
-            metrics.host_id, self.host_id,
-            "Metrics host ID must match"
-        );
+        assert_eq!(metrics.host_id, self.host_id, "Metrics host ID must match");
         self.metrics = metrics;
     }
 

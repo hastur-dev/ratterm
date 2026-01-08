@@ -3,6 +3,7 @@
 //! Handles key events for different application modes.
 
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use tracing::{debug, trace};
 
 use crate::config::is_windows_11;
 use crate::ui::layout::FocusedPane;
@@ -17,6 +18,14 @@ impl App {
             return;
         }
 
+        trace!(
+            "handle_key: mode={:?}, key={:?}, modifiers={:?}, dashboard_open={}",
+            self.mode,
+            key.code,
+            key.modifiers,
+            self.is_health_dashboard_open()
+        );
+
         match self.mode {
             AppMode::Normal => self.handle_normal_key(key),
             AppMode::FileBrowser => self.handle_file_browser_key(key),
@@ -28,9 +37,12 @@ impl App {
     fn handle_normal_key(&mut self, key: KeyEvent) {
         // Health dashboard takes priority when open
         if self.is_health_dashboard_open() {
+            debug!("Dashboard open, routing key to dashboard handler");
             if self.handle_health_dashboard_key(key) {
+                debug!("Key handled by dashboard");
                 return;
             }
+            debug!("Key NOT handled by dashboard, falling through to global");
         }
 
         if self.handle_global_key(key) {

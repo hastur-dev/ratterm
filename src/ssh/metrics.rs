@@ -104,7 +104,10 @@ impl GpuMetrics {
     /// Creates new GPU metrics.
     #[must_use]
     pub fn new(gpu_type: GpuType, name: String) -> Self {
-        assert!(!name.is_empty() || gpu_type == GpuType::None, "GPU name required for detected GPU");
+        assert!(
+            !name.is_empty() || gpu_type == GpuType::None,
+            "GPU name required for detected GPU"
+        );
         Self {
             gpu_type,
             name,
@@ -289,7 +292,7 @@ impl DeviceMetrics {
     /// Returns true if this device has GPU metrics.
     #[must_use]
     pub fn has_gpu(&self) -> bool {
-        self.gpu.as_ref().map_or(false, |g| g.is_available())
+        self.gpu.as_ref().is_some_and(|g| g.is_available())
     }
 }
 

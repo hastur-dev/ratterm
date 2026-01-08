@@ -98,7 +98,11 @@ fn render_header(dashboard: &HealthDashboard, area: Rect, buf: &mut Buffer) {
     let offline = dashboard.offline_count();
     let total = dashboard.host_count();
     let time_since = dashboard.time_since_refresh();
-    let auto_status = if dashboard.auto_refresh() { "ON" } else { "OFF" };
+    let auto_status = if dashboard.auto_refresh() {
+        "ON"
+    } else {
+        "OFF"
+    };
 
     let header = Line::from(vec![
         Span::styled(
@@ -217,7 +221,11 @@ fn render_host_row(host: &DashboardHost, selected: bool, area: Rect, buf: &mut B
 
     // Line 2: Metrics bars (only if online)
     if host.metrics.status.is_online() {
-        render_metrics_line(host, Rect::new(area.x + 2, area.y + 1, area.width - 2, 1), buf);
+        render_metrics_line(
+            host,
+            Rect::new(area.x + 2, area.y + 1, area.width - 2, 1),
+            buf,
+        );
     } else {
         let empty_line = Line::from(vec![Span::styled(
             "  CPU: --        RAM: --         DISK: --         GPU: --",
@@ -247,15 +255,19 @@ fn render_metrics_line(host: &DashboardHost, area: Rect, buf: &mut Buffer) {
                 ),
             ]
         } else {
-            vec![Span::styled("GPU: N/A", Style::default().fg(Color::DarkGray))]
+            vec![Span::styled(
+                "GPU: N/A",
+                Style::default().fg(Color::DarkGray),
+            )]
         }
     } else {
-        vec![Span::styled("GPU: N/A", Style::default().fg(Color::DarkGray))]
+        vec![Span::styled(
+            "GPU: N/A",
+            Style::default().fg(Color::DarkGray),
+        )]
     };
 
-    let mut spans = vec![
-        Span::styled("CPU: ", Style::default().fg(Color::DarkGray)),
-    ];
+    let mut spans = vec![Span::styled("CPU: ", Style::default().fg(Color::DarkGray))];
     spans.extend(cpu_bar);
     spans.push(Span::styled(
         format!(" {:3.0}%  ", m.cpu_usage_percent),
