@@ -3,9 +3,8 @@
 //! Handles key events for different application modes.
 
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
-use tracing::{debug, trace};
 
-use crate::config::is_windows_11;
+use crate::config::{is_windows_11, KeyBinding};
 use crate::ui::layout::FocusedPane;
 use crate::ui::popup::PopupKind;
 
@@ -88,6 +87,15 @@ impl App {
 
     /// Handles global keybindings. Returns true if handled.
     fn handle_global_key(&mut self, key: KeyEvent) -> bool {
+        // Check addon keybindings first
+        let binding = KeyBinding::from_key_event(&key);
+        if let Some(addon) = self.config.addon_commands.get(&binding) {
+            let name = addon.name.clone();
+            let command = addon.command.clone();
+            self.run_addon_command(&name, &command);
+            return true;
+        }
+
         match (key.modifiers, key.code) {
             (KeyModifiers::CONTROL, KeyCode::Char('i')) => {
                 self.toggle_ide();
