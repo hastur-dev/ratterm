@@ -319,6 +319,8 @@ fn collect_with_password(host: &HostCollectionInfo, password: &str) -> DeviceMet
 }
 
 /// Collects metrics using plink (PuTTY) on Windows.
+///
+/// Uses cmd.exe to pipe 'y' to plink to auto-accept host key prompts.
 fn collect_with_plink(host: &HostCollectionInfo, password: &str) -> DeviceMetrics {
     // Check if plink is available
     if !is_plink_available() {
@@ -328,46 +330,42 @@ fn collect_with_plink(host: &HostCollectionInfo, password: &str) -> DeviceMetric
         );
     }
 
-    let mut cmd = Command::new("plink");
+    // Build the plink command string
+    // We use cmd.exe to pipe 'y' to auto-accept host key if not cached
+    let port_arg = if host.port != 22 {
+        format!("-P {} ", host.port)
+    } else {
+        String::new()
+    };
 
-    // Use -batch mode but also add -no-antispoof to suppress prompts
-    // Note: -batch will fail if host key not cached, but user likely connected via SSH manager already
-    cmd.arg("-batch");
-    cmd.arg("-no-antispoof");
-
-    // Password
-    cmd.arg("-pw").arg(password);
-
-    // Add port if not default
-    if host.port != 22 {
-        cmd.arg("-P").arg(host.port.to_string());
-    }
-
-    // Add user@host
     let target = format!("{}@{}", host.username, host.hostname);
-    cmd.arg(&target);
 
-    // Add the metrics command
-    cmd.arg(METRICS_COMMAND);
+    // Build plink command - use -no-antispoof to suppress security warning
+    // The 'echo y |' will auto-accept the host key prompt if it appears
+    let plink_cmd = format!(
+        "echo y | plink -no-antispoof -pw \"{}\" {}{} \"{}\"",
+        password.replace('"', "\\\""),
+        port_arg,
+        target,
+        METRICS_COMMAND.replace('"', "\\\"")
+    );
 
     debug!(
-        "plink command: plink -batch -no-antispoof -pw *** {} {}",
-        if host.port != 22 {
-            format!("-P {}", host.port)
-        } else {
-            String::new()
-        },
-        target
+        "plink command via cmd: echo y | plink -no-antispoof -pw *** {}{}",
+        port_arg, target
     );
+
+    let mut cmd = Command::new("cmd");
+    cmd.arg("/C").arg(&plink_cmd);
 
     let result = execute_ssh_command(cmd, host.host_id);
 
-    // If plink failed (likely host key issue), show helpful message
+    // If plink still failed, show helpful message
     if result.status == MetricStatus::Error {
         if let Some(ref err) = result.error {
-            if err.contains("host key") || err.contains("SSH failed") {
+            if err.contains("host key") || err.contains("refused") {
                 warn!(
-                    "plink failed for {} - try connecting via SSH Manager first to cache host key",
+                    "plink failed for {} - consider using key-based auth or WSL sshpass",
                     host.hostname
                 );
             }

@@ -18,44 +18,71 @@ impl App {
             return;
         }
 
-        trace!(
-            "handle_key: mode={:?}, key={:?}, modifiers={:?}, dashboard_open={}",
-            self.mode,
-            key.code,
-            key.modifiers,
-            self.is_health_dashboard_open()
+        // VERBOSE LOGGING for dashboard debugging
+        let dashboard_open = self.is_health_dashboard_open();
+        tracing::info!(
+            "=== KEY EVENT === mode={:?}, key={:?}, modifiers={:?}, dashboard_open={}, popup_visible={}, popup_kind={:?}",
+            self.mode, key.code, key.modifiers, dashboard_open, self.popup.is_visible(), self.popup.kind()
         );
 
         match self.mode {
-            AppMode::Normal => self.handle_normal_key(key),
-            AppMode::FileBrowser => self.handle_file_browser_key(key),
-            AppMode::Popup => self.handle_popup_key(key),
+            AppMode::Normal => {
+                tracing::info!("Routing to handle_normal_key");
+                self.handle_normal_key(key);
+            }
+            AppMode::FileBrowser => {
+                tracing::info!("Routing to handle_file_browser_key");
+                self.handle_file_browser_key(key);
+            }
+            AppMode::Popup => {
+                tracing::info!("Routing to handle_popup_key");
+                self.handle_popup_key(key);
+            }
         }
     }
 
     /// Handles keys in normal mode.
     fn handle_normal_key(&mut self, key: KeyEvent) {
+        tracing::info!("handle_normal_key called, checking dashboard...");
+
         // Health dashboard takes priority when open
         if self.is_health_dashboard_open() {
-            debug!("Dashboard open, routing key to dashboard handler");
-            if self.handle_health_dashboard_key(key) {
-                debug!("Key handled by dashboard");
+            tracing::info!(
+                "Dashboard IS OPEN, calling handle_health_dashboard_key for {:?}",
+                key.code
+            );
+            let handled = self.handle_health_dashboard_key(key);
+            tracing::info!("handle_health_dashboard_key returned: {}", handled);
+            if handled {
+                tracing::info!("Key was handled by dashboard, returning early");
                 return;
             }
-            debug!("Key NOT handled by dashboard, falling through to global");
+            tracing::info!("Key NOT handled by dashboard, falling through to global");
+        } else {
+            tracing::info!("Dashboard is NOT open");
         }
 
+        tracing::info!("Checking global key handler...");
         if self.handle_global_key(key) {
+            tracing::info!("Key handled by global handler");
             return;
         }
 
         if self.layout.focused() == FocusedPane::Editor && self.handle_editor_global_key(key) {
+            tracing::info!("Key handled by editor global handler");
             return;
         }
 
+        tracing::info!("Falling through to pane handler, focused={:?}", self.layout.focused());
         match self.layout.focused() {
-            FocusedPane::Terminal => self.handle_terminal_key(key),
-            FocusedPane::Editor => self.handle_editor_key(key),
+            FocusedPane::Terminal => {
+                tracing::info!("Sending key to TERMINAL handler");
+                self.handle_terminal_key(key);
+            }
+            FocusedPane::Editor => {
+                tracing::info!("Sending key to editor handler");
+                self.handle_editor_key(key);
+            }
         }
     }
 
