@@ -15,6 +15,7 @@ pub use keybindings::{KeyAction, KeyBinding, KeybindingMode, Keybindings};
 pub use platform::{command_palette_hotkey, is_windows_11};
 pub use shell::{ShellDetector, ShellInfo, ShellInstallInfo, ShellInstaller, ShellType};
 
+use crate::logging::LogConfig;
 use crate::ssh::StorageMode;
 use crate::theme::{ThemeManager, ThemeSettings};
 
@@ -122,6 +123,14 @@ mode = vim
 # Examples:
 # addon.my-tool = f3|/path/to/my-tool
 # addon.rat-squad = f2|~/.ratterm/extensions/rat-squad/rat-squad
+
+# Logging Configuration
+# ---------------------
+# Logs are stored in ~/.ratterm/logs/ with automatic cleanup.
+#
+# log_enabled = true       # Enable/disable file logging (true/false)
+# log_level = info         # Log level: trace, debug, info, warn, error, off
+# log_retention = 24       # Hours to keep log files (default: 24)
 "#;
 
 /// Addon/extension command configuration.
@@ -158,6 +167,8 @@ pub struct Config {
     pub ssh_number_setting: bool,
     /// Addon hotkey bindings (keybinding -> command).
     pub addon_commands: HashMap<KeyBinding, AddonCommand>,
+    /// Logging configuration.
+    pub log_config: LogConfig,
 }
 
 impl Default for Config {
@@ -174,6 +185,7 @@ impl Default for Config {
             set_ssh_tab: "ctrl".to_string(),
             ssh_number_setting: true,
             addon_commands: HashMap::new(),
+            log_config: LogConfig::default(),
         }
     }
 }
@@ -323,6 +335,16 @@ impl Config {
             }
             "ssh_number_setting" => {
                 self.ssh_number_setting =
+                    matches!(value.to_lowercase().as_str(), "true" | "yes" | "1" | "on");
+            }
+            "log_level" => {
+                self.log_config.level = LogConfig::parse_level(value);
+            }
+            "log_retention" | "log_retention_hours" => {
+                self.log_config.retention_hours = LogConfig::parse_retention(value);
+            }
+            "log_enabled" | "logging" => {
+                self.log_config.enabled =
                     matches!(value.to_lowercase().as_str(), "true" | "yes" | "1" | "on");
             }
             _ => {
