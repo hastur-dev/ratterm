@@ -7,10 +7,12 @@ mod docker_connect;
 mod docker_ops;
 mod extension_ops;
 mod file_ops;
+mod health_ops;
 mod input;
 mod input_docker;
 mod input_docker_create;
 mod input_editor;
+mod input_health;
 mod input_mouse;
 mod input_ssh;
 mod input_terminal;
@@ -45,6 +47,7 @@ use crate::filebrowser::FileBrowser;
 use crate::remote::{RemoteFileBrowser, RemoteFileManager};
 use crate::ssh::{NetworkScanner, SSHHostList, SSHStorage};
 use crate::terminal::{BackgroundManager, TerminalMultiplexer, pty::PtyError};
+use crate::ui::health_dashboard::HealthDashboard;
 use crate::ui::{
     docker_manager::DockerManagerSelector,
     editor_tabs::EditorTabInfo,
@@ -191,6 +194,8 @@ pub struct App {
     pub(crate) completion_handle: Option<CompletionHandle>,
     /// Current completion suggestion text for rendering.
     pub(crate) completion_suggestion: Option<String>,
+    /// SSH health dashboard for monitoring device metrics.
+    pub(crate) health_dashboard: Option<HealthDashboard>,
 }
 
 impl App {
@@ -277,6 +282,7 @@ impl App {
             win11_notification_shown: false,
             completion_handle: Some(CompletionHandle::new(cwd)),
             completion_suggestion: None,
+            health_dashboard: None,
         })
     }
 
@@ -562,9 +568,10 @@ impl App {
         self.process_api_requests();
         self.background_manager.update_counts();
         self.poll_ssh_scanner();
+        self.poll_health_dashboard();
         self.update_completion_suggestion();
 
-        if !self.file_browser.is_visible() {
+        if !self.file_browser.is_visible() && !self.is_health_dashboard_open() {
             if let Some(ref mut terminals) = self.terminals {
                 if let Err(e) = terminals.process_all() {
                     self.last_error = Some(format!("Terminal error: {}", e));

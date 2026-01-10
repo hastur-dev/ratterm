@@ -191,6 +191,15 @@ impl KeyBinding {
         Self { modifiers, code }
     }
 
+    /// Creates a key binding from a crossterm KeyEvent.
+    #[must_use]
+    pub fn from_key_event(event: &crossterm::event::KeyEvent) -> Self {
+        Self {
+            modifiers: event.modifiers,
+            code: event.code,
+        }
+    }
+
     /// Parses a key binding from a string like "ctrl+shift+c".
     #[must_use]
     pub fn parse(s: &str) -> Option<Self> {
