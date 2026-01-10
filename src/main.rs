@@ -44,7 +44,9 @@ use crossterm::{
 use ratatui::{Terminal, backend::CrosstermBackend};
 
 use ratterm::app::App;
+use ratterm::config::Config;
 use ratterm::extension::{ExtensionManager, installer::Installer};
+use ratterm::logging::{self, LogConfig};
 #[cfg(not(windows))]
 use ratterm::updater::restart_application;
 use ratterm::updater::{self, StartupUpdateResult, UpdateStatus, Updater, VERSION};
@@ -153,8 +155,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         original_hook(panic_info);
     }));
 
-    // Initialize tracing for logging (both stderr and file)
-    setup_logging();
+    // Load config early so we can use log settings
+    let config = Config::load().unwrap_or_default();
+
+    // Initialize logging with configurable retention
+    setup_logging(&config.log_config);
 
     // Set up terminal
     enable_raw_mode()?;
@@ -282,38 +287,27 @@ fn restore_terminal() -> io::Result<()> {
     Ok(())
 }
 
-/// Sets up logging to both stderr and a file.
+/// Sets up logging using the logging module with configurable retention.
 ///
-/// Logs are written to `~/.ratterm/ratterm.log` with daily rotation.
-fn setup_logging() {
-    use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+/// Logs are written to `~/.ratterm/logs/` with automatic cleanup of old logs.
+fn setup_logging(log_config: &LogConfig) {
+    if let Err(e) = logging::init(log_config) {
+        // Fall back to stderr-only logging if file logging fails
+        eprintln!("Warning: Failed to initialize file logging: {}", e);
 
-    // Create log directory if it doesn't exist
-    let log_dir = dirs::home_dir()
-        .map(|h| h.join(".ratterm"))
-        .unwrap_or_else(|| std::path::PathBuf::from("."));
+        use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+        let env_filter = tracing_subscriber::EnvFilter::from_default_env()
+            .add_directive(tracing::Level::INFO.into());
 
-    std::fs::create_dir_all(&log_dir).ok();
-
-    // Create file appender with daily rotation
-    let file_appender = tracing_appender::rolling::daily(&log_dir, "ratterm.log");
-
-    // Build the subscriber with both stderr and file layers
-    let env_filter = tracing_subscriber::EnvFilter::from_default_env();
-
-    tracing_subscriber::registry()
-        .with(env_filter)
-        .with(
-            tracing_subscriber::fmt::layer()
-                .with_writer(std::io::stderr)
-                .with_ansi(true),
-        )
-        .with(
-            tracing_subscriber::fmt::layer()
-                .with_writer(file_appender)
-                .with_ansi(false),
-        )
-        .init();
+        tracing_subscriber::registry()
+            .with(env_filter)
+            .with(
+                tracing_subscriber::fmt::layer()
+                    .with_writer(std::io::stderr)
+                    .with_ansi(true),
+            )
+            .init();
+    }
 }
 
 /// Handles extension subcommands: `rat ext <command>`

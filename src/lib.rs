@@ -43,6 +43,7 @@ pub mod docker;
 pub mod editor;
 pub mod extension;
 pub mod filebrowser;
+pub mod logging;
 pub mod remote;
 pub mod session;
 pub mod ssh;
