@@ -1,6 +1,6 @@
 //! SSH Health Dashboard operations for the App.
 
-use tracing::{debug, info, warn};
+use tracing::{info, warn};
 
 use crate::ui::health_dashboard::HealthDashboard;
 
@@ -12,10 +12,29 @@ impl App {
     /// Loads SSH hosts and creates a new dashboard instance.
     /// Only hosts with saved credentials will be shown (credentials are required for SSH).
     pub fn open_health_dashboard(&mut self) {
-        info!("Opening SSH health dashboard");
+        info!("=== OPENING SSH HEALTH DASHBOARD ===");
+        info!(
+            "open_health_dashboard: Storage path={:?}, mode={:?}",
+            self.ssh_storage.path(),
+            self.ssh_storage.mode()
+        );
+
+        // Log pre-load state
+        let pre_load_hosts = self.ssh_hosts.len();
+        let pre_load_creds = self
+            .ssh_hosts
+            .hosts()
+            .filter(|h| self.ssh_hosts.get_credentials(h.id).is_some())
+            .count();
+        info!(
+            "open_health_dashboard: PRE-LOAD state: {} hosts, {} with credentials",
+            pre_load_hosts, pre_load_creds
+        );
 
         // Reload SSH hosts to ensure fresh data
         self.load_ssh_hosts();
+
+        // Log post-load state
         let total_hosts = self.ssh_hosts.len();
         let hosts_with_creds = self
             .ssh_hosts
@@ -24,32 +43,66 @@ impl App {
             .count();
 
         info!(
-            "Loaded {} SSH hosts, {} have credentials",
+            "open_health_dashboard: POST-LOAD state: {} hosts, {} with credentials",
             total_hosts, hosts_with_creds
         );
 
-        // Log hosts without credentials for debugging
-        for host in self.ssh_hosts.hosts() {
-            let has_creds = self.ssh_hosts.get_credentials(host.id).is_some();
-            debug!(
-                "Host {}: {} (has_creds={})",
-                host.id, host.hostname, has_creds
+        // Detect if load caused credential loss
+        if pre_load_creds > 0 && hosts_with_creds == 0 {
+            warn!(
+                "open_health_dashboard: CREDENTIAL LOSS DETECTED! Had {} creds before load, now have 0. \
+                 This suggests the storage file doesn't contain credentials or failed to parse.",
+                pre_load_creds
             );
-            if !has_creds {
-                info!(
-                    "Skipping host {} ({}) - no credentials saved",
-                    host.id, host.hostname
-                );
+        }
+
+        // Log detailed host/credential state for debugging
+        info!("open_health_dashboard: Host/Credential Details:");
+        for host in self.ssh_hosts.hosts() {
+            let creds = self.ssh_hosts.get_credentials(host.id);
+            match creds {
+                Some(c) => {
+                    info!(
+                        "  [OK] Host {} '{}' (id={}): username='{}', has_password={}, has_key={}, save={}",
+                        host.hostname,
+                        host.display_name.as_deref().unwrap_or("-"),
+                        host.id,
+                        c.username,
+                        c.password.is_some(),
+                        c.key_path.is_some(),
+                        c.save
+                    );
+                }
+                None => {
+                    warn!(
+                        "  [MISSING] Host {} '{}' (id={}): NO CREDENTIALS - will be excluded from dashboard",
+                        host.hostname,
+                        host.display_name.as_deref().unwrap_or("-"),
+                        host.id
+                    );
+                }
             }
         }
 
         // Create the dashboard with current hosts
         let mut dashboard = HealthDashboard::new(&self.ssh_hosts);
-        info!("Created dashboard with {} hosts", dashboard.host_count());
+        info!(
+            "open_health_dashboard: Created dashboard with {} hosts (filtered from {} total)",
+            dashboard.host_count(),
+            total_hosts
+        );
+
+        if dashboard.host_count() == 0 && total_hosts > 0 {
+            warn!(
+                "open_health_dashboard: Dashboard has 0 hosts but {} exist! \
+                 All hosts are missing credentials.",
+                total_hosts
+            );
+        }
 
         // Start initial metrics collection
         dashboard.refresh(&self.ssh_hosts);
-        info!("Started initial metrics collection");
+        info!("open_health_dashboard: Started initial metrics collection");
 
         self.health_dashboard = Some(dashboard);
 
@@ -58,9 +111,19 @@ impl App {
             self.hide_ssh_manager();
         }
 
+        // Use dedicated HealthDashboard mode for proper key handling
+        self.mode = AppMode::HealthDashboard;
+
         // Show informative status based on configuration
         let status_msg = if hosts_with_creds == 0 {
-            "SSH Health Dashboard - No hosts with credentials. Add credentials in SSH Manager.".to_string()
+            if total_hosts == 0 {
+                "SSH Health Dashboard - No hosts configured. Add hosts in SSH Manager.".to_string()
+            } else {
+                format!(
+                    "SSH Health Dashboard - {} hosts found but NONE have credentials. Save credentials in SSH Manager.",
+                    total_hosts
+                )
+            }
         } else if hosts_with_creds < total_hosts {
             format!(
                 "SSH Health Dashboard - Monitoring {}/{} hosts (others need credentials)",
@@ -73,62 +136,27 @@ impl App {
             )
         };
         self.set_status(status_msg);
+        info!("=== HEALTH DASHBOARD OPENED ===");
     }
 
     /// Closes the SSH health dashboard.
-    ///
-    /// Ensures proper cleanup of dashboard state and resets app mode to Normal.
     pub fn close_health_dashboard(&mut self) {
-        info!(
-            "Closing SSH health dashboard (current mode={:?}, popup_visible={})",
-            self.mode,
-            self.popup.is_visible()
-        );
+        info!("Closing SSH health dashboard (mode={:?})", self.mode);
 
         // Stop dashboard collector threads
         if let Some(ref mut dashboard) = self.health_dashboard {
             info!("Stopping dashboard collector threads");
             dashboard.stop();
-            info!("Dashboard collector stopped");
-        } else {
-            warn!("close_health_dashboard called but dashboard was None");
         }
 
-        // Clear the dashboard
+        // Clear the dashboard state
         self.health_dashboard = None;
-        debug!("Dashboard set to None");
 
-        // CRITICAL: Use hide_popup() to properly clean up ALL popup-related state
-        // This fixes the issue where hotkeys stop working after closing the dashboard
-        // because popup state (mode_switcher, shell_selector, etc.) wasn't being cleared
-        if self.popup.is_visible() {
-            info!("Hiding popup with full state cleanup");
-            self.hide_popup();
-        } else {
-            // Even if popup isn't visible, ensure mode is reset to Normal
-            // in case something else changed it
-            if self.mode != AppMode::Normal {
-                info!("Resetting app mode from {:?} to Normal", self.mode);
-                self.mode = AppMode::Normal;
-            }
-        }
+        // Reset mode to Normal
+        self.mode = AppMode::Normal;
 
-        // Clear SSH manager if somehow still set (shouldn't happen after hide_popup)
-        if self.ssh_manager.is_some() {
-            info!("Clearing lingering SSH manager state");
-            self.ssh_manager = None;
-        }
-
-        // Force a redraw to ensure UI updates properly
-        self.needs_redraw = true;
-
-        info!(
-            "Dashboard closed, final state: mode={:?}, popup_visible={}, ssh_manager={}",
-            self.mode,
-            self.popup.is_visible(),
-            self.ssh_manager.is_some()
-        );
         self.set_status("Dashboard closed");
+        info!("Dashboard closed, mode={:?}", self.mode);
     }
 
     /// Returns whether the health dashboard is open.
