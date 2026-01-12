@@ -229,15 +229,51 @@ fn collect_host_metrics(host: &HostCollectionInfo) -> DeviceMetrics {
         host.jump_host.is_some()
     );
 
-    // Check if we need password authentication
+    // Strategy: Try key-based auth first (uses SSH agent/default keys), then fall back to password
+    // This is because many servers are configured for key-only auth, and the user's SSH
+    // terminal connections work via keys even when passwords are stored in the app.
+
+    // First, try key-based authentication (works with SSH agent and ~/.ssh/ keys)
+    info!(
+        "Trying key-based authentication first for {}",
+        host.hostname
+    );
+    let key_result = collect_with_key(host);
+
+    // If key-based auth succeeded, return the result
+    if key_result.status != MetricStatus::Error {
+        info!(
+            "Key-based auth succeeded for {}: {:?}",
+            host.hostname, key_result.status
+        );
+        return key_result;
+    }
+
+    // Key-based auth failed - check if we have a password to try
     if let Some(ref password) = host.password {
-        debug!("Using password authentication for {}", host.hostname);
+        // Check if the error was auth-related (worth trying password) vs network (don't bother)
+        let error_msg = key_result.error.as_deref().unwrap_or("");
+        if error_msg.contains("timed out") || error_msg.contains("Connection refused") {
+            info!(
+                "Key-based auth failed with network error for {}, not trying password: {}",
+                host.hostname, error_msg
+            );
+            return key_result;
+        }
+
+        info!(
+            "Key-based auth failed for {}, trying password authentication. Error was: {}",
+            host.hostname, error_msg
+        );
         return collect_with_password(host, password);
     }
 
-    // No password - use key-based authentication with BatchMode
-    debug!("Using key-based authentication for {}", host.hostname);
-    collect_with_key(host)
+    // No password available, return the key-based auth error
+    info!(
+        "Key-based auth failed for {} and no password available",
+        host.hostname
+    );
+    key_result
 }
 
 /// Collects metrics using SSH key authentication.
@@ -753,20 +789,68 @@ fn find_ssh_path() -> PathBuf {
 
 /// Builds collection info for all hosts with credentials.
 pub fn build_collection_info(hosts: &SSHHostList) -> Vec<HostCollectionInfo> {
-    hosts
+    info!(
+        "build_collection_info: Building collection info for {} total hosts",
+        hosts.len()
+    );
+
+    let mut included_count = 0;
+    let mut excluded_count = 0;
+
+    let result: Vec<HostCollectionInfo> = hosts
         .hosts()
         .filter_map(|host| {
-            let creds = hosts.get_credentials(host.id)?;
-            let mut info = HostCollectionInfo::from_host(host, Some(creds))?;
+            let creds = hosts.get_credentials(host.id);
+            match creds {
+                Some(c) => {
+                    let mut info = HostCollectionInfo::from_host(host, Some(c))?;
 
-            // Add jump host if configured
-            if let Ok(Some(jump_info)) = hosts.build_jump_chain(host.id) {
-                info.jump_host = Some(jump_info.proxy_jump_string());
+                    // Add jump host if configured
+                    if let Ok(Some(jump_info)) = hosts.build_jump_chain(host.id) {
+                        info.jump_host = Some(jump_info.proxy_jump_string());
+                        debug!(
+                            "  [INCLUDE] Host {} '{}': username='{}', jump_host='{}'",
+                            host.id,
+                            host.hostname,
+                            c.username,
+                            info.jump_host.as_deref().unwrap_or("-")
+                        );
+                    } else {
+                        debug!(
+                            "  [INCLUDE] Host {} '{}': username='{}', no jump host",
+                            host.id, host.hostname, c.username
+                        );
+                    }
+
+                    included_count += 1;
+                    Some(info)
+                }
+                None => {
+                    debug!(
+                        "  [EXCLUDE] Host {} '{}': no credentials found",
+                        host.id, host.hostname
+                    );
+                    excluded_count += 1;
+                    None
+                }
             }
-
-            Some(info)
         })
-        .collect()
+        .collect();
+
+    info!(
+        "build_collection_info: Result: {} hosts included, {} excluded (no credentials)",
+        included_count, excluded_count
+    );
+
+    if result.is_empty() && !hosts.is_empty() {
+        warn!(
+            "build_collection_info: EMPTY RESULT - {} hosts exist but none have credentials! \
+             Metrics collection will not run.",
+            hosts.len()
+        );
+    }
+
+    result
 }
 
 #[cfg(test)]
