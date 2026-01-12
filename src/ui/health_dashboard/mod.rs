@@ -9,6 +9,8 @@ pub use widget::HealthDashboardWidget;
 use std::collections::HashMap;
 use std::time::Instant;
 
+use tracing::{debug, info, warn};
+
 use crate::ssh::{
     DeviceMetrics, MetricStatus, MetricsCollector, SSHHost, SSHHostList, build_collection_info,
 };
@@ -101,12 +103,48 @@ impl HealthDashboard {
     /// Creates a new health dashboard from SSH hosts.
     #[must_use]
     pub fn new(ssh_hosts: &SSHHostList) -> Self {
+        info!(
+            "HealthDashboard::new: Creating dashboard from {} total hosts",
+            ssh_hosts.len()
+        );
+
+        let mut included = 0;
+        let mut excluded = 0;
+
         let hosts: Vec<DashboardHost> = ssh_hosts
             .hosts()
-            .filter(|h| ssh_hosts.get_credentials(h.id).is_some())
+            .filter(|h| {
+                let has_creds = ssh_hosts.get_credentials(h.id).is_some();
+                if has_creds {
+                    debug!(
+                        "  [INCLUDE] Host {} '{}': has credentials",
+                        h.id, h.hostname
+                    );
+                    included += 1;
+                } else {
+                    debug!(
+                        "  [EXCLUDE] Host {} '{}': missing credentials",
+                        h.id, h.hostname
+                    );
+                    excluded += 1;
+                }
+                has_creds
+            })
             .take(MAX_DASHBOARD_HOSTS)
             .map(DashboardHost::from_ssh_host)
             .collect();
+
+        info!(
+            "HealthDashboard::new: Filtered result: {} included, {} excluded",
+            included, excluded
+        );
+
+        if hosts.is_empty() && !ssh_hosts.is_empty() {
+            warn!(
+                "HealthDashboard::new: Dashboard will be EMPTY! {} hosts exist but none have credentials.",
+                ssh_hosts.len()
+            );
+        }
 
         Self {
             hosts,
@@ -152,13 +190,33 @@ impl HealthDashboard {
 
     /// Starts a metrics collection cycle.
     pub fn refresh(&mut self, ssh_hosts: &SSHHostList) {
+        info!(
+            "HealthDashboard::refresh: Starting refresh for {} dashboard hosts from {} total SSH hosts",
+            self.hosts.len(),
+            ssh_hosts.len()
+        );
+
         let collection_info = build_collection_info(ssh_hosts);
+
         if !collection_info.is_empty() {
+            info!(
+                "HealthDashboard::refresh: Starting collection for {} hosts",
+                collection_info.len()
+            );
             self.collector.collect(&collection_info);
             self.last_refresh = Instant::now();
             self.error = None;
         } else {
-            self.error = Some("No hosts with credentials to collect".to_string());
+            let error_msg = if ssh_hosts.is_empty() {
+                "No SSH hosts configured".to_string()
+            } else {
+                format!(
+                    "No hosts with credentials to collect ({} hosts exist but none have saved credentials)",
+                    ssh_hosts.len()
+                )
+            };
+            warn!("HealthDashboard::refresh: {}", error_msg);
+            self.error = Some(error_msg);
         }
     }
 
