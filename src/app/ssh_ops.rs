@@ -46,35 +46,106 @@ impl App {
 
     /// Loads SSH hosts from storage.
     pub(crate) fn load_ssh_hosts(&mut self) {
+        info!(
+            "load_ssh_hosts: Starting load from {:?}",
+            self.ssh_storage.path()
+        );
+        info!(
+            "load_ssh_hosts: Current storage mode={:?}, needs_master_password={}",
+            self.ssh_storage.mode(),
+            self.ssh_storage.needs_master_password()
+        );
+
         match self.ssh_storage.load() {
             Ok(hosts) => {
+                let total_hosts = hosts.len();
                 let creds_count = hosts
                     .hosts()
                     .filter(|h| hosts.get_credentials(h.id).is_some())
                     .count();
+
                 info!(
-                    "Loaded {} SSH hosts with {} credentials from storage",
-                    hosts.len(),
-                    creds_count
+                    "load_ssh_hosts: SUCCESS - Loaded {} hosts with {} credentials",
+                    total_hosts, creds_count
                 );
-                self.set_status(format!(
-                    "Loaded {} hosts, {} with credentials",
-                    hosts.len(),
-                    creds_count
-                ));
+
+                // Log each host and its credential status
                 for host in hosts.hosts() {
-                    let has_creds = hosts.get_credentials(host.id).is_some();
-                    info!(
-                        "  - Loaded host {}: {} (has_creds={})",
-                        host.id, host.hostname, has_creds
+                    let creds = hosts.get_credentials(host.id);
+                    if let Some(c) = creds {
+                        info!(
+                            "  - Host {} '{}': has_creds=true, username='{}', has_password={}, has_key={}",
+                            host.id,
+                            host.hostname,
+                            c.username,
+                            c.password.is_some(),
+                            c.key_path.is_some()
+                        );
+                    } else {
+                        info!(
+                            "  - Host {} '{}': has_creds=false",
+                            host.id, host.hostname
+                        );
+                    }
+                }
+
+                // Log warning if hosts exist but no credentials
+                if total_hosts > 0 && creds_count == 0 {
+                    warn!(
+                        "load_ssh_hosts: {} hosts loaded but NONE have credentials! \
+                         Check if credentials were saved with 'save' checkbox enabled.",
+                        total_hosts
                     );
                 }
+
+                self.set_status(format!(
+                    "Loaded {} hosts, {} with credentials",
+                    total_hosts, creds_count
+                ));
                 self.ssh_hosts = hosts;
             }
             Err(e) => {
-                warn!("Failed to load SSH hosts: {}", e);
-                self.set_status(format!("Failed to load SSH hosts: {}", e));
-                self.ssh_hosts = crate::ssh::SSHHostList::new();
+                // Detailed error logging based on error type
+                let error_msg = format!("{}", e);
+                warn!("load_ssh_hosts: FAILED - {}", error_msg);
+
+                // Provide specific guidance based on error type
+                let user_msg = if error_msg.contains("Master password required") {
+                    warn!(
+                        "load_ssh_hosts: Storage is encrypted but no master password set. \
+                         User must unlock storage first."
+                    );
+                    "SSH storage locked - enter master password to unlock".to_string()
+                } else if error_msg.contains("Parse error") {
+                    warn!(
+                        "load_ssh_hosts: TOML parse error - storage file may be corrupted. \
+                         Check {:?} for syntax errors.",
+                        self.ssh_storage.path()
+                    );
+                    format!("SSH storage file corrupted: {}", error_msg)
+                } else if error_msg.contains("IO error") {
+                    warn!(
+                        "load_ssh_hosts: IO error reading {:?} - check file permissions",
+                        self.ssh_storage.path()
+                    );
+                    format!("Cannot read SSH storage: {}", error_msg)
+                } else {
+                    format!("Failed to load SSH hosts: {}", error_msg)
+                };
+
+                self.set_status(user_msg);
+
+                // IMPORTANT: Don't reset to empty if we already have hosts in memory
+                // This preserves in-memory state if disk load fails
+                if self.ssh_hosts.is_empty() {
+                    info!("load_ssh_hosts: No existing hosts in memory, initializing empty list");
+                    self.ssh_hosts = crate::ssh::SSHHostList::new();
+                } else {
+                    warn!(
+                        "load_ssh_hosts: Preserving {} existing in-memory hosts despite load failure",
+                        self.ssh_hosts.len()
+                    );
+                }
             }
         }
     }
