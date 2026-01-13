@@ -1,7 +1,7 @@
 //! Health Dashboard input handling for the App.
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 use crate::ui::health_dashboard::DashboardMode;
 
@@ -10,80 +10,51 @@ use super::App;
 impl App {
     /// Handles key events when the health dashboard is open.
     ///
-    /// Returns true if the key was handled by the dashboard.
-    pub fn handle_health_dashboard_key(&mut self, key: KeyEvent) -> bool {
-        info!(">>> handle_health_dashboard_key ENTRY");
+    /// Called from handle_popup_key when popup kind is HealthDashboard.
+    pub(super) fn handle_health_dashboard_key(&mut self, key: KeyEvent) {
+        info!("DASHBOARD: handle_health_dashboard_key called, code={:?}", key.code);
 
-        let dashboard = match self.health_dashboard.as_mut() {
-            Some(d) => {
-                info!("Dashboard exists, getting mode...");
-                d
-            }
-            None => {
-                warn!("!!! handle_health_dashboard_key called but dashboard is None!");
-                return false;
-            }
+        let Some(ref dashboard) = self.health_dashboard else {
+            info!("DASHBOARD: dashboard is None, hiding popup");
+            self.hide_popup();
+            return;
         };
 
-        let dashboard_mode = dashboard.mode();
-        info!(
-            "Dashboard mode={:?}, key.code={:?}, key.modifiers={:?}",
-            dashboard_mode, key.code, key.modifiers
-        );
+        let mode = dashboard.mode();
+        info!("DASHBOARD: mode={:?}", mode);
 
-        let handled = match dashboard_mode {
-            DashboardMode::Overview => {
-                info!("Calling handle_dashboard_overview_key");
-                self.handle_dashboard_overview_key(key)
-            }
-            DashboardMode::Detail => {
-                info!("Calling handle_dashboard_detail_key");
-                self.handle_dashboard_detail_key(key)
-            }
-        };
-
-        info!("<<< handle_health_dashboard_key EXIT, returning {}", handled);
-        handled
+        match mode {
+            DashboardMode::Overview => self.handle_dashboard_overview_key(key),
+            DashboardMode::Detail => self.handle_dashboard_detail_key(key),
+        }
     }
 
     /// Handles keys in overview mode.
-    fn handle_dashboard_overview_key(&mut self, key: KeyEvent) -> bool {
-        info!(">>> handle_dashboard_overview_key: modifiers={:?}, code={:?}", key.modifiers, key.code);
+    fn handle_dashboard_overview_key(&mut self, key: KeyEvent) {
+        info!("DASHBOARD OVERVIEW: code={:?}, mods={:?}", key.code, key.modifiers);
 
         match (key.modifiers, key.code) {
             // Navigation
-            (KeyModifiers::NONE, KeyCode::Up) => {
-                info!("MATCHED: Up arrow");
+            (KeyModifiers::NONE, KeyCode::Up) | (KeyModifiers::NONE, KeyCode::Char('k')) => {
+                info!("DASHBOARD: select_previous");
                 if let Some(ref mut dashboard) = self.health_dashboard {
                     dashboard.select_previous();
                 }
             }
-            (KeyModifiers::NONE, KeyCode::Char('k')) => {
-                info!("MATCHED: 'k' key");
-                if let Some(ref mut dashboard) = self.health_dashboard {
-                    dashboard.select_previous();
-                }
-            }
-            (KeyModifiers::NONE, KeyCode::Down) => {
-                info!("MATCHED: Down arrow");
-                if let Some(ref mut dashboard) = self.health_dashboard {
-                    dashboard.select_next();
-                }
-            }
-            (KeyModifiers::NONE, KeyCode::Char('j')) => {
-                info!("MATCHED: 'j' key");
+            (KeyModifiers::NONE, KeyCode::Down) | (KeyModifiers::NONE, KeyCode::Char('j')) => {
+                info!("DASHBOARD: select_next");
                 if let Some(ref mut dashboard) = self.health_dashboard {
                     dashboard.select_next();
                 }
             }
             (KeyModifiers::NONE, KeyCode::Home) => {
-                info!("MATCHED: Home");
+                info!("DASHBOARD: select_first");
                 if let Some(ref mut dashboard) = self.health_dashboard {
                     dashboard.select_first();
                 }
             }
             (KeyModifiers::NONE, KeyCode::End) => {
-                info!("MATCHED: End");
+                info!("DASHBOARD: select_last");
                 if let Some(ref mut dashboard) = self.health_dashboard {
                     dashboard.select_last();
                 }
@@ -91,7 +62,7 @@ impl App {
 
             // Enter detail mode
             (KeyModifiers::NONE, KeyCode::Enter) => {
-                info!("MATCHED: Enter");
+                info!("DASHBOARD: enter_detail");
                 if let Some(ref mut dashboard) = self.health_dashboard {
                     dashboard.enter_detail();
                 }
@@ -99,38 +70,30 @@ impl App {
 
             // Refresh
             (KeyModifiers::NONE, KeyCode::Char('r')) => {
-                info!("MATCHED: 'r' refresh");
+                info!("DASHBOARD: refresh");
                 self.refresh_health_dashboard();
             }
 
             // Toggle auto-refresh
             (KeyModifiers::NONE, KeyCode::Char(' ')) => {
-                info!("MATCHED: Space toggle auto-refresh");
+                info!("DASHBOARD: toggle_auto_refresh");
                 self.toggle_dashboard_auto_refresh();
             }
 
             // Close dashboard
-            (KeyModifiers::NONE, KeyCode::Esc) => {
-                info!("MATCHED: Esc - closing dashboard");
-                self.close_health_dashboard();
-            }
-            (KeyModifiers::NONE, KeyCode::Char('q')) => {
-                info!("MATCHED: 'q' - closing dashboard");
+            (KeyModifiers::NONE, KeyCode::Esc) | (KeyModifiers::NONE, KeyCode::Char('q')) => {
+                info!("DASHBOARD: close");
                 self.close_health_dashboard();
             }
 
             _ => {
-                info!("NO MATCH - unhandled key (still consuming): modifiers={:?}, code={:?}", key.modifiers, key.code);
+                info!("DASHBOARD: unhandled key {:?}", key.code);
             }
         }
-        // IMPORTANT: Always return true to consume ALL keys when dashboard is open
-        // This prevents keys from falling through to the terminal
-        info!("<<< handle_dashboard_overview_key returning TRUE");
-        true
     }
 
     /// Handles keys in detail mode.
-    fn handle_dashboard_detail_key(&mut self, key: KeyEvent) -> bool {
+    fn handle_dashboard_detail_key(&mut self, key: KeyEvent) {
         match (key.modifiers, key.code) {
             // Back to overview
             (KeyModifiers::NONE, KeyCode::Backspace | KeyCode::Esc) => {
@@ -144,25 +107,14 @@ impl App {
                 self.refresh_health_dashboard();
             }
 
-            // Close dashboard
+            // Close dashboard completely
             (KeyModifiers::NONE, KeyCode::Char('q')) => {
-                info!(
-                    "Dashboard close requested (detail mode) - key: {:?}",
-                    key.code
-                );
                 self.close_health_dashboard();
-                info!(
-                    "Dashboard closed, health_dashboard is_some: {}",
-                    self.health_dashboard.is_some()
-                );
             }
 
             _ => {
-                debug!("Unhandled key in dashboard detail (consumed): {:?}", key);
+                debug!("Unhandled key in dashboard detail: {:?}", key.code);
             }
         }
-        // IMPORTANT: Always return true to consume ALL keys when dashboard is open
-        // This prevents keys from falling through to the terminal
-        true
     }
 }
