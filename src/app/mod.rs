@@ -72,6 +72,8 @@ pub enum AppMode {
     FileBrowser,
     /// Popup dialog is active.
     Popup,
+    /// SSH Health Dashboard is active.
+    HealthDashboard,
 }
 
 /// Context for file browser operations.
