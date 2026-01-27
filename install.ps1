@@ -11,7 +11,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$Version = "0.1.8"
+$Version = "0.1.9"
 $Repo = "hastur-dev/ratterm"
 $BinaryName = "rat"
 $AppName = "ratterm"
