@@ -79,6 +79,17 @@ jobs:
         with:
           path: artifacts
 
+      - name: Read CHANGES.md
+        id: changes
+        run: |
+          if [ -f CHANGES.md ]; then
+            echo "changes<<EOF" >> $GITHUB_OUTPUT
+            cat CHANGES.md >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          else
+            echo "changes=No changes documented." >> $GITHUB_OUTPUT
+          fi
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
@@ -88,6 +99,10 @@ jobs:
           prerelease: false
           files: artifacts/**/*
           body: |
+            ${{ steps.changes.outputs.changes }}
+
+            ---
+
             ## Installation
 
             ### Quick Install (recommended)
