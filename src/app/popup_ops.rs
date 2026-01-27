@@ -400,7 +400,9 @@ impl App {
             | PopupKind::SSHStorageSetup
             | PopupKind::SSHMasterPassword
             | PopupKind::SSHSubnetEntry
-            | PopupKind::DockerManager => {
+            | PopupKind::DockerManager
+            | PopupKind::HealthDashboard => {
+                // These popups handle their own Enter actions
                 self.hide_popup();
             }
             PopupKind::KeybindingChangeNotification => {

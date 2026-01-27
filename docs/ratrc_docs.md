@@ -623,6 +623,96 @@ You can also change themes without editing `.ratrc` directly:
 
 ---
 
+---
+
+### Logging Configuration
+
+Ratterm includes a file-based logging system for debugging and troubleshooting.
+
+#### Enable/Disable Logging
+
+```
+log_enabled = <true|false>
+```
+
+| Value | Description |
+|-------|-------------|
+| `false` | Logging disabled (default) |
+| `true` / `yes` / `1` / `on` | Enable file logging |
+
+---
+
+#### Log Level
+
+```
+log_level = <level>
+```
+
+Sets the minimum severity level for logged messages.
+
+| Value | Description |
+|-------|-------------|
+| `off` | No logging |
+| `error` | Only errors |
+| `warn` | Errors and warnings |
+| `info` | General information (default when enabled) |
+| `debug` | Detailed debugging information |
+| `trace` | Most verbose - all messages |
+
+**Example:**
+```
+log_level = debug
+```
+
+---
+
+#### Log Retention
+
+```
+log_retention = <hours>
+```
+
+Sets how long log files are kept before automatic deletion.
+
+| Value | Description |
+|-------|-------------|
+| `24` | Keep logs for 24 hours (default) |
+| Any positive number | Hours to retain logs |
+
+**Example:**
+```
+log_retention = 48
+```
+
+**Log file location:** `~/.ratterm/logs/`
+
+---
+
+### Custom Addon Commands
+
+You can create custom hotkey bindings that execute shell commands in a new terminal tab.
+
+```
+addon.<name> = <hotkey>|<command>
+```
+
+| Component | Description |
+|-----------|-------------|
+| `<name>` | Unique identifier for this addon command |
+| `<hotkey>` | Key combination (e.g., `ctrl+shift+g`) |
+| `<command>` | Shell command to execute |
+
+**Example:**
+```
+addon.git_status = ctrl+shift+g|git status
+addon.npm_test = ctrl+shift+t|npm test
+addon.docker_ps = ctrl+alt+d|docker ps -a
+```
+
+When triggered, the command runs in a new terminal tab.
+
+---
+
 ## Reloading Configuration
 
 Configuration is loaded on application startup. To apply changes, restart Ratterm.
@@ -631,10 +721,38 @@ Theme changes via the Command Palette take effect immediately and are automatica
 
 ---
 
-## File Location
+## Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `RATTERM_NO_UPDATE` | Set to `1` to disable auto-update checks |
+| `RATTERM_INSTALL_DIR` | Custom installation directory |
+| `RATTERM_LOG_LEVEL` | Override log level (trace/debug/info/warn/error/off) |
+
+---
+
+## File Locations
+
+### Configuration File
 
 | Platform | Path |
 |----------|------|
 | Windows | `C:\Users\<username>\.ratrc` |
 | macOS | `/Users/<username>/.ratrc` |
 | Linux | `/home/<username>/.ratrc` |
+
+### Data Directory
+
+| Platform | Path |
+|----------|------|
+| Windows | `C:\Users\<username>\.ratterm\` |
+| macOS | `/Users/<username>/.ratterm/` |
+| Linux | `/home/<username>/.ratterm/` |
+
+**Data directory contents:**
+- `logs/` - Log files (when logging enabled)
+- `extensions/` - Installed extensions
+- `themes/` - Custom themes
+- `ssh_hosts.toml` - SSH hosts and credentials
+- `docker_items.toml` - Docker quick-connect settings
+- `approved_extensions.toml` - Extension approvals

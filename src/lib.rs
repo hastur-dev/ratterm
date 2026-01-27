@@ -39,10 +39,12 @@ pub mod app;
 pub mod clipboard;
 pub mod completion;
 pub mod config;
+pub mod daemon;
 pub mod docker;
 pub mod editor;
 pub mod extension;
 pub mod filebrowser;
+pub mod logging;
 pub mod remote;
 pub mod session;
 pub mod ssh;
@@ -64,3 +66,6 @@ pub use remote::{RemoteFile, RemoteFileManager};
 pub use ssh::{NetworkScanner, SSHHost, SSHHostList, SSHStorage};
 pub use terminal::Terminal;
 pub use theme::{Theme, ThemeManager, ThemePreset};
+
+// Re-export daemon types
+pub use daemon::{DaemonDeployer, DaemonError, DaemonManager, DaemonMetrics, DaemonStatus};

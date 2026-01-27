@@ -325,6 +325,33 @@ impl ParserPerformer<'_> {
                     self.actions.push(ParsedAction::Hyperlink { url, id });
                 }
             }
+            "52" => {
+                // OSC 52: Clipboard operations
+                // Format: OSC 52 ; <selection> ; <base64-data> ST
+                // Selection: c=clipboard, p=primary, s=secondary, etc.
+                // If base64-data is "?", it's a query (not supported)
+                if data.len() >= 3 {
+                    let base64_data = String::from_utf8_lossy(data[2]);
+                    // Skip clipboard queries (data == "?")
+                    if base64_data != "?" && !base64_data.is_empty() {
+                        if let Some(decoded) = decode_base64(&base64_data) {
+                            self.actions.push(ParsedAction::SetClipboard(decoded));
+                        }
+                    }
+                } else if data.len() == 2 {
+                    // Some implementations send: OSC 52 ; c;<base64> ST (no separator)
+                    // where the selection and data are combined
+                    let combined = String::from_utf8_lossy(data[1]);
+                    if let Some(semicolon_pos) = combined.find(';') {
+                        let base64_data = &combined[semicolon_pos + 1..];
+                        if base64_data != "?" && !base64_data.is_empty() {
+                            if let Some(decoded) = decode_base64(base64_data) {
+                                self.actions.push(ParsedAction::SetClipboard(decoded));
+                            }
+                        }
+                    }
+                }
+            }
             _ => {}
         }
     }
@@ -364,6 +391,77 @@ fn parse_file_uri(uri: &str) -> Option<String> {
         // Not a file:// URI, might be a plain path
         Some(uri.to_string())
     }
+}
+
+/// Decodes a base64 string to UTF-8 text.
+/// Returns None if decoding fails.
+fn decode_base64(input: &str) -> Option<String> {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+    // Build decode table
+    let mut decode_table = [255u8; 256];
+    for (i, &c) in ALPHABET.iter().enumerate() {
+        decode_table[c as usize] = i as u8;
+    }
+
+    // Filter out whitespace and padding, validate characters
+    let filtered: Vec<u8> = input
+        .bytes()
+        .filter(|&b| b != b'=' && !b.is_ascii_whitespace())
+        .collect();
+
+    // Validate all characters are in alphabet
+    for &b in &filtered {
+        if decode_table[b as usize] == 255 {
+            return None;
+        }
+    }
+
+    let mut output = Vec::with_capacity(filtered.len() * 3 / 4);
+
+    // Process in chunks of 4
+    let chunks = filtered.chunks(4);
+    let max_iterations = 1_000_000; // Prevent unbounded loop
+
+    for (iteration, chunk) in chunks.enumerate() {
+        if iteration >= max_iterations {
+            return None;
+        }
+
+        let len = chunk.len();
+        if len == 0 {
+            break;
+        }
+
+        let b0 = decode_table[chunk[0] as usize] as u32;
+        let b1 = if len > 1 {
+            decode_table[chunk[1] as usize] as u32
+        } else {
+            0
+        };
+        let b2 = if len > 2 {
+            decode_table[chunk[2] as usize] as u32
+        } else {
+            0
+        };
+        let b3 = if len > 3 {
+            decode_table[chunk[3] as usize] as u32
+        } else {
+            0
+        };
+
+        let combined = (b0 << 18) | (b1 << 12) | (b2 << 6) | b3;
+
+        output.push((combined >> 16) as u8);
+        if len > 2 {
+            output.push((combined >> 8) as u8);
+        }
+        if len > 3 {
+            output.push(combined as u8);
+        }
+    }
+
+    String::from_utf8(output).ok()
 }
 
 /// Simple URL decoding for file paths.
@@ -508,5 +606,53 @@ mod tests {
             actions.as_slice(),
             [ParsedAction::SetFg(Color::Red)]
         ));
+    }
+
+    #[test]
+    fn test_decode_base64_simple() {
+        // "Hello" in base64 is "SGVsbG8="
+        let result = decode_base64("SGVsbG8=");
+        assert_eq!(result, Some("Hello".to_string()));
+    }
+
+    #[test]
+    fn test_decode_base64_with_padding() {
+        // "Hi" in base64 is "SGk="
+        let result = decode_base64("SGk=");
+        assert_eq!(result, Some("Hi".to_string()));
+    }
+
+    #[test]
+    fn test_decode_base64_no_padding() {
+        // "ABC" in base64 is "QUJD"
+        let result = decode_base64("QUJD");
+        assert_eq!(result, Some("ABC".to_string()));
+    }
+
+    #[test]
+    fn test_decode_base64_invalid() {
+        // Invalid base64 character
+        let result = decode_base64("!!!!");
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_osc_52_clipboard() {
+        let mut parser = AnsiParser::new();
+        // OSC 52 ; c ; SGVsbG8= ST (Hello in base64)
+        // Using BEL (0x07) as terminator
+        let actions = parser.parse(b"\x1b]52;c;SGVsbG8=\x07");
+        assert!(matches!(
+            actions.as_slice(),
+            [ParsedAction::SetClipboard(s)] if s == "Hello"
+        ));
+    }
+
+    #[test]
+    fn test_osc_52_clipboard_query_ignored() {
+        let mut parser = AnsiParser::new();
+        // OSC 52 ; c ; ? ST (query clipboard - should be ignored)
+        let actions = parser.parse(b"\x1b]52;c;?\x07");
+        assert!(actions.is_empty());
     }
 }

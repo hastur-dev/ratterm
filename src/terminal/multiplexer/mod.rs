@@ -612,6 +612,18 @@ impl TerminalMultiplexer {
         Ok(())
     }
 
+    /// Takes pending clipboard content from any terminal.
+    /// Returns the first clipboard content found (from OSC 52 sequences).
+    /// This is used to support clipboard operations from SSH sessions.
+    pub fn take_pending_clipboard(&mut self) -> Option<String> {
+        for tab in &mut self.tabs {
+            if let Some(content) = tab.grid.take_pending_clipboard() {
+                return Some(content);
+            }
+        }
+        None
+    }
+
     /// Shuts down all terminals.
     pub fn shutdown(&mut self) {
         for tab in &mut self.tabs {

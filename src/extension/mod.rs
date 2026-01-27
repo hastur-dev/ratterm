@@ -195,6 +195,11 @@ impl ExtensionManager {
 
         let manifest = manifest::load_manifest(&manifest_path)?;
 
+        // Register default hotkey if specified and not already in .ratrc
+        if let Some(hotkey) = manifest.default_hotkey() {
+            self.register_default_hotkey(&manifest.extension.name, hotkey, path);
+        }
+
         let ext = InstalledExtension {
             name: manifest.extension.name.clone(),
             version: manifest.extension.version.clone(),
@@ -204,6 +209,52 @@ impl ExtensionManager {
 
         self.installed.insert(ext.name.clone(), ext);
         Ok(())
+    }
+
+    /// Registers an extension's default hotkey in .ratrc if not already present.
+    fn register_default_hotkey(&self, name: &str, hotkey: &str, ext_path: &Path) {
+        let Some(config_path) = dirs::home_dir().map(|h| h.join(".ratrc")) else {
+            return;
+        };
+
+        // Read current config
+        let content = fs::read_to_string(&config_path).unwrap_or_default();
+
+        // Check if addon entry already exists
+        let addon_key = format!("addon.{}", name);
+        if content.lines().any(|line| {
+            let line = line.trim();
+            !line.starts_with('#') && line.starts_with(&addon_key)
+        }) {
+            // Already configured, don't override user settings
+            return;
+        }
+
+        // Build the command path
+        let command = if cfg!(windows) {
+            ext_path.join(format!("{}.exe", name))
+        } else {
+            ext_path.join(name)
+        };
+
+        // Append the addon entry to .ratrc
+        let entry = format!(
+            "\n# {} extension (auto-registered)\n{} = {}|{}\n",
+            name,
+            addon_key,
+            hotkey,
+            command.display()
+        );
+
+        if let Ok(mut file) = fs::OpenOptions::new().append(true).open(&config_path) {
+            use std::io::Write;
+            let _ = file.write_all(entry.as_bytes());
+            tracing::info!(
+                "Registered default hotkey {} for extension {}",
+                hotkey,
+                name
+            );
+        }
     }
 
     /// Returns all installed extensions.

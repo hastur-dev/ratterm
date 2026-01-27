@@ -589,6 +589,17 @@ impl TerminalGrid {
         Ok(())
     }
 
+    /// Takes pending clipboard content from any terminal in the grid.
+    /// Returns the first clipboard content found (from OSC 52 sequences).
+    pub fn take_pending_clipboard(&mut self) -> Option<String> {
+        for terminal in self.terminals.iter_mut().flatten() {
+            if let Some(content) = terminal.take_pending_clipboard() {
+                return Some(content);
+            }
+        }
+        None
+    }
+
     /// Shuts down all terminals in the grid.
     pub fn shutdown(&mut self) {
         for terminal in self.terminals.iter_mut().flatten() {

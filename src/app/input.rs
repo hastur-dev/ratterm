@@ -4,7 +4,7 @@
 
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
-use crate::config::is_windows_11;
+use crate::config::{KeyBinding, is_windows_11};
 use crate::ui::layout::FocusedPane;
 use crate::ui::popup::PopupKind;
 
@@ -13,19 +13,67 @@ use super::{App, AppMode};
 impl App {
     /// Handles a key event.
     pub(super) fn handle_key(&mut self, key: KeyEvent) {
+        tracing::info!(
+            "KEY_RAW: kind={:?}, code={:?}, mods={:?}, state={:?}",
+            key.kind,
+            key.code,
+            key.modifiers,
+            key.state
+        );
+
+        // Normally we only handle Press events. However, on Windows, spawning
+        // child processes (like plink.exe) can corrupt the console input mode,
+        // causing certain keys to only generate Release events (no Press).
+        // As a workaround, we also accept Release events for keys that are
+        // commonly affected: Escape, and any key with Ctrl/Alt/Shift modifiers.
+        let dominated_key = key.code == KeyCode::Esc
+            || key.modifiers.contains(KeyModifiers::CONTROL)
+            || key.modifiers.contains(KeyModifiers::ALT)
+            || key.modifiers.contains(KeyModifiers::SHIFT);
+
         if key.kind != KeyEventKind::Press {
-            return;
+            if key.kind == KeyEventKind::Release && dominated_key {
+                tracing::info!("KEY_WORKAROUND: accepting Release event for dominated key");
+                // Fall through to handle this Release event as if it were a Press
+            } else {
+                tracing::info!("KEY_FILTERED: not a Press event, ignoring");
+                return;
+            }
         }
 
+        tracing::info!(
+            "KEY_DISPATCH: mode={:?}, code={:?}, mods={:?}, dashboard_open={}, popup_visible={}, popup_kind={:?}",
+            self.mode,
+            key.code,
+            key.modifiers,
+            self.is_health_dashboard_open(),
+            self.popup.is_visible(),
+            self.popup.kind()
+        );
+
         match self.mode {
-            AppMode::Normal => self.handle_normal_key(key),
-            AppMode::FileBrowser => self.handle_file_browser_key(key),
-            AppMode::Popup => self.handle_popup_key(key),
+            AppMode::Normal => {
+                tracing::info!("KEY_ROUTE: -> handle_normal_key");
+                self.handle_normal_key(key);
+            }
+            AppMode::FileBrowser => {
+                tracing::info!("KEY_ROUTE: -> handle_file_browser_key");
+                self.handle_file_browser_key(key);
+            }
+            AppMode::Popup => {
+                tracing::info!("KEY_ROUTE: -> handle_popup_key");
+                self.handle_popup_key(key);
+            }
+            AppMode::HealthDashboard => {
+                tracing::info!("KEY_ROUTE: -> handle_health_dashboard_key");
+                self.handle_health_dashboard_key(key);
+            }
         }
     }
 
     /// Handles keys in normal mode.
     fn handle_normal_key(&mut self, key: KeyEvent) {
+        // Check global key handlers first
         if self.handle_global_key(key) {
             return;
         }
@@ -34,14 +82,28 @@ impl App {
             return;
         }
 
+        // Route to the focused pane handler
         match self.layout.focused() {
-            FocusedPane::Terminal => self.handle_terminal_key(key),
-            FocusedPane::Editor => self.handle_editor_key(key),
+            FocusedPane::Terminal => {
+                self.handle_terminal_key(key);
+            }
+            FocusedPane::Editor => {
+                self.handle_editor_key(key);
+            }
         }
     }
 
     /// Handles global keybindings. Returns true if handled.
     fn handle_global_key(&mut self, key: KeyEvent) -> bool {
+        // Check addon keybindings first
+        let binding = KeyBinding::from_key_event(&key);
+        if let Some(addon) = self.config.addon_commands.get(&binding) {
+            let name = addon.name.clone();
+            let command = addon.command.clone();
+            self.run_addon_command(&name, &command);
+            return true;
+        }
+
         match (key.modifiers, key.code) {
             (KeyModifiers::CONTROL, KeyCode::Char('i')) => {
                 self.toggle_ide();

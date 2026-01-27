@@ -23,6 +23,19 @@ pub struct ExtensionManifest {
     /// Process configuration (how to run the extension).
     #[serde(alias = "api")]
     pub process: Option<ProcessConfig>,
+    /// Default hotkey configuration.
+    #[serde(default)]
+    pub hotkey: Option<HotkeyConfig>,
+}
+
+/// Default hotkey configuration for an extension.
+#[derive(Debug, Clone, Deserialize)]
+pub struct HotkeyConfig {
+    /// Default hotkey (e.g., "f3", "ctrl+shift+e").
+    pub default: String,
+    /// Description of what the hotkey does.
+    #[serde(default)]
+    pub description: String,
 }
 
 /// Extension metadata.
@@ -151,6 +164,24 @@ impl ExtensionManifest {
     #[must_use]
     pub fn command(&self) -> Option<&str> {
         self.process.as_ref().map(|p| p.command.as_str())
+    }
+
+    /// Returns the default hotkey configuration if specified.
+    #[must_use]
+    pub fn default_hotkey(&self) -> Option<&str> {
+        self.hotkey.as_ref().map(|h| h.default.as_str())
+    }
+
+    /// Returns the hotkey description if specified.
+    #[must_use]
+    pub fn hotkey_description(&self) -> Option<&str> {
+        self.hotkey.as_ref().and_then(|h| {
+            if h.description.is_empty() {
+                None
+            } else {
+                Some(h.description.as_str())
+            }
+        })
     }
 }
 

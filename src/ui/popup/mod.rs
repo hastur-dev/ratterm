@@ -70,6 +70,8 @@ pub enum PopupKind {
     DockerManager,
     /// Windows 11 keybinding change notification.
     KeybindingChangeNotification,
+    /// SSH Health Dashboard for monitoring SSH hosts.
+    HealthDashboard,
 }
 
 impl PopupKind {
@@ -97,6 +99,7 @@ impl PopupKind {
             Self::SSHSubnetEntry => "Network Scan",
             Self::DockerManager => "Docker Manager",
             Self::KeybindingChangeNotification => "Windows 11 Keybinding Change",
+            Self::HealthDashboard => "SSH Health Dashboard",
         }
     }
 
@@ -124,6 +127,7 @@ impl PopupKind {
             Self::SSHSubnetEntry => "Subnet (e.g., 192.168.1.0/24): ",
             Self::DockerManager => "",
             Self::KeybindingChangeNotification => "",
+            Self::HealthDashboard => "",
         }
     }
 
@@ -222,6 +226,12 @@ impl PopupKind {
     #[must_use]
     pub fn is_keybinding_notification(&self) -> bool {
         matches!(self, Self::KeybindingChangeNotification)
+    }
+
+    /// Returns true if this popup is the health dashboard.
+    #[must_use]
+    pub fn is_health_dashboard(&self) -> bool {
+        matches!(self, Self::HealthDashboard)
     }
 }
 

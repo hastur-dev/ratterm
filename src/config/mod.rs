@@ -6,6 +6,7 @@ mod keybindings;
 pub mod platform;
 pub mod shell;
 
+use std::collections::HashMap;
 use std::fs;
 use std::io::{self, Write};
 use std::path::PathBuf;
@@ -14,6 +15,7 @@ pub use keybindings::{KeyAction, KeyBinding, KeybindingMode, Keybindings};
 pub use platform::{command_palette_hotkey, is_windows_11};
 pub use shell::{ShellDetector, ShellInfo, ShellInstallInfo, ShellInstaller, ShellType};
 
+use crate::logging::LogConfig;
 use crate::ssh::StorageMode;
 use crate::theme::{ThemeManager, ThemeSettings};
 
@@ -111,7 +113,34 @@ mode = vim
 # editor_undo           = u                # Undo
 # editor_redo           = ctrl+r           # Redo
 # editor_save           = ctrl+s           # Save file
+
+# Extension/Addon Hotkeys
+# -----------------------
+# Format: addon.<name> = <hotkey>|<command>
+# Bind a hotkey to launch an extension or external command in a new terminal tab.
+# The command will run in the configured shell.
+#
+# Examples:
+# addon.my-tool = f3|/path/to/my-tool
+# addon.rat-squad = f2|~/.ratterm/extensions/rat-squad/rat-squad
+
+# Logging Configuration
+# ---------------------
+# Logs are stored in ~/.ratterm/logs/ with automatic cleanup.
+#
+# log_enabled = true       # Enable/disable file logging (true/false)
+# log_level = info         # Log level: trace, debug, info, warn, error, off
+# log_retention = 24       # Hours to keep log files (default: 24)
 "#;
+
+/// Addon/extension command configuration.
+#[derive(Debug, Clone)]
+pub struct AddonCommand {
+    /// Name of the addon.
+    pub name: String,
+    /// Command to execute.
+    pub command: String,
+}
 
 /// Application configuration.
 #[derive(Debug, Clone)]
@@ -136,6 +165,10 @@ pub struct Config {
     pub set_ssh_tab: String,
     /// Enable SSH quick connect with numbers (set_ssh_tab + 1-9).
     pub ssh_number_setting: bool,
+    /// Addon hotkey bindings (keybinding -> command).
+    pub addon_commands: HashMap<KeyBinding, AddonCommand>,
+    /// Logging configuration.
+    pub log_config: LogConfig,
 }
 
 impl Default for Config {
@@ -151,6 +184,8 @@ impl Default for Config {
             ssh_storage_mode: StorageMode::Plaintext,
             set_ssh_tab: "ctrl".to_string(),
             ssh_number_setting: true,
+            addon_commands: HashMap::new(),
+            log_config: LogConfig::default(),
         }
     }
 }
@@ -302,9 +337,34 @@ impl Config {
                 self.ssh_number_setting =
                     matches!(value.to_lowercase().as_str(), "true" | "yes" | "1" | "on");
             }
+            "log_level" => {
+                self.log_config.level = LogConfig::parse_level(value);
+            }
+            "log_retention" | "log_retention_hours" => {
+                self.log_config.retention_hours = LogConfig::parse_retention(value);
+            }
+            "log_enabled" | "logging" => {
+                self.log_config.enabled =
+                    matches!(value.to_lowercase().as_str(), "true" | "yes" | "1" | "on");
+            }
             _ => {
-                // Try to parse as keybinding
-                if let Some(action) = KeyAction::parse_action(key) {
+                // Check for addon.* pattern: addon.<name> = <hotkey>|<command>
+                if let Some(addon_name) = key.strip_prefix("addon.") {
+                    if let Some((hotkey, command)) = value.split_once('|') {
+                        let hotkey = hotkey.trim();
+                        let command = command.trim();
+                        if let Some(binding) = KeyBinding::parse(hotkey) {
+                            self.addon_commands.insert(
+                                binding,
+                                AddonCommand {
+                                    name: addon_name.to_string(),
+                                    command: command.to_string(),
+                                },
+                            );
+                        }
+                    }
+                } else if let Some(action) = KeyAction::parse_action(key) {
+                    // Try to parse as keybinding
                     if let Some(binding) = KeyBinding::parse(value) {
                         self.keybindings.set(action, binding);
                     }

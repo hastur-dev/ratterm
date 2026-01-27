@@ -298,4 +298,37 @@ impl App {
     pub fn background_error_count(&self) -> usize {
         self.background_manager.error_count()
     }
+
+    /// Runs an addon command in a new terminal tab.
+    ///
+    /// Creates a new terminal tab and immediately executes the given command.
+    pub fn run_addon_command(&mut self, addon_name: &str, command: &str) {
+        if let Some(ref mut terminals) = self.terminals {
+            let shell_path = self.config.shell.get_shell_path();
+            match terminals.add_tab_with_shell(shell_path) {
+                Ok(idx) => {
+                    // Get the active terminal and send the command
+                    if let Some(terminal) = terminals.active_terminal_mut() {
+                        // Write the command followed by Enter
+                        let cmd_with_newline = format!("{}\r", command);
+                        if let Err(e) = terminal.write(cmd_with_newline.as_bytes()) {
+                            self.set_status(format!(
+                                "Addon {}: failed to send command: {}",
+                                addon_name, e
+                            ));
+                            return;
+                        }
+                    }
+                    self.set_status(format!(
+                        "Addon {}: started in terminal {}",
+                        addon_name,
+                        idx + 1
+                    ));
+                }
+                Err(e) => {
+                    self.set_status(format!("Addon {}: cannot create tab: {}", addon_name, e));
+                }
+            }
+        }
+    }
 }

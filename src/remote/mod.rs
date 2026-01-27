@@ -7,14 +7,12 @@ pub mod browser;
 pub mod sftp;
 
 pub use browser::{RemoteFileBrowser, RemoteFileEntry};
+pub use sftp::{RemoteDirEntry, SftpClient, SftpError};
 
 use std::collections::HashMap;
 use std::path::PathBuf;
 
 use crate::terminal::SSHContext;
-use sftp::{SftpClient, SftpError};
-
-pub use sftp::RemoteDirEntry;
 
 /// Represents a remote file being edited locally.
 #[derive(Debug, Clone)]

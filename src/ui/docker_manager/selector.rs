@@ -2,6 +2,7 @@
 
 use tracing::info;
 
+use crate::app::input_traits::ListSelectable;
 use crate::docker::{
     ContainerCreationState, DockerAvailability, DockerContainer, DockerDiscoveryResult, DockerHost,
     DockerImage, DockerRunOptions,
@@ -999,6 +1000,24 @@ impl DockerManagerSelector {
 impl Default for DockerManagerSelector {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl ListSelectable for DockerManagerSelector {
+    fn select_prev(&mut self) {
+        DockerManagerSelector::select_prev(self);
+    }
+
+    fn select_next(&mut self) {
+        DockerManagerSelector::select_next(self);
+    }
+
+    fn select_first(&mut self) {
+        DockerManagerSelector::select_first(self);
+    }
+
+    fn select_last(&mut self) {
+        DockerManagerSelector::select_last(self);
     }
 }
 
