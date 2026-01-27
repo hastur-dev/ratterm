@@ -204,7 +204,7 @@ pub fn get_diagnostics() -> String {
 
     #[cfg(not(windows))]
     {
-        lines.push(format!("Platform: Unix"));
+        lines.push("Platform: Unix".to_string());
     }
 
     lines.join("\n")
