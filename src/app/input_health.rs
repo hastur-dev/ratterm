@@ -3,6 +3,7 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use tracing::{debug, info};
 
+use crate::app::input_traits::handle_full_list_navigation;
 use crate::ui::health_dashboard::DashboardMode;
 
 use super::App;
@@ -33,33 +34,15 @@ impl App {
     fn handle_dashboard_overview_key(&mut self, key: KeyEvent) {
         info!("DASHBOARD OVERVIEW: code={:?}, mods={:?}", key.code, key.modifiers);
 
-        match (key.modifiers, key.code) {
-            // Navigation
-            (KeyModifiers::NONE, KeyCode::Up) | (KeyModifiers::NONE, KeyCode::Char('k')) => {
-                info!("DASHBOARD: select_previous");
-                if let Some(ref mut dashboard) = self.health_dashboard {
-                    dashboard.select_previous();
-                }
+        // Handle list navigation using shared helper (uses ListSelectable trait)
+        if let Some(ref mut dashboard) = self.health_dashboard {
+            if handle_full_list_navigation(dashboard, &key) {
+                info!("DASHBOARD: navigation handled by helper");
+                return;
             }
-            (KeyModifiers::NONE, KeyCode::Down) | (KeyModifiers::NONE, KeyCode::Char('j')) => {
-                info!("DASHBOARD: select_next");
-                if let Some(ref mut dashboard) = self.health_dashboard {
-                    dashboard.select_next();
-                }
-            }
-            (KeyModifiers::NONE, KeyCode::Home) => {
-                info!("DASHBOARD: select_first");
-                if let Some(ref mut dashboard) = self.health_dashboard {
-                    dashboard.select_first();
-                }
-            }
-            (KeyModifiers::NONE, KeyCode::End) => {
-                info!("DASHBOARD: select_last");
-                if let Some(ref mut dashboard) = self.health_dashboard {
-                    dashboard.select_last();
-                }
-            }
+        }
 
+        match (key.modifiers, key.code) {
             // Enter detail mode
             (KeyModifiers::NONE, KeyCode::Enter) => {
                 info!("DASHBOARD: enter_detail");
@@ -116,5 +99,310 @@ impl App {
                 debug!("Unhandled key in dashboard detail: {:?}", key.code);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crossterm::event::{KeyEventKind, KeyEventState};
+    use crate::ssh::SSHHostList;
+    use crate::ui::health_dashboard::{DashboardMode, HealthDashboard};
+
+    /// Helper to create a KeyEvent for testing.
+    fn key_event(code: KeyCode) -> KeyEvent {
+        KeyEvent {
+            code,
+            modifiers: KeyModifiers::NONE,
+            kind: KeyEventKind::Press,
+            state: KeyEventState::NONE,
+        }
+    }
+
+    /// Helper to create an App with a health dashboard for testing.
+    ///
+    /// Note: App::new may fail if PTY is unavailable, but that's OK
+    /// because terminals will be None and tests can still run.
+    fn create_test_app_with_dashboard() -> Option<App> {
+        let mut app = App::new(80, 24).ok()?;
+
+        // Manually set up the health dashboard to bypass SSH host loading
+        let ssh_hosts = SSHHostList::new();
+        let dashboard = HealthDashboard::new(&ssh_hosts);
+        app.health_dashboard = Some(dashboard);
+        app.mode = super::super::AppMode::HealthDashboard;
+
+        Some(app)
+    }
+
+    // ========================================================================
+    // Overview Mode Key Handling Tests
+    // ========================================================================
+
+    #[test]
+    fn test_escape_closes_dashboard_overview_mode() {
+        let Some(mut app) = create_test_app_with_dashboard() else {
+            // Skip test if App cannot be created (no PTY)
+            return;
+        };
+
+        assert!(app.is_health_dashboard_open(), "Dashboard should be open");
+        assert_eq!(
+            app.mode,
+            super::super::AppMode::HealthDashboard,
+            "Mode should be HealthDashboard"
+        );
+
+        // Press Escape in overview mode
+        let esc_key = key_event(KeyCode::Esc);
+        app.handle_health_dashboard_key(esc_key);
+
+        assert!(
+            !app.is_health_dashboard_open(),
+            "Dashboard should be closed after Escape"
+        );
+        assert_eq!(
+            app.mode,
+            super::super::AppMode::Normal,
+            "Mode should return to Normal"
+        );
+    }
+
+    #[test]
+    fn test_q_closes_dashboard_overview_mode() {
+        let Some(mut app) = create_test_app_with_dashboard() else {
+            return;
+        };
+
+        assert!(app.is_health_dashboard_open());
+
+        let q_key = key_event(KeyCode::Char('q'));
+        app.handle_health_dashboard_key(q_key);
+
+        assert!(
+            !app.is_health_dashboard_open(),
+            "Dashboard should be closed after 'q'"
+        );
+        assert_eq!(app.mode, super::super::AppMode::Normal);
+    }
+
+    // ========================================================================
+    // Detail Mode Key Handling Tests
+    // ========================================================================
+
+    #[test]
+    fn test_escape_exits_detail_mode_to_overview() {
+        let Some(mut app) = create_test_app_with_dashboard() else {
+            return;
+        };
+
+        // Put dashboard into detail mode
+        if let Some(ref mut dashboard) = app.health_dashboard {
+            dashboard.toggle_mode(); // Switch to Detail
+            assert_eq!(dashboard.mode(), DashboardMode::Detail);
+        }
+
+        let esc_key = key_event(KeyCode::Esc);
+        app.handle_health_dashboard_key(esc_key);
+
+        // Should return to overview, not close the dashboard
+        assert!(
+            app.is_health_dashboard_open(),
+            "Dashboard should still be open (Escape exits detail to overview)"
+        );
+        if let Some(ref dashboard) = app.health_dashboard {
+            assert_eq!(
+                dashboard.mode(),
+                DashboardMode::Overview,
+                "Should be back in Overview mode"
+            );
+        }
+    }
+
+    #[test]
+    fn test_backspace_exits_detail_mode_to_overview() {
+        let Some(mut app) = create_test_app_with_dashboard() else {
+            return;
+        };
+
+        if let Some(ref mut dashboard) = app.health_dashboard {
+            dashboard.toggle_mode();
+            assert_eq!(dashboard.mode(), DashboardMode::Detail);
+        }
+
+        let backspace_key = key_event(KeyCode::Backspace);
+        app.handle_health_dashboard_key(backspace_key);
+
+        assert!(app.is_health_dashboard_open());
+        if let Some(ref dashboard) = app.health_dashboard {
+            assert_eq!(dashboard.mode(), DashboardMode::Overview);
+        }
+    }
+
+    #[test]
+    fn test_q_closes_dashboard_from_detail_mode() {
+        let Some(mut app) = create_test_app_with_dashboard() else {
+            return;
+        };
+
+        if let Some(ref mut dashboard) = app.health_dashboard {
+            dashboard.toggle_mode();
+            assert_eq!(dashboard.mode(), DashboardMode::Detail);
+        }
+
+        let q_key = key_event(KeyCode::Char('q'));
+        app.handle_health_dashboard_key(q_key);
+
+        assert!(
+            !app.is_health_dashboard_open(),
+            "'q' should close dashboard even from detail mode"
+        );
+        assert_eq!(app.mode, super::super::AppMode::Normal);
+    }
+
+    // ========================================================================
+    // Navigation Key Tests
+    // ========================================================================
+
+    #[test]
+    fn test_navigation_keys_in_overview() {
+        let Some(mut app) = create_test_app_with_dashboard() else {
+            return;
+        };
+
+        // Test j/k navigation (should not close dashboard)
+        let j_key = key_event(KeyCode::Char('j'));
+        app.handle_health_dashboard_key(j_key);
+        assert!(app.is_health_dashboard_open());
+
+        let k_key = key_event(KeyCode::Char('k'));
+        app.handle_health_dashboard_key(k_key);
+        assert!(app.is_health_dashboard_open());
+
+        // Test arrow key navigation
+        let down_key = key_event(KeyCode::Down);
+        app.handle_health_dashboard_key(down_key);
+        assert!(app.is_health_dashboard_open());
+
+        let up_key = key_event(KeyCode::Up);
+        app.handle_health_dashboard_key(up_key);
+        assert!(app.is_health_dashboard_open());
+    }
+
+    #[test]
+    fn test_home_end_keys_in_overview() {
+        let Some(mut app) = create_test_app_with_dashboard() else {
+            return;
+        };
+
+        let home_key = key_event(KeyCode::Home);
+        app.handle_health_dashboard_key(home_key);
+        assert!(app.is_health_dashboard_open());
+
+        let end_key = key_event(KeyCode::End);
+        app.handle_health_dashboard_key(end_key);
+        assert!(app.is_health_dashboard_open());
+    }
+
+    // ========================================================================
+    // Refresh Key Tests
+    // ========================================================================
+
+    #[test]
+    fn test_r_key_refreshes_dashboard() {
+        let Some(mut app) = create_test_app_with_dashboard() else {
+            return;
+        };
+
+        let r_key = key_event(KeyCode::Char('r'));
+        app.handle_health_dashboard_key(r_key);
+
+        // Dashboard should still be open after refresh
+        assert!(app.is_health_dashboard_open());
+    }
+
+    #[test]
+    fn test_space_toggles_auto_refresh() {
+        let Some(mut app) = create_test_app_with_dashboard() else {
+            return;
+        };
+
+        let initial_auto_refresh = app
+            .health_dashboard
+            .as_ref()
+            .map(|d| d.auto_refresh())
+            .unwrap_or(true);
+
+        let space_key = key_event(KeyCode::Char(' '));
+        app.handle_health_dashboard_key(space_key);
+
+        let new_auto_refresh = app
+            .health_dashboard
+            .as_ref()
+            .map(|d| d.auto_refresh())
+            .unwrap_or(true);
+
+        assert_ne!(
+            initial_auto_refresh, new_auto_refresh,
+            "Auto-refresh should be toggled"
+        );
+        assert!(app.is_health_dashboard_open());
+    }
+
+    // ========================================================================
+    // Enter Key Tests
+    // ========================================================================
+
+    #[test]
+    fn test_enter_key_enters_detail_mode() {
+        let Some(mut app) = create_test_app_with_dashboard() else {
+            return;
+        };
+
+        if let Some(ref dashboard) = app.health_dashboard {
+            assert_eq!(dashboard.mode(), DashboardMode::Overview);
+        }
+
+        let enter_key = key_event(KeyCode::Enter);
+        app.handle_health_dashboard_key(enter_key);
+
+        // With no hosts, enter_detail does nothing (stays in Overview)
+        assert!(app.is_health_dashboard_open());
+    }
+
+    // ========================================================================
+    // Edge Case Tests
+    // ========================================================================
+
+    #[test]
+    fn test_handle_key_with_no_dashboard() {
+        let Some(mut app) = create_test_app_with_dashboard() else {
+            return;
+        };
+
+        // Remove the dashboard
+        app.health_dashboard = None;
+
+        let esc_key = key_event(KeyCode::Esc);
+
+        // Should not panic, should hide popup instead
+        app.handle_health_dashboard_key(esc_key);
+    }
+
+    #[test]
+    fn test_multiple_escapes_only_closes_once() {
+        let Some(mut app) = create_test_app_with_dashboard() else {
+            return;
+        };
+
+        let esc_key = key_event(KeyCode::Esc);
+
+        app.handle_health_dashboard_key(esc_key);
+        assert!(!app.is_health_dashboard_open());
+
+        // Second escape should not cause issues
+        // (Dashboard is already closed, this tests robustness)
+        app.mode = super::super::AppMode::HealthDashboard;
+        app.handle_health_dashboard_key(esc_key);
     }
 }

@@ -11,6 +11,18 @@ use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
+
+/// Windows flags to prevent spawned processes from affecting the parent console.
+/// DETACHED_PROCESS: Process has no console at all
+/// CREATE_NO_WINDOW: Process has no visible window
+/// Combined, these should prevent plink.exe from corrupting keyboard input.
+#[cfg(windows)]
+const DETACHED_PROCESS: u32 = 0x00000008;
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
+
 use tracing::{debug, error, info, warn};
 
 use super::host::{SSHCredentials, SSHHost, SSHHostList};
@@ -136,13 +148,14 @@ impl MetricsCollector {
             debug!("Cleaned up {} finished threads", before - after);
         }
 
-        // Mark all hosts as collecting
+        // Only set "Collecting" status for hosts that don't have data yet
+        // Preserve existing metrics while collecting new ones
         if let Ok(mut guard) = self.metrics.lock() {
             for host in hosts {
                 guard
                     .entry(host.host_id)
-                    .or_insert_with(|| DeviceMetrics::collecting(host.host_id))
-                    .status = MetricStatus::Collecting;
+                    .or_insert_with(|| DeviceMetrics::collecting(host.host_id));
+                // Don't reset status to Collecting if we already have valid data
             }
         }
 
@@ -376,32 +389,43 @@ fn collect_with_plink(host: &HostCollectionInfo, password: &str) -> DeviceMetric
 
     let target = format!("{}@{}", host.username, host.hostname);
 
-    // Build plink command - use -no-antispoof to suppress security warning
-    // The 'echo y |' will auto-accept the host key prompt if it appears
-    let plink_cmd = format!(
-        "echo y | plink -no-antispoof -pw \"{}\" {}{} \"{}\"",
-        password.replace('"', "\\\""),
-        port_arg,
-        target,
-        METRICS_COMMAND.replace('"', "\\\"")
+    // Build plink command - use -batch to avoid interactive prompts
+    // Don't use cmd.exe wrapper - call plink directly to avoid shell escaping issues
+    info!(
+        "plink command for {}: plink -batch -no-antispoof -pw *** {}{}",
+        host.hostname, port_arg, target
     );
 
-    debug!(
-        "plink command via cmd: echo y | plink -no-antispoof -pw *** {}{}",
-        port_arg, target
-    );
+    let mut cmd = Command::new("plink");
+    cmd.arg("-batch");  // Non-interactive mode, auto-accept host key
+    cmd.arg("-no-antispoof");
+    cmd.arg("-pw").arg(password);  // Pass password directly, no escaping needed
 
-    let mut cmd = Command::new("cmd");
-    cmd.arg("/C").arg(&plink_cmd);
+    if host.port != 22 {
+        cmd.arg("-P").arg(host.port.to_string());
+    }
+
+    cmd.arg(&target);
+    cmd.arg(METRICS_COMMAND);
 
     let result = execute_ssh_command(cmd, host.host_id);
+
+    // Log the result
+    info!(
+        "plink result for {}: status={:?}, error={:?}",
+        host.hostname, result.status, result.error
+    );
 
     // If plink still failed, show helpful message
     if result.status == MetricStatus::Error {
         if let Some(ref err) = result.error {
-            if err.contains("host key") || err.contains("refused") {
+            error!(
+                "plink failed for {}: {}",
+                host.hostname, err
+            );
+            if err.contains("host key") || err.contains("refused") || err.contains("Access denied") {
                 warn!(
-                    "plink failed for {} - consider using key-based auth or WSL sshpass",
+                    "plink auth failed for {} - check credentials or use key-based auth",
                     host.hostname
                 );
             }
@@ -463,6 +487,13 @@ fn execute_ssh_command(mut cmd: Command, host_id: u32) -> DeviceMetrics {
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
 
+    // CRITICAL: On Windows, use DETACHED_PROCESS to completely detach from
+    // the parent console. This prevents plink.exe from corrupting the console's
+    // input mode, which would cause crossterm to only receive Release events
+    // (no Press events) for special keys like Escape, Ctrl, and arrow keys.
+    #[cfg(windows)]
+    cmd.creation_flags(DETACHED_PROCESS | CREATE_NO_WINDOW);
+
     debug!("Executing SSH command for host_id={}", host_id);
 
     // Execute with timeout
@@ -486,22 +517,30 @@ fn execute_ssh_command(mut cmd: Command, host_id: u32) -> DeviceMetrics {
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         let stdout = String::from_utf8_lossy(&output.stdout);
-        warn!(
-            "SSH failed for host_id={}: stderr={}, stdout_len={}",
-            host_id,
-            stderr.chars().take(200).collect::<String>(),
-            stdout.len()
-        );
 
-        let error = if stderr.contains("Permission denied") {
+        // Log full stderr for debugging
+        error!(
+            "SSH failed for host_id={}: exit_code={:?}",
+            host_id,
+            output.status.code()
+        );
+        error!("  STDERR: {}", stderr);
+        error!("  STDOUT (len={}): {}", stdout.len(), stdout.chars().take(200).collect::<String>());
+
+        let error = if stderr.contains("Permission denied") || stderr.contains("permission denied") {
             "Permission denied".to_string()
+        } else if stderr.contains("Access denied") || stderr.contains("access denied") {
+            "Access denied".to_string()
         } else if stderr.contains("Connection refused") {
             "Connection refused".to_string()
         } else if stderr.contains("Connection timed out") || stderr.contains("timed out") {
             "Connection timed out".to_string()
+        } else if stderr.contains("No such file") || stderr.contains("not found") {
+            "SSH client not found".to_string()
         } else if stderr.is_empty() {
             format!("SSH failed (exit code {:?})", output.status.code())
         } else {
+            // Return first 100 chars of stderr for unknown errors
             stderr.chars().take(100).collect()
         };
         return DeviceMetrics::with_error(host_id, error);

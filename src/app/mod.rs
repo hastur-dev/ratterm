@@ -16,6 +16,7 @@ mod input_health;
 mod input_mouse;
 mod input_ssh;
 mod input_terminal;
+pub mod input_traits;
 mod keymap;
 mod layout_ops;
 mod popup_ops;
@@ -40,6 +41,7 @@ use crate::api::{ApiHandler, ApiServer, MAX_REQUESTS_PER_FRAME, RequestReceiver}
 use crate::clipboard::Clipboard;
 use crate::completion::CompletionHandle;
 use crate::config::{Config, KeybindingMode};
+use crate::daemon::DaemonManager;
 use crate::docker::{DockerItemList, DockerStorage};
 use crate::editor::Editor;
 use crate::extension::ExtensionManager;
@@ -198,6 +200,8 @@ pub struct App {
     pub(crate) completion_suggestion: Option<String>,
     /// SSH health dashboard for monitoring device metrics.
     pub(crate) health_dashboard: Option<HealthDashboard>,
+    /// Daemon manager for real-time metrics collection.
+    pub(crate) daemon_manager: Option<DaemonManager>,
 }
 
 impl App {
@@ -285,6 +289,7 @@ impl App {
             completion_handle: Some(CompletionHandle::new(cwd)),
             completion_suggestion: None,
             health_dashboard: None,
+            daemon_manager: None,
         })
     }
 
@@ -577,6 +582,11 @@ impl App {
             if let Some(ref mut terminals) = self.terminals {
                 if let Err(e) = terminals.process_all() {
                     self.last_error = Some(format!("Terminal error: {}", e));
+                }
+                // Check for clipboard content from OSC 52 (e.g., from SSH/vim/tmux)
+                if let Some(content) = terminals.take_pending_clipboard() {
+                    self.copy_to_clipboard(&content);
+                    self.set_status("Copied from remote");
                 }
             }
         }

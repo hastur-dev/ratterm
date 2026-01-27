@@ -11,6 +11,7 @@ use std::time::Instant;
 
 use tracing::{debug, info, warn};
 
+use crate::app::input_traits::ListSelectable;
 use crate::ssh::{
     DeviceMetrics, MetricStatus, MetricsCollector, SSHHost, SSHHostList, build_collection_info,
 };
@@ -19,7 +20,7 @@ use crate::ssh::{
 pub const MAX_DASHBOARD_HOSTS: usize = 50;
 
 /// Default refresh interval in seconds.
-pub const REFRESH_INTERVAL_SECS: u64 = 1;
+pub const REFRESH_INTERVAL_SECS: u64 = 5;
 
 /// Dashboard display mode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -261,6 +262,11 @@ impl HealthDashboard {
         &self.hosts
     }
 
+    /// Returns mutable access to all hosts.
+    pub fn hosts_mut(&mut self) -> &mut [DashboardHost] {
+        &mut self.hosts
+    }
+
     /// Returns the selected host.
     #[must_use]
     pub fn selected_host(&self) -> Option<&DashboardHost> {
@@ -384,6 +390,29 @@ impl HealthDashboard {
 impl Drop for HealthDashboard {
     fn drop(&mut self) {
         self.stop();
+    }
+}
+
+/// Adapter implementation for ListSelectable trait.
+///
+/// Note: HealthDashboard uses `select_previous()` instead of `select_prev()`,
+/// so this adapter maps the trait method to the actual implementation.
+impl ListSelectable for HealthDashboard {
+    fn select_prev(&mut self) {
+        // Adapter: maps trait's select_prev to HealthDashboard's select_previous
+        self.select_previous();
+    }
+
+    fn select_next(&mut self) {
+        HealthDashboard::select_next(self);
+    }
+
+    fn select_first(&mut self) {
+        HealthDashboard::select_first(self);
+    }
+
+    fn select_last(&mut self) {
+        HealthDashboard::select_last(self);
     }
 }
 

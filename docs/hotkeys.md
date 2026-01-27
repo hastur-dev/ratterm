@@ -533,6 +533,82 @@ When inside a Docker session (after exec into container):
 | `Ctrl+T` | Show container stats (split panel) |
 | `Ctrl+L` | Show container logs (split panel) |
 
+---
+
+## Mouse Support
+
+Ratterm supports mouse interactions for selection and scrolling.
+
+### Terminal Mouse Actions
+
+| Action | Result |
+|--------|--------|
+| `Left Click` | Position cursor / focus pane |
+| `Left Click + Drag` | Select text |
+| `Left Release` | Finalize selection |
+| `Scroll Wheel Up` | Scroll terminal history up |
+| `Scroll Wheel Down` | Scroll terminal history down |
+
+### Editor Mouse Actions
+
+| Action | Result |
+|--------|--------|
+| `Left Click` | Position cursor |
+| `Left Click + Drag` | Select text |
+| `Double Click` | Select word |
+| `Triple Click` | Select line |
+
+---
+
+## Edit Commands (Command Palette)
+
+These commands are available via the Command Palette (`Ctrl+Shift+P` or `F1`):
+
+### Line Operations
+
+| Command | Hotkey | Description |
+|---------|--------|-------------|
+| `Edit: Duplicate Line` | `Ctrl+D` | Duplicate current line below |
+| `Edit: Delete Line` | `Ctrl+Shift+K` | Delete entire current line |
+| `Edit: Move Line Up` | `Alt+Up` | Move current line up |
+| `Edit: Move Line Down` | `Alt+Down` | Move current line down |
+
+### Selection Operations
+
+| Command | Hotkey | Description |
+|---------|--------|-------------|
+| `Edit: Select All` | `Ctrl+A` | Select all text in editor |
+| `Edit: Select Line` | `Ctrl+L` | Select current line |
+
+### Code Editing
+
+| Command | Hotkey | Description |
+|---------|--------|-------------|
+| `Edit: Toggle Comment` | `Ctrl+/` | Comment/uncomment selection |
+| `Edit: Indent` | `Tab` | Increase indentation |
+| `Edit: Outdent` | `Shift+Tab` | Decrease indentation |
+
+---
+
+## Custom Addon Hotkeys
+
+You can define custom hotkeys in `.ratrc` that execute shell commands:
+
+```
+addon.<name> = <hotkey>|<command>
+```
+
+**Example Configuration:**
+```
+addon.git_status = ctrl+shift+g|git status
+addon.npm_test = ctrl+shift+t|npm test
+addon.docker_ps = ctrl+alt+d|docker ps -a
+```
+
+When triggered, the command executes in a new terminal tab.
+
+See [ratrc_docs.md](ratrc_docs.md#custom-addon-commands) for full documentation
+
 ### Run Options Form
 
 When running an image with options (`Ctrl+O`):

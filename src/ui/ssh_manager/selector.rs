@@ -1,5 +1,6 @@
 //! SSH Manager selector state and methods.
 
+use crate::app::input_traits::ListSelectable;
 use crate::ssh::{ConnectionStatus, SSHHostList};
 
 use super::types::{
@@ -560,5 +561,23 @@ impl SSHManagerSelector {
 impl Default for SSHManagerSelector {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl ListSelectable for SSHManagerSelector {
+    fn select_prev(&mut self) {
+        SSHManagerSelector::select_prev(self);
+    }
+
+    fn select_next(&mut self) {
+        SSHManagerSelector::select_next(self);
+    }
+
+    fn select_first(&mut self) {
+        SSHManagerSelector::select_first(self);
+    }
+
+    fn select_last(&mut self) {
+        SSHManagerSelector::select_last(self);
     }
 }

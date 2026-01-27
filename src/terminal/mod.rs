@@ -231,6 +231,8 @@ pub struct Terminal {
     ssh_context: Option<SSHContext>,
     /// Docker connection context (None for non-Docker terminals).
     docker_context: Option<DockerContext>,
+    /// Pending clipboard content from OSC 52 (to be copied to system clipboard).
+    pending_clipboard: Option<String>,
 }
 
 impl Terminal {
@@ -611,6 +613,7 @@ impl Terminal {
             output_buffer: String::new(),
             ssh_context: None,
             docker_context: None,
+            pending_clipboard: None,
         })
     }
 
@@ -692,6 +695,13 @@ impl Terminal {
     /// Returns true if a bell was triggered since last check.
     pub fn take_bell(&mut self) -> bool {
         std::mem::take(&mut self.bell)
+    }
+
+    /// Returns pending clipboard content from OSC 52, if any.
+    /// This should be called after `process()` to check for clipboard updates
+    /// from remote applications (e.g., vim, tmux over SSH).
+    pub fn take_pending_clipboard(&mut self) -> Option<String> {
+        self.pending_clipboard.take()
     }
 
     /// Returns true if the terminal is running.
@@ -926,6 +936,10 @@ impl Terminal {
             ParsedAction::SetCwd(path) => {
                 // Update the tracked current working directory
                 self.cwd = Some(PathBuf::from(path));
+            }
+            ParsedAction::SetClipboard(text) => {
+                // Store clipboard content for the app to retrieve and copy to system clipboard
+                self.pending_clipboard = Some(text);
             }
             ParsedAction::Unknown(_) => {
                 // Ignore unknown sequences

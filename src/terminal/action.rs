@@ -73,6 +73,9 @@ pub enum ParsedAction {
     Hyperlink { url: String, id: Option<String> },
     /// Set current working directory (OSC 7).
     SetCwd(String),
+    /// Set clipboard content (OSC 52).
+    /// Contains the decoded text to copy to clipboard.
+    SetClipboard(String),
     /// Unknown sequence.
     Unknown(String),
 }

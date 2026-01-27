@@ -3,6 +3,7 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use tracing::{debug, error, info, warn};
 
+use crate::app::input_traits::handle_full_list_navigation;
 use crate::docker::DockerAvailability;
 use crate::ui::docker_manager::{DockerListSection, DockerManagerMode};
 
@@ -90,32 +91,34 @@ impl App {
             return;
         }
 
+        // Handle standard list navigation using shared helper
+        if let Some(ref mut manager) = self.docker_manager {
+            if handle_full_list_navigation(manager, &key) {
+                return;
+            }
+        }
+
+        // Handle Docker-specific 'g' for first (vim-style) and 'G' for last
+        match (key.modifiers, key.code) {
+            (KeyModifiers::NONE, KeyCode::Char('g')) => {
+                if let Some(ref mut manager) = self.docker_manager {
+                    manager.select_first();
+                }
+                return;
+            }
+            (KeyModifiers::SHIFT, KeyCode::Char('G')) => {
+                if let Some(ref mut manager) = self.docker_manager {
+                    manager.select_last();
+                }
+                return;
+            }
+            _ => {}
+        }
+
         match (key.modifiers, key.code) {
             // Close manager
             (KeyModifiers::NONE, KeyCode::Esc) => {
                 self.hide_docker_manager();
-            }
-
-            // Navigation
-            (KeyModifiers::NONE, KeyCode::Up | KeyCode::Char('k')) => {
-                if let Some(ref mut manager) = self.docker_manager {
-                    manager.select_prev();
-                }
-            }
-            (KeyModifiers::NONE, KeyCode::Down | KeyCode::Char('j')) => {
-                if let Some(ref mut manager) = self.docker_manager {
-                    manager.select_next();
-                }
-            }
-            (KeyModifiers::NONE, KeyCode::Home | KeyCode::Char('g')) => {
-                if let Some(ref mut manager) = self.docker_manager {
-                    manager.select_first();
-                }
-            }
-            (KeyModifiers::SHIFT, KeyCode::Char('G')) | (KeyModifiers::NONE, KeyCode::End) => {
-                if let Some(ref mut manager) = self.docker_manager {
-                    manager.select_last();
-                }
             }
 
             // Section switching
@@ -435,32 +438,39 @@ impl App {
     fn handle_docker_host_selection_key(&mut self, key: KeyEvent) {
         debug!("Docker host selection key: {:?}", key.code);
 
+        // Handle vim-style navigation for host list (j/k and arrows)
+        if key.modifiers == KeyModifiers::NONE {
+            match key.code {
+                KeyCode::Down | KeyCode::Char('j') => {
+                    if let Some(ref mut manager) = self.docker_manager {
+                        manager.select_next_host();
+                        debug!(
+                            "Docker host selection: moved down to index {}",
+                            manager.host_selection_index()
+                        );
+                    }
+                    return;
+                }
+                KeyCode::Up | KeyCode::Char('k') => {
+                    if let Some(ref mut manager) = self.docker_manager {
+                        manager.select_prev_host();
+                        debug!(
+                            "Docker host selection: moved up to index {}",
+                            manager.host_selection_index()
+                        );
+                    }
+                    return;
+                }
+                _ => {}
+            }
+        }
+
         match (key.modifiers, key.code) {
             // Close/cancel
             (KeyModifiers::NONE, KeyCode::Esc) => {
                 info!("Docker host selection cancelled");
                 if let Some(ref mut manager) = self.docker_manager {
                     manager.cancel_host_selection();
-                }
-            }
-            // Navigate up
-            (KeyModifiers::NONE, KeyCode::Char('k') | KeyCode::Up) => {
-                if let Some(ref mut manager) = self.docker_manager {
-                    manager.select_prev_host();
-                    debug!(
-                        "Docker host selection: moved up to index {}",
-                        manager.host_selection_index()
-                    );
-                }
-            }
-            // Navigate down
-            (KeyModifiers::NONE, KeyCode::Char('j') | KeyCode::Down) => {
-                if let Some(ref mut manager) = self.docker_manager {
-                    manager.select_next_host();
-                    debug!(
-                        "Docker host selection: moved down to index {}",
-                        manager.host_selection_index()
-                    );
                 }
             }
             // Quick-select local

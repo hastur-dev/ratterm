@@ -13,20 +13,54 @@ use super::{App, AppMode};
 impl App {
     /// Handles a key event.
     pub(super) fn handle_key(&mut self, key: KeyEvent) {
+        tracing::info!(
+            "KEY_RAW: kind={:?}, code={:?}, mods={:?}, state={:?}",
+            key.kind, key.code, key.modifiers, key.state
+        );
+
+        // Normally we only handle Press events. However, on Windows, spawning
+        // child processes (like plink.exe) can corrupt the console input mode,
+        // causing certain keys to only generate Release events (no Press).
+        // As a workaround, we also accept Release events for keys that are
+        // commonly affected: Escape, and any key with Ctrl/Alt/Shift modifiers.
+        let dominated_key = key.code == KeyCode::Esc
+            || key.modifiers.contains(KeyModifiers::CONTROL)
+            || key.modifiers.contains(KeyModifiers::ALT)
+            || key.modifiers.contains(KeyModifiers::SHIFT);
+
         if key.kind != KeyEventKind::Press {
-            return;
+            if key.kind == KeyEventKind::Release && dominated_key {
+                tracing::info!("KEY_WORKAROUND: accepting Release event for dominated key");
+                // Fall through to handle this Release event as if it were a Press
+            } else {
+                tracing::info!("KEY_FILTERED: not a Press event, ignoring");
+                return;
+            }
         }
 
         tracing::info!(
-            "KEY: mode={:?}, code={:?}, mods={:?}, dashboard_open={}",
-            self.mode, key.code, key.modifiers, self.is_health_dashboard_open()
+            "KEY_DISPATCH: mode={:?}, code={:?}, mods={:?}, dashboard_open={}, popup_visible={}, popup_kind={:?}",
+            self.mode, key.code, key.modifiers, self.is_health_dashboard_open(),
+            self.popup.is_visible(), self.popup.kind()
         );
 
         match self.mode {
-            AppMode::Normal => self.handle_normal_key(key),
-            AppMode::FileBrowser => self.handle_file_browser_key(key),
-            AppMode::Popup => self.handle_popup_key(key),
-            AppMode::HealthDashboard => self.handle_health_dashboard_key(key),
+            AppMode::Normal => {
+                tracing::info!("KEY_ROUTE: -> handle_normal_key");
+                self.handle_normal_key(key);
+            }
+            AppMode::FileBrowser => {
+                tracing::info!("KEY_ROUTE: -> handle_file_browser_key");
+                self.handle_file_browser_key(key);
+            }
+            AppMode::Popup => {
+                tracing::info!("KEY_ROUTE: -> handle_popup_key");
+                self.handle_popup_key(key);
+            }
+            AppMode::HealthDashboard => {
+                tracing::info!("KEY_ROUTE: -> handle_health_dashboard_key");
+                self.handle_health_dashboard_key(key);
+            }
         }
     }
 
