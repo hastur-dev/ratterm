@@ -4,7 +4,7 @@
 
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
-use crate::config::{is_windows_11, KeyBinding};
+use crate::config::{KeyBinding, is_windows_11};
 use crate::ui::layout::FocusedPane;
 use crate::ui::popup::PopupKind;
 
@@ -15,7 +15,10 @@ impl App {
     pub(super) fn handle_key(&mut self, key: KeyEvent) {
         tracing::info!(
             "KEY_RAW: kind={:?}, code={:?}, mods={:?}, state={:?}",
-            key.kind, key.code, key.modifiers, key.state
+            key.kind,
+            key.code,
+            key.modifiers,
+            key.state
         );
 
         // Normally we only handle Press events. However, on Windows, spawning
@@ -40,8 +43,12 @@ impl App {
 
         tracing::info!(
             "KEY_DISPATCH: mode={:?}, code={:?}, mods={:?}, dashboard_open={}, popup_visible={}, popup_kind={:?}",
-            self.mode, key.code, key.modifiers, self.is_health_dashboard_open(),
-            self.popup.is_visible(), self.popup.kind()
+            self.mode,
+            key.code,
+            key.modifiers,
+            self.is_health_dashboard_open(),
+            self.popup.is_visible(),
+            self.popup.kind()
         );
 
         match self.mode {

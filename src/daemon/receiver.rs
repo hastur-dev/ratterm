@@ -69,9 +69,9 @@ impl MetricsReceiver {
 
         let addr = SocketAddr::from(([127, 0, 0, 1], port));
 
-        let listener = TcpListener::bind(addr)
-            .await
-            .map_err(|e| DaemonError::ServerError(format!("Failed to bind port {}: {}", port, e)))?;
+        let listener = TcpListener::bind(addr).await.map_err(|e| {
+            DaemonError::ServerError(format!("Failed to bind port {}: {}", port, e))
+        })?;
 
         info!("Metrics receiver listening on http://{}", addr);
 
@@ -135,10 +135,7 @@ impl MetricsReceiver {
     /// Returns the number of cached metrics entries.
     #[must_use]
     pub fn cached_count(&self) -> usize {
-        self.metrics
-            .lock()
-            .map(|g| g.len())
-            .unwrap_or(0)
+        self.metrics.lock().map(|g| g.len()).unwrap_or(0)
     }
 
     /// Returns the port the receiver is running on.
@@ -232,6 +229,7 @@ async fn handle_health() -> &'static str {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
 

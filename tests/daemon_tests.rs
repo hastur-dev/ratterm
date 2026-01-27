@@ -6,10 +6,10 @@
 //! - Deployer command generation
 //! - DaemonManager coordination
 
-use ratterm::daemon::{
-    DaemonDeployer, DaemonError, DaemonManager, DaemonMetrics, DaemonStatus, DAEMON_SCRIPT,
-};
-use ratterm::ssh::metrics::{DeviceMetrics, GpuType, MetricStatus};
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
+use ratterm::daemon::{DAEMON_SCRIPT, DaemonError, DaemonManager, DaemonMetrics, DaemonStatus};
+use ratterm::ssh::metrics::{GpuType, MetricStatus};
 
 // ============================================================================
 // Script Tests
@@ -335,7 +335,9 @@ mod metrics_parsing_tests {
 // ============================================================================
 
 mod deployer_tests {
-    use ratterm::daemon::script::{deploy_daemon_command, status_daemon_command, stop_daemon_command};
+    use ratterm::daemon::script::{
+        deploy_daemon_command, status_daemon_command, stop_daemon_command,
+    };
 
     #[test]
     fn test_deploy_command_includes_host_id() {
@@ -440,11 +442,7 @@ mod manager_tests {
     #[test]
     fn test_active_hosts_initially_empty() {
         let manager = DaemonManager::new();
-        assert_eq!(
-            manager.active_host_count(),
-            0,
-            "No active hosts initially"
-        );
+        assert_eq!(manager.active_host_count(), 0, "No active hosts initially");
         assert!(
             manager.active_host_ids().is_empty(),
             "Active host set should be empty"
@@ -494,7 +492,10 @@ mod manager_tests {
                 assert!(result.is_ok(), "Starting again should succeed");
 
                 manager.stop();
-                assert!(!manager.is_active(), "Manager should not be active after stop");
+                assert!(
+                    !manager.is_active(),
+                    "Manager should not be active after stop"
+                );
 
                 // Can stop again without error (idempotent)
                 manager.stop();
@@ -510,11 +511,8 @@ mod manager_tests {
     #[test]
     fn test_deploy_fails_when_inactive() {
         let manager = DaemonManager::new();
-        let ctx = ratterm::terminal::SSHContext::new(
-            "test".to_string(),
-            "localhost".to_string(),
-            22,
-        );
+        let ctx =
+            ratterm::terminal::SSHContext::new("test".to_string(), "localhost".to_string(), 22);
 
         let result = manager.deploy_to_host(&ctx, 1);
         assert!(

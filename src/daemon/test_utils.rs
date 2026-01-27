@@ -6,9 +6,9 @@ use std::time::Duration;
 
 use tracing::{error, info};
 
+use super::DaemonManager;
 use super::receiver::DEFAULT_RECEIVER_PORT;
 use super::types::DaemonMetrics;
-use super::DaemonManager;
 
 /// Result of a daemon system test.
 #[derive(Debug, Clone)]
@@ -68,7 +68,10 @@ pub fn test_daemon_receiver() -> DaemonTestResult {
 
     match manager.start() {
         Ok(()) => {
-            info!("Daemon manager started successfully on port {}", DEFAULT_RECEIVER_PORT);
+            info!(
+                "Daemon manager started successfully on port {}",
+                DEFAULT_RECEIVER_PORT
+            );
             result.receiver_started = true;
         }
         Err(e) => {
@@ -173,10 +176,7 @@ fn send_test_metric(metric: &DaemonMetrics) -> Result<(), String> {
 pub fn is_port_available() -> bool {
     use std::net::TcpListener;
 
-    match TcpListener::bind(("127.0.0.1", DEFAULT_RECEIVER_PORT)) {
-        Ok(_) => true,
-        Err(_) => false,
-    }
+    TcpListener::bind(("127.0.0.1", DEFAULT_RECEIVER_PORT)).is_ok()
 }
 
 /// Returns diagnostic info about the daemon system.
@@ -188,13 +188,17 @@ pub fn get_diagnostics() -> String {
     lines.push(format!("Receiver port: {}", DEFAULT_RECEIVER_PORT));
     lines.push(format!(
         "Port available: {}",
-        if is_port_available() { "Yes" } else { "No (in use)" }
+        if is_port_available() {
+            "Yes"
+        } else {
+            "No (in use)"
+        }
     ));
 
     // Check if running as admin on Windows
     #[cfg(windows)]
     {
-        lines.push(format!("Platform: Windows"));
+        lines.push("Platform: Windows".to_string());
         // Note: Checking admin status requires additional dependencies
     }
 

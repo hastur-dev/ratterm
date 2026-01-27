@@ -13,7 +13,10 @@ impl App {
     ///
     /// Called from handle_popup_key when popup kind is HealthDashboard.
     pub(super) fn handle_health_dashboard_key(&mut self, key: KeyEvent) {
-        info!("DASHBOARD: handle_health_dashboard_key called, code={:?}", key.code);
+        info!(
+            "DASHBOARD: handle_health_dashboard_key called, code={:?}",
+            key.code
+        );
 
         let Some(ref dashboard) = self.health_dashboard else {
             info!("DASHBOARD: dashboard is None, hiding popup");
@@ -32,7 +35,10 @@ impl App {
 
     /// Handles keys in overview mode.
     fn handle_dashboard_overview_key(&mut self, key: KeyEvent) {
-        info!("DASHBOARD OVERVIEW: code={:?}, mods={:?}", key.code, key.modifiers);
+        info!(
+            "DASHBOARD OVERVIEW: code={:?}, mods={:?}",
+            key.code, key.modifiers
+        );
 
         // Handle list navigation using shared helper (uses ListSelectable trait)
         if let Some(ref mut dashboard) = self.health_dashboard {
@@ -105,9 +111,9 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crossterm::event::{KeyEventKind, KeyEventState};
     use crate::ssh::SSHHostList;
     use crate::ui::health_dashboard::{DashboardMode, HealthDashboard};
+    use crossterm::event::{KeyEventKind, KeyEventState};
 
     /// Helper to create a KeyEvent for testing.
     fn key_event(code: KeyCode) -> KeyEvent {

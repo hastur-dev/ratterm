@@ -131,7 +131,8 @@ impl DaemonMetrics {
             };
 
             // Include GPU even if type is "videocore" (Raspberry Pi)
-            let include_gpu = gpu_type != GpuType::None || gpu.gpu_type.to_lowercase() == "videocore";
+            let include_gpu =
+                gpu_type != GpuType::None || gpu.gpu_type.to_lowercase() == "videocore";
 
             if include_gpu {
                 let display_type = if gpu.gpu_type.to_lowercase() == "videocore" {
@@ -223,6 +224,7 @@ impl std::fmt::Display for DaemonError {
 impl std::error::Error for DaemonError {}
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
 

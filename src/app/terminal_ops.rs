@@ -312,11 +312,18 @@ impl App {
                         // Write the command followed by Enter
                         let cmd_with_newline = format!("{}\r", command);
                         if let Err(e) = terminal.write(cmd_with_newline.as_bytes()) {
-                            self.set_status(format!("Addon {}: failed to send command: {}", addon_name, e));
+                            self.set_status(format!(
+                                "Addon {}: failed to send command: {}",
+                                addon_name, e
+                            ));
                             return;
                         }
                     }
-                    self.set_status(format!("Addon {}: started in terminal {}", addon_name, idx + 1));
+                    self.set_status(format!(
+                        "Addon {}: started in terminal {}",
+                        addon_name,
+                        idx + 1
+                    ));
                 }
                 Err(e) => {
                     self.set_status(format!("Addon {}: cannot create tab: {}", addon_name, e));

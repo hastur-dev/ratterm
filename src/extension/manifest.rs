@@ -175,15 +175,13 @@ impl ExtensionManifest {
     /// Returns the hotkey description if specified.
     #[must_use]
     pub fn hotkey_description(&self) -> Option<&str> {
-        self.hotkey
-            .as_ref()
-            .and_then(|h| {
-                if h.description.is_empty() {
-                    None
-                } else {
-                    Some(h.description.as_str())
-                }
-            })
+        self.hotkey.as_ref().and_then(|h| {
+            if h.description.is_empty() {
+                None
+            } else {
+                Some(h.description.as_str())
+            }
+        })
     }
 }
 

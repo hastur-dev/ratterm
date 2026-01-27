@@ -11,7 +11,7 @@ use std::time::{Duration, SystemTime};
 use tracing_subscriber::fmt::writer::MakeWriterExt;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::{fmt, EnvFilter};
+use tracing_subscriber::{EnvFilter, fmt};
 
 /// Default log retention in hours.
 pub const DEFAULT_LOG_RETENTION_HOURS: u32 = 24;
@@ -110,10 +110,8 @@ pub fn cleanup_old_logs(retention_hours: u32) -> io::Result<u32> {
         if let Ok(metadata) = entry.metadata() {
             if let Ok(modified) = metadata.modified() {
                 if let Ok(age) = now.duration_since(modified) {
-                    if age > retention_duration {
-                        if fs::remove_file(&path).is_ok() {
-                            deleted_count += 1;
-                        }
+                    if age > retention_duration && fs::remove_file(&path).is_ok() {
+                        deleted_count += 1;
                     }
                 }
             }
@@ -151,8 +149,8 @@ pub fn init(config: &LogConfig) -> io::Result<()> {
     let log_file = File::create(&log_path)?;
 
     // Build the filter from config level
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new(&config.level));
+    let filter =
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(&config.level));
 
     // Set up the subscriber with file output
     let file_layer = fmt::layer()
@@ -195,7 +193,7 @@ pub fn check_rotation() -> io::Result<bool> {
             if path.extension().and_then(|e| e.to_str()) == Some("log") {
                 if let Ok(metadata) = entry.metadata() {
                     if let Ok(modified) = metadata.modified() {
-                        if newest_log.as_ref().map_or(true, |(_, t)| modified > *t) {
+                        if newest_log.as_ref().is_none_or(|(_, t)| modified > *t) {
                             newest_log = Some((path, modified));
                         }
                     }
@@ -209,7 +207,10 @@ pub fn check_rotation() -> io::Result<bool> {
         if let Ok(metadata) = fs::metadata(&path) {
             if metadata.len() > MAX_LOG_SIZE_BYTES {
                 // Create new log file (rotation happens naturally with timestamped names)
-                tracing::info!("Log rotation triggered, file size: {} bytes", metadata.len());
+                tracing::info!(
+                    "Log rotation triggered, file size: {} bytes",
+                    metadata.len()
+                );
                 return Ok(true);
             }
         }
@@ -244,7 +245,10 @@ mod tests {
     fn test_parse_retention() {
         assert_eq!(LogConfig::parse_retention("48"), 48);
         assert_eq!(LogConfig::parse_retention("0"), 0);
-        assert_eq!(LogConfig::parse_retention("invalid"), DEFAULT_LOG_RETENTION_HOURS);
+        assert_eq!(
+            LogConfig::parse_retention("invalid"),
+            DEFAULT_LOG_RETENTION_HOURS
+        );
     }
 
     #[test]

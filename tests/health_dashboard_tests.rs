@@ -3,7 +3,7 @@
 //! Tests cover: dashboard creation, mode transitions, key handling,
 //! open/close operations via Escape key.
 
-#![allow(clippy::expect_used)]
+#![allow(clippy::expect_used, clippy::unwrap_used)]
 
 use ratterm::ssh::{DeviceMetrics, SSHHostList};
 use ratterm::ui::health_dashboard::{DashboardHost, DashboardMode, HealthDashboard};
@@ -77,8 +77,15 @@ fn test_health_dashboard_new_empty_hosts() {
         DashboardMode::Overview,
         "Initial mode should be Overview"
     );
-    assert!(dashboard.auto_refresh(), "Auto-refresh should be enabled by default");
-    assert_eq!(dashboard.selected_index(), 0, "Initial selection should be 0");
+    assert!(
+        dashboard.auto_refresh(),
+        "Auto-refresh should be enabled by default"
+    );
+    assert_eq!(
+        dashboard.selected_index(),
+        0,
+        "Initial selection should be 0"
+    );
     assert_eq!(dashboard.scroll_offset(), 0, "Initial scroll should be 0");
 }
 
@@ -252,7 +259,10 @@ fn test_health_dashboard_time_since_refresh() {
 
     // Time since refresh should be 0 or very small immediately after creation
     let elapsed = dashboard.time_since_refresh();
-    assert!(elapsed < 2, "Time since refresh should be minimal right after creation");
+    assert!(
+        elapsed < 2,
+        "Time since refresh should be minimal right after creation"
+    );
 }
 
 #[test]
@@ -325,7 +335,11 @@ fn test_health_dashboard_selected_host_empty() {
 #[test]
 fn test_dashboard_mode_default() {
     let mode = DashboardMode::default();
-    assert_eq!(mode, DashboardMode::Overview, "Default mode should be Overview");
+    assert_eq!(
+        mode,
+        DashboardMode::Overview,
+        "Default mode should be Overview"
+    );
 }
 
 #[test]

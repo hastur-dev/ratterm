@@ -45,7 +45,7 @@ pub mod test_utils;
 pub mod types;
 
 pub use deployer::{DaemonDeployer, DaemonStatus};
-pub use receiver::{MetricsReceiver, DEFAULT_RECEIVER_PORT};
+pub use receiver::{DEFAULT_RECEIVER_PORT, MetricsReceiver};
 pub use script::DAEMON_SCRIPT;
 pub use types::{DaemonError, DaemonMetrics};
 
@@ -224,17 +224,11 @@ impl DaemonManager {
     ///
     /// # Errors
     /// Returns error if deployment fails.
-    pub fn deploy_to_host(
-        &self,
-        context: &SSHContext,
-        host_id: u32,
-    ) -> Result<(), DaemonError> {
+    pub fn deploy_to_host(&self, context: &SSHContext, host_id: u32) -> Result<(), DaemonError> {
         assert!(host_id > 0, "host_id must be positive");
 
         if !self.is_active() {
-            return Err(DaemonError::ServerError(
-                "Manager not active".to_string(),
-            ));
+            return Err(DaemonError::ServerError("Manager not active".to_string()));
         }
 
         info!(
@@ -243,8 +237,8 @@ impl DaemonManager {
         );
 
         // Connect via SFTP
-        let sftp = SftpClient::connect(context)
-            .map_err(|e| DaemonError::SshError(e.to_string()))?;
+        let sftp =
+            SftpClient::connect(context).map_err(|e| DaemonError::SshError(e.to_string()))?;
 
         // Deploy the daemon
         DaemonDeployer::deploy(&sftp, host_id)?;
@@ -269,8 +263,8 @@ impl DaemonManager {
             context.hostname, host_id
         );
 
-        let sftp = SftpClient::connect(context)
-            .map_err(|e| DaemonError::SshError(e.to_string()))?;
+        let sftp =
+            SftpClient::connect(context).map_err(|e| DaemonError::SshError(e.to_string()))?;
 
         DaemonDeployer::stop(&sftp)?;
 
@@ -361,6 +355,7 @@ impl Drop for DaemonManager {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
 

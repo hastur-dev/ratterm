@@ -556,7 +556,10 @@ mod tests {
             &mut list,
             &key_event(KeyModifiers::NONE, KeyCode::Char('j')),
         );
-        handle_full_list_navigation(&mut list, &key_event(KeyModifiers::NONE, KeyCode::Char('k')));
+        handle_full_list_navigation(
+            &mut list,
+            &key_event(KeyModifiers::NONE, KeyCode::Char('k')),
+        );
         handle_full_list_navigation(&mut list, &key_event(KeyModifiers::NONE, KeyCode::Home));
         handle_full_list_navigation(&mut list, &key_event(KeyModifiers::NONE, KeyCode::End));
 
@@ -578,8 +581,14 @@ mod tests {
         assert_eq!(field.insert_calls, 5);
 
         // Backspace twice
-        handle_text_input(&mut field, &key_event(KeyModifiers::NONE, KeyCode::Backspace));
-        handle_text_input(&mut field, &key_event(KeyModifiers::NONE, KeyCode::Backspace));
+        handle_text_input(
+            &mut field,
+            &key_event(KeyModifiers::NONE, KeyCode::Backspace),
+        );
+        handle_text_input(
+            &mut field,
+            &key_event(KeyModifiers::NONE, KeyCode::Backspace),
+        );
         assert_eq!(field.content, "hel");
         assert_eq!(field.backspace_calls, 2);
     }

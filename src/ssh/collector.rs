@@ -397,9 +397,9 @@ fn collect_with_plink(host: &HostCollectionInfo, password: &str) -> DeviceMetric
     );
 
     let mut cmd = Command::new("plink");
-    cmd.arg("-batch");  // Non-interactive mode, auto-accept host key
+    cmd.arg("-batch"); // Non-interactive mode, auto-accept host key
     cmd.arg("-no-antispoof");
-    cmd.arg("-pw").arg(password);  // Pass password directly, no escaping needed
+    cmd.arg("-pw").arg(password); // Pass password directly, no escaping needed
 
     if host.port != 22 {
         cmd.arg("-P").arg(host.port.to_string());
@@ -419,11 +419,9 @@ fn collect_with_plink(host: &HostCollectionInfo, password: &str) -> DeviceMetric
     // If plink still failed, show helpful message
     if result.status == MetricStatus::Error {
         if let Some(ref err) = result.error {
-            error!(
-                "plink failed for {}: {}",
-                host.hostname, err
-            );
-            if err.contains("host key") || err.contains("refused") || err.contains("Access denied") {
+            error!("plink failed for {}: {}", host.hostname, err);
+            if err.contains("host key") || err.contains("refused") || err.contains("Access denied")
+            {
                 warn!(
                     "plink auth failed for {} - check credentials or use key-based auth",
                     host.hostname
@@ -525,9 +523,14 @@ fn execute_ssh_command(mut cmd: Command, host_id: u32) -> DeviceMetrics {
             output.status.code()
         );
         error!("  STDERR: {}", stderr);
-        error!("  STDOUT (len={}): {}", stdout.len(), stdout.chars().take(200).collect::<String>());
+        error!(
+            "  STDOUT (len={}): {}",
+            stdout.len(),
+            stdout.chars().take(200).collect::<String>()
+        );
 
-        let error = if stderr.contains("Permission denied") || stderr.contains("permission denied") {
+        let error = if stderr.contains("Permission denied") || stderr.contains("permission denied")
+        {
             "Permission denied".to_string()
         } else if stderr.contains("Access denied") || stderr.contains("access denied") {
             "Access denied".to_string()
@@ -893,6 +896,7 @@ pub fn build_collection_info(hosts: &SSHHostList) -> Vec<HostCollectionInfo> {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
 

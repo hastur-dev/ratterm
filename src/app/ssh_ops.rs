@@ -82,10 +82,7 @@ impl App {
                             c.key_path.is_some()
                         );
                     } else {
-                        info!(
-                            "  - Host {} '{}': has_creds=false",
-                            host.id, host.hostname
-                        );
+                        info!("  - Host {} '{}': has_creds=false", host.id, host.hostname);
                     }
                 }
 

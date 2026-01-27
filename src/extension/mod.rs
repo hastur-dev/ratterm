@@ -249,7 +249,11 @@ impl ExtensionManager {
         if let Ok(mut file) = fs::OpenOptions::new().append(true).open(&config_path) {
             use std::io::Write;
             let _ = file.write_all(entry.as_bytes());
-            tracing::info!("Registered default hotkey {} for extension {}", hotkey, name);
+            tracing::info!(
+                "Registered default hotkey {} for extension {}",
+                hotkey,
+                name
+            );
         }
     }
 
