@@ -23,6 +23,7 @@
 //!
 //! Options:
 //!   --version, -v    Show version
+//!   --verify         Verify binary is valid (used by updater)
 //!   --update         Check and install updates
 //!   --no-update      Skip update check
 //!
@@ -61,6 +62,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Handle --version flag
     if args.iter().any(|a| a == "--version" || a == "-v") {
         println!("ratterm v{VERSION}");
+        return Ok(());
+    }
+
+    // Handle --verify flag (used by updater to validate downloaded binaries)
+    if args.iter().any(|a| a == "--verify") {
+        println!("ratterm v{VERSION} verify-ok");
         return Ok(());
     }
 

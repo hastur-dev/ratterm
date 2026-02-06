@@ -17,6 +17,9 @@ const REPO: &str = "hastur-dev/ratterm";
 /// Maximum retry attempts for HTTP requests.
 const MAX_HTTP_RETRIES: usize = 3;
 
+/// Token printed by `--verify` to confirm a valid binary.
+pub const VERIFY_TOKEN: &str = "verify-ok";
+
 /// Update check result.
 #[derive(Debug)]
 pub enum UpdateStatus {
@@ -194,12 +197,7 @@ impl Updater {
             return Err("Downloaded file is empty".to_string());
         }
 
-        // Note: We trust the version comparison done earlier in is_newer().
-        // We don't compare file bytes because different builds of the same
-        // version may have slightly different binaries, and we already verified
-        // the version is newer before downloading.
-
-        // Make executable on Unix
+        // Make executable on Unix before verification
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
@@ -210,6 +208,17 @@ impl Updater {
             fs::set_permissions(&temp_path, perms)
                 .map_err(|e| format!("Failed to set permissions: {e}"))?;
         }
+
+        // Verify the downloaded binary is a valid ratterm executable
+        // before replacing the current one
+        eprintln!("Verifying downloaded binary...");
+        if let Err(e) = self.verify_binary(&temp_path, new_version) {
+            let _ = fs::remove_file(&temp_path);
+            return Err(format!(
+                "Downloaded binary failed verification: {e}. Update aborted."
+            ));
+        }
+        eprintln!("Verification passed.");
 
         // Platform-specific installation
         #[cfg(windows)]
@@ -254,6 +263,69 @@ impl Updater {
         Ok(())
     }
 
+    /// Verifies a downloaded binary is a valid ratterm executable.
+    ///
+    /// Runs the binary with `--verify` and checks that:
+    /// 1. The process exits with code 0
+    /// 2. The output contains the expected version and verify token
+    ///
+    /// Returns Ok(()) if verification passes, Err with details if it fails.
+    fn verify_binary(
+        &self,
+        binary_path: &Path,
+        expected_version: &str,
+    ) -> Result<(), String> {
+        assert!(binary_path.exists(), "Binary path must exist");
+        assert!(!expected_version.is_empty(), "Expected version must not be empty");
+
+        let output = Command::new(binary_path)
+            .arg("--verify")
+            .output()
+            .map_err(|e| {
+                format!(
+                    "Failed to execute downloaded binary for verification: {e}"
+                )
+            })?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!(
+                "Verification failed: binary exited with {} (stderr: {})",
+                output.status,
+                stderr.trim()
+            ));
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        validate_verify_output(stdout.trim(), expected_version)
+    }
+}
+
+/// Validates the output from a `--verify` invocation.
+///
+/// Expected format: "ratterm v{version} verify-ok"
+/// Returns Ok(()) if the output matches, Err with details if not.
+fn validate_verify_output(
+    output: &str,
+    expected_version: &str,
+) -> Result<(), String> {
+    let expected = format!(
+        "ratterm v{} {}",
+        expected_version.trim_start_matches('v'),
+        VERIFY_TOKEN
+    );
+
+    if output != expected {
+        return Err(format!(
+            "Verification failed: expected '{}', got '{}'",
+            expected, output
+        ));
+    }
+
+    Ok(())
+}
+
+impl Updater {
     /// Installs update on Windows using a helper script.
     /// Windows cannot replace a running executable directly.
     #[cfg(windows)]
@@ -272,40 +344,77 @@ impl Updater {
         // Create a batch script that:
         // 1. Waits for the current process to exit
         // 2. Replaces the executable
-        // 3. Restarts the application
-        // 4. Cleans up
+        // 3. Verifies the new binary works (--verify)
+        // 4. If verification fails, reverts to backup
+        // 5. If verification passes, starts the new binary
+        // 6. Cleans up
+        let verify_expected = format!(
+            "ratterm v{} {}",
+            new_version.trim_start_matches('v'),
+            VERIFY_TOKEN
+        );
         let script_content = format!(
             r#"@echo off
-setlocal
+setlocal EnableDelayedExpansion
 echo Updating ratterm to v{new_version}...
 set RETRIES=30
 :WAIT_LOOP
-if %RETRIES% LEQ 0 goto :ERROR
+if !RETRIES! LEQ 0 (
+    echo ERROR: Timed out waiting for ratterm to exit.
+    goto :REVERT
+)
 tasklist /FI "PID eq %~1" 2>NUL | find /I /N "%~1" >NUL
-if "%ERRORLEVEL%"=="0" (
+if "!ERRORLEVEL!"=="0" (
     timeout /t 1 /nobreak >NUL
-    set /a RETRIES=%RETRIES%-1
+    set /a RETRIES=!RETRIES!-1
     goto :WAIT_LOOP
 )
 echo Process exited, installing update...
 if exist "{backup_path_str}" del /f /q "{backup_path_str}"
 move /y "{current_exe_str}" "{backup_path_str}"
-if errorlevel 1 goto :ERROR
+if errorlevel 1 (
+    echo ERROR: Failed to create backup of current binary.
+    goto :REVERT
+)
 move /y "{temp_path_str}" "{current_exe_str}"
 if errorlevel 1 (
-    move /y "{backup_path_str}" "{current_exe_str}"
-    goto :ERROR
+    echo ERROR: Failed to install new binary.
+    goto :REVERT
 )
+echo Verifying new binary...
+for /f "delims=" %%i in ('"{current_exe_str}" --verify 2^>NUL') do set "VERIFY_OUT=%%i"
+if "!VERIFY_OUT!" NEQ "{verify_expected}" (
+    echo ERROR: Verification failed!
+    echo   Expected: {verify_expected}
+    echo   Got:      !VERIFY_OUT!
+    echo Reverting to previous version...
+    del /f /q "{current_exe_str}" 2>NUL
+    goto :REVERT
+)
+echo Verification passed!
 del /f /q "{backup_path_str}" 2>NUL
-echo Update complete! Starting ratterm...
+echo Update to v{new_version} complete! Starting ratterm...
 start "" "{current_exe_str}"
 del /f /q "%~f0"
 exit /b 0
-:ERROR
-echo Update failed!
-if exist "{backup_path_str}" move /y "{backup_path_str}" "{current_exe_str}"
+:REVERT
+echo Restoring previous version...
+if exist "{backup_path_str}" (
+    if exist "{current_exe_str}" del /f /q "{current_exe_str}"
+    move /y "{backup_path_str}" "{current_exe_str}"
+    if errorlevel 1 (
+        echo CRITICAL: Failed to restore backup! Your binary may be at:
+        echo   {backup_path_str}
+        echo Please manually rename it to:
+        echo   {current_exe_str}
+    ) else (
+        echo Previous version restored successfully.
+    )
+)
 if exist "{temp_path_str}" del /f /q "{temp_path_str}"
-pause
+echo.
+echo Update failed. Press any key to close.
+pause >NUL
 del /f /q "%~f0"
 exit /b 1
 "#
@@ -560,27 +669,241 @@ pub fn check_for_updates() -> StartupUpdateResult {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Write;
+
+    /// Helper to create an Updater with a specific version for testing.
+    fn test_updater(current_version: &str) -> Updater {
+        Updater {
+            enabled: true,
+            is_dev_mode: false,
+            repo: "test/test".to_string(),
+            current_version: current_version.to_string(),
+        }
+    }
+
+    // ── parse_version tests ──
 
     #[test]
-    fn test_parse_version() {
+    fn test_parse_version_standard() {
         assert_eq!(parse_version("1.2.3"), (1, 2, 3));
+    }
+
+    #[test]
+    fn test_parse_version_with_v_prefix() {
         assert_eq!(parse_version("v1.2.3"), (1, 2, 3));
+    }
+
+    #[test]
+    fn test_parse_version_zero() {
         assert_eq!(parse_version("0.1.0"), (0, 1, 0));
     }
 
     #[test]
-    fn test_is_newer() {
+    fn test_parse_version_missing_parts() {
+        assert_eq!(parse_version("1"), (1, 0, 0));
+        assert_eq!(parse_version("1.2"), (1, 2, 0));
+    }
+
+    #[test]
+    fn test_parse_version_empty() {
+        assert_eq!(parse_version(""), (0, 0, 0));
+    }
+
+    // ── is_newer tests ──
+
+    #[test]
+    fn test_is_newer_major_bump() {
+        let updater = test_updater("0.1.0");
+        assert!(updater.is_newer("1.0.0"));
+    }
+
+    #[test]
+    fn test_is_newer_minor_bump() {
+        let updater = test_updater("0.1.0");
+        assert!(updater.is_newer("0.2.0"));
+    }
+
+    #[test]
+    fn test_is_newer_patch_bump() {
+        let updater = test_updater("0.1.0");
+        assert!(updater.is_newer("0.1.1"));
+    }
+
+    #[test]
+    fn test_is_newer_same_version() {
+        let updater = test_updater("0.1.0");
+        assert!(!updater.is_newer("0.1.0"));
+    }
+
+    #[test]
+    fn test_is_newer_older_version() {
+        let updater = test_updater("0.1.0");
+        assert!(!updater.is_newer("0.0.9"));
+    }
+
+    #[test]
+    fn test_is_newer_with_v_prefix() {
+        let updater = test_updater("0.1.0");
+        assert!(updater.is_newer("v0.2.0"));
+    }
+
+    // ── get_asset_name tests ──
+
+    #[test]
+    fn test_get_asset_name_format() {
+        let updater = test_updater("0.1.0");
+        let name = updater.get_asset_name();
+
+        // Should contain "rat-" prefix
+        assert!(name.starts_with("rat-"), "Asset name should start with 'rat-'");
+
+        // Should contain architecture
+        assert!(
+            name.contains("x86_64") || name.contains("aarch64"),
+            "Asset name should contain architecture"
+        );
+
+        // Platform-specific checks
+        if cfg!(target_os = "windows") {
+            assert!(name.ends_with(".exe"), "Windows asset should end with .exe");
+            assert!(name.contains("windows"), "Windows asset should contain 'windows'");
+        } else if cfg!(target_os = "macos") {
+            assert!(!name.ends_with(".exe"), "Unix asset should not end with .exe");
+            assert!(name.contains("macos"), "macOS asset should contain 'macos'");
+        } else {
+            assert!(!name.ends_with(".exe"), "Unix asset should not end with .exe");
+            assert!(name.contains("linux"), "Linux asset should contain 'linux'");
+        }
+    }
+
+    // ── validate_verify_output tests ──
+
+    #[test]
+    fn test_validate_verify_output_correct() {
+        let result = validate_verify_output("ratterm v0.2.0 verify-ok", "0.2.0");
+        assert!(result.is_ok(), "Correct output should pass: {:?}", result.err());
+    }
+
+    #[test]
+    fn test_validate_verify_output_with_v_prefix() {
+        // Expected version has v prefix - should still work
+        let result = validate_verify_output("ratterm v0.2.0 verify-ok", "v0.2.0");
+        assert!(result.is_ok(), "Version with v prefix should pass: {:?}", result.err());
+    }
+
+    #[test]
+    fn test_validate_verify_output_wrong_version() {
+        let result = validate_verify_output("ratterm v0.1.0 verify-ok", "0.2.0");
+        assert!(result.is_err(), "Wrong version should fail");
+        let err = result.err().unwrap_or_default();
+        assert!(err.contains("Verification failed"), "Error: {err}");
+        assert!(err.contains("v0.2.0"), "Error should mention expected version: {err}");
+    }
+
+    #[test]
+    fn test_validate_verify_output_missing_token() {
+        let result = validate_verify_output("ratterm v0.2.0", "0.2.0");
+        assert!(result.is_err(), "Missing verify token should fail");
+    }
+
+    #[test]
+    fn test_validate_verify_output_wrong_token() {
+        let result = validate_verify_output("ratterm v0.2.0 bad-token", "0.2.0");
+        assert!(result.is_err(), "Wrong verify token should fail");
+    }
+
+    #[test]
+    fn test_validate_verify_output_empty() {
+        let result = validate_verify_output("", "0.2.0");
+        assert!(result.is_err(), "Empty output should fail");
+    }
+
+    #[test]
+    fn test_validate_verify_output_garbage() {
+        let result = validate_verify_output("<!DOCTYPE html>", "0.2.0");
+        assert!(result.is_err(), "HTML content should fail");
+    }
+
+    #[test]
+    fn test_validate_verify_output_wrong_binary_name() {
+        let result = validate_verify_output("othertool v0.2.0 verify-ok", "0.2.0");
+        assert!(result.is_err(), "Wrong binary name should fail");
+    }
+
+    // ── verify_binary integration tests ──
+
+    #[test]
+    fn test_verify_binary_nonexistent_binary_panics() {
+        let updater = test_updater("0.1.0");
+        let fake_path = Path::new("this_binary_does_not_exist_12345");
+
+        // Should panic because of the assert
+        let result = std::panic::catch_unwind(|| {
+            updater.verify_binary(fake_path, "0.1.0")
+        });
+        assert!(
+            result.is_err(),
+            "Should panic on nonexistent binary (assertion)"
+        );
+    }
+
+    #[allow(clippy::expect_used)] // expect is acceptable in test setup code
+    #[test]
+    fn test_verify_binary_invalid_executable() {
+        // Create a temporary file that is not a valid executable
+        let temp_dir = env::temp_dir();
+        let fake_exe = temp_dir.join("ratterm_test_fake_binary.exe");
+        {
+            let mut f =
+                fs::File::create(&fake_exe).expect("test setup: create temp file");
+            f.write_all(b"this is not an executable")
+                .expect("test setup: write to temp file");
+        }
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = fs::metadata(&fake_exe)
+                .expect("test setup: get metadata")
+                .permissions();
+            perms.set_mode(0o755);
+            fs::set_permissions(&fake_exe, perms)
+                .expect("test setup: set permissions");
+        }
+
+        let updater = test_updater("0.1.0");
+        let result = updater.verify_binary(&fake_exe, "0.1.0");
+
+        // Clean up
+        let _ = fs::remove_file(&fake_exe);
+
+        assert!(
+            result.is_err(),
+            "Invalid executable should fail verification"
+        );
+    }
+
+    // ── VERIFY_TOKEN constant test ──
+
+    #[test]
+    fn test_verify_token_is_stable() {
+        // The verify token must remain stable across versions
+        assert_eq!(VERIFY_TOKEN, "verify-ok");
+    }
+
+    // ── UpdateStatus tests ──
+
+    #[test]
+    fn test_check_returns_disabled_when_not_enabled() {
         let updater = Updater {
-            enabled: true,
+            enabled: false,
             is_dev_mode: false,
             repo: "test/test".to_string(),
             current_version: "0.1.0".to_string(),
         };
-
-        assert!(updater.is_newer("0.2.0"));
-        assert!(updater.is_newer("0.1.1"));
-        assert!(updater.is_newer("1.0.0"));
-        assert!(!updater.is_newer("0.1.0"));
-        assert!(!updater.is_newer("0.0.9"));
+        assert!(
+            matches!(updater.check(), UpdateStatus::Disabled),
+            "Should return Disabled when not enabled"
+        );
     }
 }

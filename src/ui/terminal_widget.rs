@@ -127,23 +127,31 @@ impl<'a> TerminalWidget<'a> {
             // Calculate which row to render based on scroll offset
             // scroll_offset = 0 means we're at the bottom (current view)
             // scroll_offset > 0 means we're looking at scrollback
+            //
+            // When scrolled, scrollback content appears at the TOP of the screen,
+            // and visible grid content is pushed DOWN (and partially off-screen).
 
-            let row_from_bottom = visible_rows - 1 - screen_row;
-            let row_to_render = if row_from_bottom < scroll_offset {
-                // This row is in scrollback (selection not supported in scrollback for now)
-                let scrollback_idx = scroll_offset - 1 - row_from_bottom;
+            if screen_row < scroll_offset {
+                // Top rows show scrollback content (older history at top)
+                // scrollback_row(0) = most recent scrollback line (just above visible grid)
+                // So screen_row=0 with scroll_offset=5 should show scrollback[4] (oldest of visible)
+                // screen_row=4 with scroll_offset=5 should show scrollback[0] (most recent)
+                let scrollback_idx = scroll_offset - 1 - screen_row;
                 self.render_scrollback_row(grid, scrollback_idx, screen_row, cols, area, buf);
-                continue;
             } else {
-                // This row is in visible grid
-                (grid.rows() as usize)
-                    .saturating_sub(scroll_offset)
-                    .saturating_sub(visible_rows - screen_row)
-            };
+                // Remaining rows show visible grid content
+                // screen_row - scroll_offset gives us which grid row to show
+                // But we need to account for grid possibly being smaller than visible area
+                let grid_rows = grid.rows() as usize;
+                let rows_from_grid = visible_rows - scroll_offset;
+                let grid_start_row = grid_rows.saturating_sub(rows_from_grid);
+                let row_to_render = grid_start_row + (screen_row - scroll_offset);
 
-            // Render row from visible grid
-            if let Some(row) = grid.row(row_to_render) {
-                self.render_row_cells(row, row_to_render, screen_row, cols, area, buf, grid);
+                if row_to_render < grid_rows {
+                    if let Some(row) = grid.row(row_to_render) {
+                        self.render_row_cells(row, row_to_render, screen_row, cols, area, buf, grid);
+                    }
+                }
             }
         }
 
