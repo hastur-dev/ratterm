@@ -149,7 +149,15 @@ impl<'a> TerminalWidget<'a> {
 
                 if row_to_render < grid_rows {
                     if let Some(row) = grid.row(row_to_render) {
-                        self.render_row_cells(row, row_to_render, screen_row, cols, area, buf, grid);
+                        self.render_row_cells(
+                            row,
+                            row_to_render,
+                            screen_row,
+                            cols,
+                            area,
+                            buf,
+                            grid,
+                        );
                     }
                 }
             }

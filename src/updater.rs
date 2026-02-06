@@ -270,22 +270,17 @@ impl Updater {
     /// 2. The output contains the expected version and verify token
     ///
     /// Returns Ok(()) if verification passes, Err with details if it fails.
-    fn verify_binary(
-        &self,
-        binary_path: &Path,
-        expected_version: &str,
-    ) -> Result<(), String> {
+    fn verify_binary(&self, binary_path: &Path, expected_version: &str) -> Result<(), String> {
         assert!(binary_path.exists(), "Binary path must exist");
-        assert!(!expected_version.is_empty(), "Expected version must not be empty");
+        assert!(
+            !expected_version.is_empty(),
+            "Expected version must not be empty"
+        );
 
         let output = Command::new(binary_path)
             .arg("--verify")
             .output()
-            .map_err(|e| {
-                format!(
-                    "Failed to execute downloaded binary for verification: {e}"
-                )
-            })?;
+            .map_err(|e| format!("Failed to execute downloaded binary for verification: {e}"))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -305,10 +300,7 @@ impl Updater {
 ///
 /// Expected format: "ratterm v{version} verify-ok"
 /// Returns Ok(()) if the output matches, Err with details if not.
-fn validate_verify_output(
-    output: &str,
-    expected_version: &str,
-) -> Result<(), String> {
+fn validate_verify_output(output: &str, expected_version: &str) -> Result<(), String> {
     let expected = format!(
         "ratterm v{} {}",
         expected_version.trim_start_matches('v'),
@@ -755,7 +747,10 @@ mod tests {
         let name = updater.get_asset_name();
 
         // Should contain "rat-" prefix
-        assert!(name.starts_with("rat-"), "Asset name should start with 'rat-'");
+        assert!(
+            name.starts_with("rat-"),
+            "Asset name should start with 'rat-'"
+        );
 
         // Should contain architecture
         assert!(
@@ -766,12 +761,21 @@ mod tests {
         // Platform-specific checks
         if cfg!(target_os = "windows") {
             assert!(name.ends_with(".exe"), "Windows asset should end with .exe");
-            assert!(name.contains("windows"), "Windows asset should contain 'windows'");
+            assert!(
+                name.contains("windows"),
+                "Windows asset should contain 'windows'"
+            );
         } else if cfg!(target_os = "macos") {
-            assert!(!name.ends_with(".exe"), "Unix asset should not end with .exe");
+            assert!(
+                !name.ends_with(".exe"),
+                "Unix asset should not end with .exe"
+            );
             assert!(name.contains("macos"), "macOS asset should contain 'macos'");
         } else {
-            assert!(!name.ends_with(".exe"), "Unix asset should not end with .exe");
+            assert!(
+                !name.ends_with(".exe"),
+                "Unix asset should not end with .exe"
+            );
             assert!(name.contains("linux"), "Linux asset should contain 'linux'");
         }
     }
@@ -781,14 +785,22 @@ mod tests {
     #[test]
     fn test_validate_verify_output_correct() {
         let result = validate_verify_output("ratterm v0.2.0 verify-ok", "0.2.0");
-        assert!(result.is_ok(), "Correct output should pass: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Correct output should pass: {:?}",
+            result.err()
+        );
     }
 
     #[test]
     fn test_validate_verify_output_with_v_prefix() {
         // Expected version has v prefix - should still work
         let result = validate_verify_output("ratterm v0.2.0 verify-ok", "v0.2.0");
-        assert!(result.is_ok(), "Version with v prefix should pass: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Version with v prefix should pass: {:?}",
+            result.err()
+        );
     }
 
     #[test]
@@ -797,7 +809,10 @@ mod tests {
         assert!(result.is_err(), "Wrong version should fail");
         let err = result.err().unwrap_or_default();
         assert!(err.contains("Verification failed"), "Error: {err}");
-        assert!(err.contains("v0.2.0"), "Error should mention expected version: {err}");
+        assert!(
+            err.contains("v0.2.0"),
+            "Error should mention expected version: {err}"
+        );
     }
 
     #[test]
@@ -838,9 +853,7 @@ mod tests {
         let fake_path = Path::new("this_binary_does_not_exist_12345");
 
         // Should panic because of the assert
-        let result = std::panic::catch_unwind(|| {
-            updater.verify_binary(fake_path, "0.1.0")
-        });
+        let result = std::panic::catch_unwind(|| updater.verify_binary(fake_path, "0.1.0"));
         assert!(
             result.is_err(),
             "Should panic on nonexistent binary (assertion)"
@@ -854,8 +867,7 @@ mod tests {
         let temp_dir = env::temp_dir();
         let fake_exe = temp_dir.join("ratterm_test_fake_binary.exe");
         {
-            let mut f =
-                fs::File::create(&fake_exe).expect("test setup: create temp file");
+            let mut f = fs::File::create(&fake_exe).expect("test setup: create temp file");
             f.write_all(b"this is not an executable")
                 .expect("test setup: write to temp file");
         }
@@ -867,8 +879,7 @@ mod tests {
                 .expect("test setup: get metadata")
                 .permissions();
             perms.set_mode(0o755);
-            fs::set_permissions(&fake_exe, perms)
-                .expect("test setup: set permissions");
+            fs::set_permissions(&fake_exe, perms).expect("test setup: set permissions");
         }
 
         let updater = test_updater("0.1.0");
