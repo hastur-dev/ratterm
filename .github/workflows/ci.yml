@@ -83,6 +83,38 @@ jobs:
       - name: Run doc tests
         run: cargo test --doc
 
+      - name: Build release binary
+        run: cargo build --release
+
+      - name: Verify binary executes (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          OUTPUT=$(./target/release/rat --verify)
+          VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
+          EXPECTED="ratterm v${VERSION} verify-ok"
+          if [ "$OUTPUT" != "$EXPECTED" ]; then
+            echo "ERROR: --verify output mismatch"
+            echo "  Expected: $EXPECTED"
+            echo "  Got:      $OUTPUT"
+            exit 1
+          fi
+          echo "Binary verification passed: $OUTPUT"
+
+      - name: Verify binary executes (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $output = & .\target\release\rat.exe --verify
+          $version = (Select-String -Path Cargo.toml -Pattern '^version = "(.+)"' | Select-Object -First 1).Matches.Groups[1].Value
+          $expected = "ratterm v$version verify-ok"
+          if ($output -ne $expected) {
+            Write-Host "ERROR: --verify output mismatch"
+            Write-Host "  Expected: $expected"
+            Write-Host "  Got:      $output"
+            exit 1
+          }
+          Write-Host "Binary verification passed: $output"
+
   # Install script tests on multiple platforms
   install-script:
     name: Install Script (${{ matrix.os }})

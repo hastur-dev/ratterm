@@ -15,9 +15,43 @@ permissions:
   contents: write
 
 jobs:
-  build:
+  # Step 1: Run all tests first
+  test:
     strategy:
-      fail-fast: false  # Continue other builds if one fails
+      fail-fast: true  # Stop all if one fails
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+          components: clippy
+
+      - name: Run clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Run tests
+        run: cargo test --all-features
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+  # Step 2: Build binaries after tests pass
+  build:
+    needs: test
+    strategy:
+      fail-fast: true  # Stop all if one fails
       matrix:
         include:
           - os: ubuntu-latest
@@ -46,11 +80,7 @@ jobs:
         shell: bash
         run: |
           VERSION=${{ github.event.inputs.version }}
-          if [[ "$RUNNER_OS" == "Windows" ]]; then
-            sed -i "s/^version = \".*\"/version = \"$VERSION\"/" Cargo.toml
-          else
-            sed -i "s/^version = \".*\"/version = \"$VERSION\"/" Cargo.toml
-          fi
+          sed -i "s/^version = \".*\"/version = \"$VERSION\"/" Cargo.toml
           echo "Updated Cargo.toml to version $VERSION"
           grep "^version" Cargo.toml
 
@@ -68,8 +98,35 @@ jobs:
           name: ${{ matrix.asset_name }}
           path: ${{ matrix.asset_name }}
 
-  release:
+  # Step 3: Update version in install scripts
+  update-install-scripts:
     needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Update version in install scripts and Cargo.toml
+        run: |
+          VERSION=${{ github.event.inputs.version }}
+          # Update install scripts
+          sed -i "s/VERSION=\".*\"/VERSION=\"$VERSION\"/" install.sh
+          sed -i "s/\$Version = \".*\"/\$Version = \"$VERSION\"/" install.ps1
+          # Update Cargo.toml so future builds have correct version
+          sed -i "s/^version = \".*\"/version = \"$VERSION\"/" Cargo.toml
+
+      - name: Commit and push
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add install.sh install.ps1 Cargo.toml
+          git diff --staged --quiet || git commit -m "chore: bump version to v${{ github.event.inputs.version }}"
+          git push
+
+  # Step 4: Create the GitHub release (after everything else succeeds)
+  release:
+    needs: update-install-scripts
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -117,14 +174,14 @@ jobs:
             ### Manual Download
             Download the appropriate binary for your platform below.
 
-  # Test install scripts after release is published
-  test-install-linux-x86:
+  # Step 5: Verify install scripts work with the new release
+  verify-install-linux-x86:
     needs: release
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Test install script (verbose)
+      - name: Test install script
         env:
           RATTERM_VERSION: ${{ github.event.inputs.version }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -135,31 +192,54 @@ jobs:
 
       - name: Verify installation
         run: |
-          echo "=== Verifying installation ==="
           export PATH="$PATH:$HOME/.local/bin"
-          which rat || echo "rat not found in PATH"
-          rat --version || echo "rat --version failed"
+          rat --version
+
+      - name: Verify binary integrity
+        run: |
+          export PATH="$PATH:$HOME/.local/bin"
+          OUTPUT=$(rat --verify)
+          EXPECTED="ratterm v${{ github.event.inputs.version }} verify-ok"
+          if [ "$OUTPUT" != "$EXPECTED" ]; then
+            echo "ERROR: --verify output mismatch"
+            echo "  Expected: $EXPECTED"
+            echo "  Got:      $OUTPUT"
+            exit 1
+          fi
+          echo "Binary verification passed: $OUTPUT"
+
+      - name: Verify release asset directly
+        run: |
+          echo "=== Testing release asset download and verification ==="
+          curl -fsSL -o /tmp/rat-test \
+            "https://github.com/${{ github.repository }}/releases/download/v${{ github.event.inputs.version }}/rat-linux-x86_64"
+          chmod +x /tmp/rat-test
+          OUTPUT=$(/tmp/rat-test --verify)
+          EXPECTED="ratterm v${{ github.event.inputs.version }} verify-ok"
+          if [ "$OUTPUT" != "$EXPECTED" ]; then
+            echo "ERROR: Downloaded release asset failed verification"
+            echo "  Expected: $EXPECTED"
+            echo "  Got:      $OUTPUT"
+            exit 1
+          fi
+          echo "Release asset verification passed: $OUTPUT"
+          rm -f /tmp/rat-test
 
       - name: Test uninstall
         run: |
-          echo "=== Testing uninstall ==="
           ./install.sh --uninstall --verbose
-
-      - name: Verify uninstall
-        run: |
           if [ -f "$HOME/.local/bin/rat" ]; then
             echo "ERROR: rat binary still exists after uninstall"
             exit 1
           fi
-          echo "Uninstall verified successfully"
 
-  test-install-linux-arm:
+  verify-install-linux-arm:
     needs: release
     runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
 
-      - name: Test install script (verbose)
+      - name: Test install script
         run: |
           echo "=== Testing install.sh on Linux (aarch64) ==="
           chmod +x install.sh
@@ -167,91 +247,120 @@ jobs:
 
       - name: Verify installation
         run: |
-          echo "=== Verifying installation ==="
           export PATH="$PATH:$HOME/.local/bin"
-          which rat || echo "rat not found in PATH"
-          rat --version || echo "rat --version failed"
+          rat --version
+
+      - name: Verify binary integrity
+        run: |
+          export PATH="$PATH:$HOME/.local/bin"
+          OUTPUT=$(rat --verify)
+          EXPECTED="ratterm v${{ github.event.inputs.version }} verify-ok"
+          if [ "$OUTPUT" != "$EXPECTED" ]; then
+            echo "ERROR: --verify output mismatch"
+            echo "  Expected: $EXPECTED"
+            echo "  Got:      $OUTPUT"
+            exit 1
+          fi
+          echo "Binary verification passed: $OUTPUT"
+
+      - name: Verify release asset directly
+        run: |
+          echo "=== Testing release asset download and verification ==="
+          curl -fsSL -o /tmp/rat-test \
+            "https://github.com/${{ github.repository }}/releases/download/v${{ github.event.inputs.version }}/rat-linux-aarch64"
+          chmod +x /tmp/rat-test
+          OUTPUT=$(/tmp/rat-test --verify)
+          EXPECTED="ratterm v${{ github.event.inputs.version }} verify-ok"
+          if [ "$OUTPUT" != "$EXPECTED" ]; then
+            echo "ERROR: Downloaded release asset failed verification"
+            echo "  Expected: $EXPECTED"
+            echo "  Got:      $OUTPUT"
+            exit 1
+          fi
+          echo "Release asset verification passed: $OUTPUT"
+          rm -f /tmp/rat-test
 
       - name: Test uninstall
         run: |
-          echo "=== Testing uninstall ==="
           ./install.sh --uninstall --verbose
-
-      - name: Verify uninstall
-        run: |
           if [ -f "$HOME/.local/bin/rat" ]; then
             echo "ERROR: rat binary still exists after uninstall"
             exit 1
           fi
-          echo "Uninstall verified successfully"
 
-
-  test-install-windows:
+  verify-install-windows:
     needs: release
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Test install script (verbose)
+      - name: Test install script
         shell: pwsh
         run: |
           Write-Host "=== Testing install.ps1 on Windows ==="
-          $env:VERBOSE = "true"
           .\install.ps1 -User -VerboseOutput
 
       - name: Verify installation
         shell: pwsh
         run: |
-          Write-Host "=== Verifying installation ==="
           $installDir = Join-Path $env:LOCALAPPDATA "ratterm"
           $ratExe = Join-Path $installDir "rat.exe"
-
           if (Test-Path $ratExe) {
-            Write-Host "Found rat.exe at $ratExe"
             & $ratExe --version
           } else {
-            Write-Host "ERROR: rat.exe not found at $ratExe"
+            Write-Host "ERROR: rat.exe not found"
             exit 1
           }
+
+      - name: Verify binary integrity
+        shell: pwsh
+        run: |
+          $installDir = Join-Path $env:LOCALAPPDATA "ratterm"
+          $ratExe = Join-Path $installDir "rat.exe"
+          $output = & $ratExe --verify
+          $expected = "ratterm v${{ github.event.inputs.version }} verify-ok"
+          if ($output -ne $expected) {
+            Write-Host "ERROR: --verify output mismatch"
+            Write-Host "  Expected: $expected"
+            Write-Host "  Got:      $output"
+            exit 1
+          }
+          Write-Host "Binary verification passed: $output"
+
+      - name: Verify release asset directly
+        shell: pwsh
+        run: |
+          Write-Host "=== Testing release asset download and verification ==="
+          $assetUrl = "https://github.com/${{ github.repository }}/releases/download/v${{ github.event.inputs.version }}/rat-windows-x86_64.exe"
+          $testExe = Join-Path $env:TEMP "rat-update-test.exe"
+          Invoke-WebRequest -Uri $assetUrl -OutFile $testExe
+          if (-not (Test-Path $testExe)) {
+            Write-Host "ERROR: Failed to download release asset"
+            exit 1
+          }
+          $size = (Get-Item $testExe).Length
+          if ($size -eq 0) {
+            Write-Host "ERROR: Downloaded file is empty"
+            exit 1
+          }
+          Write-Host "Downloaded asset: $size bytes"
+          $output = & $testExe --verify
+          $expected = "ratterm v${{ github.event.inputs.version }} verify-ok"
+          if ($output -ne $expected) {
+            Write-Host "ERROR: Downloaded release asset failed verification"
+            Write-Host "  Expected: $expected"
+            Write-Host "  Got:      $output"
+            exit 1
+          }
+          Write-Host "Release asset verification passed: $output"
+          Remove-Item $testExe -Force
 
       - name: Test uninstall
         shell: pwsh
         run: |
-          Write-Host "=== Testing uninstall ==="
-          $env:VERBOSE = "true"
           .\install.ps1 -Uninstall -User -VerboseOutput
-
-      - name: Verify uninstall
-        shell: pwsh
-        run: |
           $installDir = Join-Path $env:LOCALAPPDATA "ratterm"
           if (Test-Path $installDir) {
-            Write-Host "ERROR: Install directory still exists after uninstall"
+            Write-Host "ERROR: Install directory still exists"
             exit 1
           }
-          Write-Host "Uninstall verified successfully"
-
-  update-install-scripts:
-    needs: [test-install-linux-x86, test-install-linux-arm, test-install-windows]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.repository.default_branch }}
-
-      - name: Update version in install scripts and Cargo.toml
-        run: |
-          VERSION=${{ github.event.inputs.version }}
-          # Update install scripts
-          sed -i "s/VERSION=\".*\"/VERSION=\"$VERSION\"/" install.sh
-          sed -i "s/\$Version = \".*\"/\$Version = \"$VERSION\"/" install.ps1
-          # Update Cargo.toml so future builds have correct version
-          sed -i "s/^version = \".*\"/version = \"$VERSION\"/" Cargo.toml
-
-      - name: Commit and push
-        run: |
-          git config user.name github-actions
-          git config user.email github-actions@github.com
-          git add install.sh install.ps1 Cargo.toml
-          git diff --staged --quiet || git commit -m "chore: bump version to v${{ github.event.inputs.version }}"
-          git push
