@@ -79,6 +79,105 @@ ssh2 = "0.9"
 proptest = "1.6"
 tempfile = "3.15"
 pretty_assertions = "1.4"
+expectrl = "0.8"
+
+# === E2E Test Binaries ===
+
+[[test]]
+name = "e2e_compile_check"
+path = "tests/e2e_compile_check.rs"
+
+[[test]]
+name = "test_startup"
+path = "tests/e2e/test_startup.rs"
+
+[[test]]
+name = "test_terminal_basic"
+path = "tests/e2e/test_terminal_basic.rs"
+
+[[test]]
+name = "test_terminal_tabs"
+path = "tests/e2e/test_terminal_tabs.rs"
+
+[[test]]
+name = "test_terminal_splits"
+path = "tests/e2e/test_terminal_splits.rs"
+
+[[test]]
+name = "test_terminal_scrollback"
+path = "tests/e2e/test_terminal_scrollback.rs"
+
+[[test]]
+name = "test_pane_focus"
+path = "tests/e2e/test_pane_focus.rs"
+
+[[test]]
+name = "test_pane_resize"
+path = "tests/e2e/test_pane_resize.rs"
+
+[[test]]
+name = "test_editor_default"
+path = "tests/e2e/test_editor_default.rs"
+
+[[test]]
+name = "test_editor_vim"
+path = "tests/e2e/test_editor_vim.rs"
+
+[[test]]
+name = "test_editor_emacs"
+path = "tests/e2e/test_editor_emacs.rs"
+
+[[test]]
+name = "test_editor_vscode"
+path = "tests/e2e/test_editor_vscode.rs"
+
+[[test]]
+name = "test_editor_file_ops"
+path = "tests/e2e/test_editor_file_ops.rs"
+
+[[test]]
+name = "test_editor_search"
+path = "tests/e2e/test_editor_search.rs"
+
+[[test]]
+name = "test_editor_tabs"
+path = "tests/e2e/test_editor_tabs.rs"
+
+[[test]]
+name = "test_file_browser"
+path = "tests/e2e/test_file_browser.rs"
+
+[[test]]
+name = "test_command_palette"
+path = "tests/e2e/test_command_palette.rs"
+
+[[test]]
+name = "test_mode_switcher"
+path = "tests/e2e/test_mode_switcher.rs"
+
+[[test]]
+name = "test_clipboard"
+path = "tests/e2e/test_clipboard.rs"
+
+[[test]]
+name = "test_config"
+path = "tests/e2e/test_config.rs"
+
+[[test]]
+name = "test_cli_args"
+path = "tests/e2e/test_cli_args.rs"
+
+[[test]]
+name = "test_quit_save_confirm"
+path = "tests/e2e/test_quit_save_confirm.rs"
+
+[[test]]
+name = "test_debug"
+path = "tests/e2e/test_debug.rs"
+
+[[test]]
+name = "e2e_smoke"
+path = "tests/e2e_smoke.rs"
 
 [profile.release]
 lto = true
