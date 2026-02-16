@@ -197,30 +197,42 @@ impl SplitLayout {
             return LayoutAreas {
                 terminal: Rect::default(),
                 editor: Rect::default(),
+                help_bar: Rect::default(),
                 status_bar: Rect::default(),
             };
         }
 
-        // Reserve space for status bar
-        let status_height = 1;
+        // Reserve space for status bar (1 row) and help bar (1 row)
+        let chrome_height: u16 = 2; // help_bar + status_bar
         let main_area = Rect {
             x: area.x,
             y: area.y,
             width: area.width,
-            height: area.height.saturating_sub(status_height),
+            height: area.height.saturating_sub(chrome_height),
+        };
+
+        let help_bar = Rect {
+            x: area.x,
+            y: area.y + main_area.height,
+            width: area.width,
+            height: 1_u16.min(area.height.saturating_sub(main_area.height)),
         };
 
         let status_bar = Rect {
             x: area.x,
-            y: area.y + main_area.height,
+            y: help_bar.y + help_bar.height,
             width: area.width,
-            height: status_height.min(area.height),
+            height: 1_u16.min(
+                area.height
+                    .saturating_sub(main_area.height + help_bar.height),
+            ),
         };
 
         if !self.show_terminal {
             return LayoutAreas {
                 terminal: Rect::default(),
                 editor: main_area,
+                help_bar,
                 status_bar,
             };
         }
@@ -229,6 +241,7 @@ impl SplitLayout {
             return LayoutAreas {
                 terminal: main_area,
                 editor: Rect::default(),
+                help_bar,
                 status_bar,
             };
         }
@@ -247,6 +260,7 @@ impl SplitLayout {
         LayoutAreas {
             terminal: chunks[0],
             editor: chunks[1],
+            help_bar,
             status_bar,
         }
     }
@@ -265,6 +279,8 @@ pub struct LayoutAreas {
     pub terminal: Rect,
     /// Editor pane area.
     pub editor: Rect,
+    /// Help/key hint bar area (1 row between content and status bar).
+    pub help_bar: Rect,
     /// Status bar area.
     pub status_bar: Rect,
 }
@@ -345,6 +361,27 @@ mod tests {
         assert!(areas.has_terminal());
         assert!(areas.has_editor());
         assert_eq!(areas.terminal.width + areas.editor.width, 100);
+    }
+
+    #[test]
+    fn test_layout_has_help_bar() {
+        let layout = SplitLayout::new();
+        let area = Rect::new(0, 0, 100, 50);
+        let areas = layout.calculate(area);
+
+        // Help bar should be 1 row tall, between content and status bar
+        assert_eq!(areas.help_bar.height, 1);
+        assert!(areas.help_bar.y > areas.terminal.y);
+        assert!(areas.help_bar.y < areas.status_bar.y);
+    }
+
+    #[test]
+    fn test_layout_help_bar_full_width() {
+        let layout = SplitLayout::new();
+        let area = Rect::new(0, 0, 120, 40);
+        let areas = layout.calculate(area);
+
+        assert_eq!(areas.help_bar.width, area.width);
     }
 
     #[test]

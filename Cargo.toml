@@ -79,6 +79,8 @@ ssh2 = "0.9"
 proptest = "1.6"
 tempfile = "3.15"
 pretty_assertions = "1.4"
+expectrl = "0.7"
+strip-ansi-escapes = "0.2"
 
 [profile.release]
 lto = true

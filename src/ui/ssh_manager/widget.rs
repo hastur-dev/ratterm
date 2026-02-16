@@ -4,7 +4,7 @@ use ratatui::{
     buffer::Buffer,
     layout::{Alignment, Rect},
     style::{Color, Modifier, Style},
-    widgets::{Block, Borders, Clear, Paragraph, Widget},
+    widgets::{Block, BorderType, Borders, Clear, Paragraph, Widget},
 };
 
 use super::selector::SSHManagerSelector;
@@ -97,9 +97,17 @@ impl Widget for SSHManagerWidget<'_> {
             Style::default().fg(Color::DarkGray)
         };
 
+        let title_style = Style::default()
+            .fg(Color::White)
+            .add_modifier(Modifier::BOLD);
+
         let block = Block::default()
-            .title(title)
+            .title(ratatui::text::Span::styled(
+                format!(" {} ", title),
+                title_style,
+            ))
             .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
             .border_style(border_style)
             .style(Style::default().bg(Color::Black));
 

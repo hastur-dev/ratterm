@@ -181,6 +181,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create application
     let mut app = App::new(size.width, size.height)?;
 
+    // Enable test-keys mode if requested (F1/F2/F3 open palette/SSH/Docker)
+    if args.iter().any(|a| a == "--test-keys") {
+        app.enable_test_keys();
+    }
+
     // Immediately resize to ensure proper layout synchronization
     // This fixes visual artifacts that occur before the first resize event
     app.resize(size.width, size.height);

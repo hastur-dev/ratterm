@@ -4,11 +4,12 @@ use ratatui::{
     buffer::Buffer,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
-    text::{Line, Span},
     widgets::{Paragraph, Row, Table, Widget},
 };
 
 use crate::ssh::ConnectionStatus;
+use crate::ui::key_hint_bar::{KeyHint, KeyHintStyle};
+use crate::ui::manager_footer::ManagerFooter;
 
 use super::selector::SSHManagerSelector;
 use super::types::CredentialField;
@@ -17,66 +18,64 @@ use super::types::CredentialField;
 pub fn render_list(selector: &SSHManagerSelector, area: Rect, buf: &mut Buffer) {
     let inner = area;
 
-    let header = Line::from(vec![
-        Span::styled("[s]", Style::default().fg(Color::Yellow)),
-        Span::raw("can "),
-        Span::styled("[c]", Style::default().fg(Color::Magenta)),
-        Span::raw("red-scan "),
-        Span::styled("[a]", Style::default().fg(Color::Yellow)),
-        Span::raw("dd "),
-        Span::styled("[e]", Style::default().fg(Color::Cyan)),
-        Span::raw("dit "),
-        Span::styled("[d]", Style::default().fg(Color::Yellow)),
-        Span::raw("el "),
-        Span::styled("[Enter]", Style::default().fg(Color::Green)),
-        Span::raw(" Connect"),
-    ]);
-
-    let header_para = Paragraph::new(header).alignment(Alignment::Center);
+    // Separator line
+    let sep_height: u16 = 1;
+    // Footer: 2 rows for primary + secondary hints
+    let footer_height: u16 = 2;
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(1),
-            Constraint::Length(1),
+            Constraint::Length(sep_height),
             Constraint::Min(3),
-            Constraint::Length(1),
+            Constraint::Length(footer_height),
         ])
         .split(inner);
 
-    header_para.render(chunks[0], buf);
-
-    let sep = "─".repeat(chunks[1].width as usize);
+    let sep = "\u{2500}".repeat(chunks[0].width as usize);
     buf.set_string(
-        chunks[1].x,
-        chunks[1].y,
+        chunks[0].x,
+        chunks[0].y,
         &sep,
         Style::default().fg(Color::DarkGray),
     );
 
     if selector.is_empty() {
-        let empty = Paragraph::new("No SSH hosts saved. Press [S] to scan or [A] to add.")
+        let empty = Paragraph::new("No SSH hosts saved. Press [s] to scan or [a] to add.")
             .alignment(Alignment::Center)
             .style(Style::default().fg(Color::DarkGray));
-        empty.render(chunks[2], buf);
+        empty.render(chunks[1], buf);
     } else {
-        render_host_table(selector, chunks[2], buf);
+        render_host_table(selector, chunks[1], buf);
     }
 
-    let footer = Line::from(vec![
-        Span::styled("Tip: ", Style::default().fg(Color::DarkGray)),
-        Span::raw("Ctrl+1-9 quick connect | Shift+S to scan specific subnet (e.g. 10.0.0.0/24)"),
-    ]);
-    let footer_para = Paragraph::new(footer)
-        .alignment(Alignment::Center)
-        .style(Style::default().fg(Color::DarkGray));
-    footer_para.render(chunks[3], buf);
+    // Render ManagerFooter with all SSH hotkeys
+    let primary = vec![
+        KeyHint::styled("Enter", "Connect", KeyHintStyle::Success),
+        KeyHint::new("a", "Add Host"),
+        KeyHint::new("e", "Edit"),
+        KeyHint::styled("d", "Delete", KeyHintStyle::Danger),
+        KeyHint::new("s", "Scan Network"),
+    ];
+    let secondary = vec![
+        KeyHint::new("c", "Credential Scan"),
+        KeyHint::new("Shift+S", "Scan Subnet"),
+        KeyHint::new("Ctrl+1-9", "Quick Connect"),
+        KeyHint::styled("Esc", "Close", KeyHintStyle::Danger),
+    ];
+
+    let footer = ManagerFooter::new(primary).secondary(secondary);
+    footer.render(chunks[2], buf);
 }
 
 /// Renders the host table.
 pub fn render_host_table(selector: &SSHManagerSelector, area: Rect, buf: &mut Buffer) {
     let header = Row::new(vec!["#", "Name", "Host", "Status"])
-        .style(Style::default().add_modifier(Modifier::BOLD))
+        .style(
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
+        )
         .height(1);
 
     let selected_index = selector.selected_index;
@@ -192,16 +191,15 @@ pub fn render_credential_entry(selector: &SSHManagerSelector, area: Rect, buf: &
     let save_para = Paragraph::new(checkbox).style(Style::default().fg(Color::Cyan));
     save_para.render(chunks[6], buf);
 
-    let footer = Line::from(vec![
-        Span::styled("[Tab]", Style::default().fg(Color::Yellow)),
-        Span::raw(" Next field "),
-        Span::styled("[Enter]", Style::default().fg(Color::Green)),
-        Span::raw(" Connect "),
-        Span::styled("[Esc]", Style::default().fg(Color::Red)),
-        Span::raw(" Cancel"),
-    ]);
-    let footer_para = Paragraph::new(footer).alignment(Alignment::Center);
-    footer_para.render(chunks[8], buf);
+    // Credential entry footer with ManagerFooter
+    let cred_hints = vec![
+        KeyHint::new("Tab", "Next Field"),
+        KeyHint::new("Space", "Toggle Save"),
+        KeyHint::styled("Enter", "Connect", KeyHintStyle::Success),
+        KeyHint::styled("Esc", "Cancel", KeyHintStyle::Danger),
+    ];
+    let cred_footer = ManagerFooter::new(cred_hints);
+    cred_footer.render(chunks[8], buf);
 }
 
 /// Renders the scanning mode.
