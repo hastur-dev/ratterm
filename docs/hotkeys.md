@@ -310,6 +310,27 @@ Opened via Command Palette > "Theme: Select Theme"
 
 ---
 
+## Dashboard Navigation (Universal)
+
+All dashboards (SSH Manager, Docker Manager, Health Dashboard) share a consistent
+navigation system. Press `?` in any dashboard to see the full shortcut list.
+
+| Hotkey | Action |
+|--------|--------|
+| `Up` / `k` | Move selection up |
+| `Down` / `j` | Move selection down |
+| `Home` | Jump to first item |
+| `End` | Jump to last item |
+| `Enter` | Activate selected item |
+| `Esc` | Close dashboard / go back |
+| `?` | Show all available shortcuts |
+
+The `?` key opens a shortcut overlay showing every hotkey available in the
+current dashboard context. Press `?` again or `Esc` to dismiss it.
+Arrow keys and `j`/`k` scroll the overlay when it is visible.
+
+---
+
 ## SSH Manager
 
 The SSH Manager provides a convenient way to manage SSH connections.
