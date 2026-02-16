@@ -44,6 +44,13 @@ impl App {
         self.hide_popup();
     }
 
+    /// Toggles the hotkey overlay for the SSH manager.
+    ///
+    /// Stub — actual overlay implementation is in Phase 2.
+    pub fn toggle_hotkey_overlay_ssh(&mut self) {
+        info!("SSH hotkey overlay toggled (stub — Phase 2 will implement)");
+    }
+
     /// Loads SSH hosts from storage.
     pub(crate) fn load_ssh_hosts(&mut self) {
         info!(

@@ -2,7 +2,7 @@
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use crate::app::input_traits::handle_full_list_navigation;
+use crate::app::dashboard_nav::{NavResult, apply_dashboard_navigation};
 use crate::ui::ssh_manager::SSHManagerMode;
 
 use super::App;
@@ -31,16 +31,28 @@ impl App {
 
     /// Handles SSH manager list mode keys.
     fn handle_ssh_list_key(&mut self, key: KeyEvent) {
-        // Handle list navigation using shared helper
+        // Unified dashboard navigation layer
         if let Some(ref mut manager) = self.ssh_manager {
-            if handle_full_list_navigation(manager, &key) {
-                return;
+            match apply_dashboard_navigation(manager, &key) {
+                NavResult::Handled => return,
+                NavResult::ShowHelp => {
+                    self.toggle_hotkey_overlay_ssh();
+                    return;
+                }
+                NavResult::Close => {
+                    self.hide_ssh_manager();
+                    return;
+                }
+                NavResult::Activate => {
+                    self.ssh_connect_selected();
+                    return;
+                }
+                NavResult::Unhandled => {}
             }
         }
 
+        // SSH-specific keys layered on top
         match (key.modifiers, key.code) {
-            (KeyModifiers::NONE, KeyCode::Esc) => self.hide_ssh_manager(),
-            (KeyModifiers::NONE, KeyCode::Enter) => self.ssh_connect_selected(),
             (KeyModifiers::NONE, KeyCode::Char('s')) => self.start_ssh_scan(),
             (KeyModifiers::SHIFT, KeyCode::Char('S')) => self.show_ssh_subnet_prompt(),
             (KeyModifiers::NONE, KeyCode::Char('a'))

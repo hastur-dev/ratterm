@@ -342,6 +342,13 @@ impl App {
         }
     }
 
+    /// Toggles the hotkey overlay for the health dashboard overview mode.
+    ///
+    /// Stub — actual overlay implementation is in Phase 2.
+    pub fn toggle_hotkey_overlay_health_overview(&mut self) {
+        info!("Hotkey overlay toggled (stub — Phase 2 will implement)");
+    }
+
     /// Returns a reference to the daemon manager.
     #[must_use]
     pub fn daemon_manager(&self) -> Option<&DaemonManager> {

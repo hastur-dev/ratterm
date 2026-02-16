@@ -44,6 +44,13 @@ impl App {
         self.request_redraw();
     }
 
+    /// Toggles the hotkey overlay for the Docker manager.
+    ///
+    /// Stub — actual overlay implementation is in Phase 2.
+    pub fn toggle_hotkey_overlay_docker(&mut self) {
+        info!("Docker hotkey overlay toggled (stub — Phase 2 will implement)");
+    }
+
     /// Refreshes Docker container/image discovery.
     pub fn refresh_docker_discovery(&mut self) {
         info!("refresh_docker_discovery: starting");

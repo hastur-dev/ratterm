@@ -3,7 +3,7 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use tracing::{debug, info};
 
-use crate::app::input_traits::handle_full_list_navigation;
+use crate::app::dashboard_nav::{NavResult, apply_dashboard_navigation};
 use crate::ui::health_dashboard::DashboardMode;
 
 use super::App;
@@ -40,23 +40,34 @@ impl App {
             key.code, key.modifiers
         );
 
-        // Handle list navigation using shared helper (uses ListSelectable trait)
+        // Unified dashboard navigation layer
         if let Some(ref mut dashboard) = self.health_dashboard {
-            if handle_full_list_navigation(dashboard, &key) {
-                info!("DASHBOARD: navigation handled by helper");
-                return;
+            match apply_dashboard_navigation(dashboard, &key) {
+                NavResult::Handled => {
+                    info!("DASHBOARD: navigation handled by unified layer");
+                    return;
+                }
+                NavResult::ShowHelp => {
+                    info!("DASHBOARD: show help requested");
+                    self.toggle_hotkey_overlay_health_overview();
+                    return;
+                }
+                NavResult::Close => {
+                    info!("DASHBOARD: close via nav layer");
+                    self.close_health_dashboard();
+                    return;
+                }
+                NavResult::Activate => {
+                    info!("DASHBOARD: enter_detail via nav layer");
+                    dashboard.enter_detail();
+                    return;
+                }
+                NavResult::Unhandled => {}
             }
         }
 
+        // Screen-specific keys layered on top
         match (key.modifiers, key.code) {
-            // Enter detail mode
-            (KeyModifiers::NONE, KeyCode::Enter) => {
-                info!("DASHBOARD: enter_detail");
-                if let Some(ref mut dashboard) = self.health_dashboard {
-                    dashboard.enter_detail();
-                }
-            }
-
             // Refresh
             (KeyModifiers::NONE, KeyCode::Char('r')) => {
                 info!("DASHBOARD: refresh");
@@ -69,9 +80,9 @@ impl App {
                 self.toggle_dashboard_auto_refresh();
             }
 
-            // Close dashboard
-            (KeyModifiers::NONE, KeyCode::Esc) | (KeyModifiers::NONE, KeyCode::Char('q')) => {
-                info!("DASHBOARD: close");
+            // Close dashboard (q as alias)
+            (KeyModifiers::NONE, KeyCode::Char('q')) => {
+                info!("DASHBOARD: close via q");
                 self.close_health_dashboard();
             }
 

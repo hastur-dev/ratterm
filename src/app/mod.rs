@@ -3,6 +3,7 @@
 //! Orchestrates the terminal emulator, code editor, and file browser.
 
 mod commands;
+pub mod dashboard_nav;
 mod docker_connect;
 mod docker_ops;
 mod extension_ops;
