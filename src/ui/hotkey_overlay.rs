@@ -85,13 +85,24 @@ impl HotkeyOverlay {
 /// Renders the hotkey overlay widget.
 pub struct HotkeyOverlayWidget<'a> {
     overlay: &'a HotkeyOverlay,
+    position: Option<crate::ui::window_position::WindowPosition>,
 }
 
 impl<'a> HotkeyOverlayWidget<'a> {
     /// Creates a new hotkey overlay widget.
     #[must_use]
     pub fn new(overlay: &'a HotkeyOverlay) -> Self {
-        Self { overlay }
+        Self {
+            overlay,
+            position: None,
+        }
+    }
+
+    /// Sets the window position.
+    #[must_use]
+    pub fn position(mut self, pos: crate::ui::window_position::WindowPosition) -> Self {
+        self.position = Some(pos);
+        self
     }
 }
 
@@ -105,10 +116,15 @@ impl Widget for HotkeyOverlayWidget<'_> {
         let max_w = 60.min(area.width.saturating_sub(4));
         let max_h = (area.height * 80 / 100).max(10).min(area.height.saturating_sub(4));
 
-        // Center on screen
-        let x = area.x + (area.width.saturating_sub(max_w)) / 2;
-        let y = area.y + (area.height.saturating_sub(max_h)) / 2;
-        let popup_area = Rect::new(x, y, max_w, max_h);
+        // Use configured position or default to center
+        let popup_area = match &self.position {
+            Some(pos) => pos.resolve(max_w, max_h, area.width, area.height),
+            None => {
+                let x = area.x + (area.width.saturating_sub(max_w)) / 2;
+                let y = area.y + (area.height.saturating_sub(max_h)) / 2;
+                Rect::new(x, y, max_w, max_h)
+            }
+        };
 
         // Clear and draw background
         Clear.render(popup_area, buf);

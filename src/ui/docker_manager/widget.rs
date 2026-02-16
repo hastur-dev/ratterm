@@ -17,13 +17,24 @@ use super::types::DockerManagerMode;
 /// Docker Manager widget.
 pub struct DockerManagerWidget<'a> {
     selector: &'a DockerManagerSelector,
+    position: Option<crate::ui::window_position::WindowPosition>,
 }
 
 impl<'a> DockerManagerWidget<'a> {
     /// Creates a new Docker manager widget.
     #[must_use]
     pub fn new(selector: &'a DockerManagerSelector) -> Self {
-        Self { selector }
+        Self {
+            selector,
+            position: None,
+        }
+    }
+
+    /// Sets the window position from config.
+    #[must_use]
+    pub fn position(mut self, pos: crate::ui::window_position::WindowPosition) -> Self {
+        self.position = Some(pos);
+        self
     }
 }
 
@@ -34,14 +45,19 @@ impl Widget for DockerManagerWidget<'_> {
             return;
         }
 
-        // Calculate popup dimensions (60% width, 70% height, centered)
+        // Calculate popup dimensions (60% width, 70% height)
         let popup_width = area.width.saturating_mul(60).saturating_div(100).max(50);
         let popup_height = area.height.saturating_mul(70).saturating_div(100).max(15);
 
-        let popup_x = area.x + (area.width.saturating_sub(popup_width)) / 2;
-        let popup_y = area.y + (area.height.saturating_sub(popup_height)) / 2;
-
-        let popup_area = Rect::new(popup_x, popup_y, popup_width, popup_height);
+        // Use configured position or default center
+        let popup_area = match &self.position {
+            Some(pos) => pos.resolve(popup_width, popup_height, area.width, area.height),
+            None => {
+                let popup_x = area.x + (area.width.saturating_sub(popup_width)) / 2;
+                let popup_y = area.y + (area.height.saturating_sub(popup_height)) / 2;
+                Rect::new(popup_x, popup_y, popup_width, popup_height)
+            }
+        };
 
         // Clear background
         Clear.render(popup_area, buf);

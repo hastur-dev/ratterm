@@ -17,6 +17,7 @@ pub mod ssh_manager;
 pub mod statusbar;
 pub mod terminal_tabs;
 pub mod terminal_widget;
+pub mod window_position;
 
 pub use docker_manager::{
     DockerListSection, DockerManagerMode, DockerManagerSelector, DockerManagerWidget,

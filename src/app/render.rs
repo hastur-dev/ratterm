@@ -197,7 +197,8 @@ impl App {
             if overlay.is_visible() {
                 use crate::ui::hotkey_overlay::HotkeyOverlayWidget;
                 use ratatui::widgets::Widget as _;
-                let widget = HotkeyOverlayWidget::new(overlay);
+                let pos = self.config.window_position("hotkey_overlay");
+                let widget = HotkeyOverlayWidget::new(overlay).position(pos);
                 widget.render(area, frame.buffer_mut());
             }
         }
@@ -674,11 +675,13 @@ impl App {
             frame.render_widget(widget, area);
         } else if let Some(ref manager) = self.ssh_manager {
             // Use special widget for SSH manager
-            let widget = SSHManagerWidget::new(manager);
+            let pos = self.config.window_position("ssh_manager");
+            let widget = SSHManagerWidget::new(manager).position(pos);
             frame.render_widget(widget, area);
         } else if let Some(ref manager) = self.docker_manager {
             // Use special widget for Docker manager
-            let widget = DockerManagerWidget::new(manager);
+            let pos = self.config.window_position("docker_manager");
+            let widget = DockerManagerWidget::new(manager).position(pos);
             frame.render_widget(widget, area);
         } else if self.popup.kind().is_keybinding_notification() {
             // Use special widget for Windows 11 keybinding notification
