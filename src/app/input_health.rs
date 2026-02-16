@@ -411,4 +411,146 @@ mod tests {
         app.mode = super::super::AppMode::HealthDashboard;
         app.handle_health_dashboard_key(esc_key);
     }
+
+    // ========================================================================
+    // Phase 0 Diagnostic Tests — Verify selected_index changes
+    // ========================================================================
+
+    /// Helper: creates an App with a dashboard containing 3 mock hosts.
+    fn create_test_app_with_hosts() -> Option<App> {
+        use crate::ssh::SSHCredentials;
+
+        let mut app = App::new(80, 24).ok()?;
+
+        let mut ssh_hosts = SSHHostList::new();
+        let id1 = ssh_hosts.add_host("host1.example.com".into(), 22)?;
+        let id2 = ssh_hosts.add_host("host2.example.com".into(), 22)?;
+        let id3 = ssh_hosts.add_host("host3.example.com".into(), 22)?;
+
+        // Credentials are required for hosts to appear in the dashboard
+        ssh_hosts.set_credentials(id1, SSHCredentials::new("user".into(), Some("pass".into())));
+        ssh_hosts.set_credentials(id2, SSHCredentials::new("user".into(), Some("pass".into())));
+        ssh_hosts.set_credentials(id3, SSHCredentials::new("user".into(), Some("pass".into())));
+
+        let dashboard = HealthDashboard::new(&ssh_hosts);
+        assert_eq!(dashboard.host_count(), 3, "Dashboard should have 3 hosts");
+        assert_eq!(dashboard.selected_index(), 0, "Initial selection should be 0");
+
+        app.health_dashboard = Some(dashboard);
+        app.mode = super::super::AppMode::HealthDashboard;
+
+        Some(app)
+    }
+
+    #[test]
+    fn test_diag_down_arrow_changes_selected_index() {
+        let Some(mut app) = create_test_app_with_hosts() else {
+            return;
+        };
+
+        let down = key_event(KeyCode::Down);
+        app.handle_health_dashboard_key(down);
+
+        let idx = app.health_dashboard.as_ref().map(|d| d.selected_index());
+        assert_eq!(idx, Some(1), "Down arrow should move selection from 0 to 1");
+    }
+
+    #[test]
+    fn test_diag_up_arrow_changes_selected_index() {
+        let Some(mut app) = create_test_app_with_hosts() else {
+            return;
+        };
+
+        // Move down first, then up
+        let down = key_event(KeyCode::Down);
+        app.handle_health_dashboard_key(down);
+        assert_eq!(
+            app.health_dashboard.as_ref().map(|d| d.selected_index()),
+            Some(1)
+        );
+
+        let up = key_event(KeyCode::Up);
+        app.handle_health_dashboard_key(up);
+        assert_eq!(
+            app.health_dashboard.as_ref().map(|d| d.selected_index()),
+            Some(0),
+            "Up arrow should move selection back to 0"
+        );
+    }
+
+    #[test]
+    fn test_diag_j_key_changes_selected_index() {
+        let Some(mut app) = create_test_app_with_hosts() else {
+            return;
+        };
+
+        let j = key_event(KeyCode::Char('j'));
+        app.handle_health_dashboard_key(j);
+
+        let idx = app.health_dashboard.as_ref().map(|d| d.selected_index());
+        assert_eq!(idx, Some(1), "'j' should move selection from 0 to 1");
+    }
+
+    #[test]
+    fn test_diag_k_key_changes_selected_index() {
+        let Some(mut app) = create_test_app_with_hosts() else {
+            return;
+        };
+
+        // Move down first
+        let j = key_event(KeyCode::Char('j'));
+        app.handle_health_dashboard_key(j);
+
+        let k = key_event(KeyCode::Char('k'));
+        app.handle_health_dashboard_key(k);
+
+        let idx = app.health_dashboard.as_ref().map(|d| d.selected_index());
+        assert_eq!(idx, Some(0), "'k' should move selection back to 0");
+    }
+
+    #[test]
+    fn test_diag_home_end_change_selected_index() {
+        let Some(mut app) = create_test_app_with_hosts() else {
+            return;
+        };
+
+        // End should go to last
+        let end = key_event(KeyCode::End);
+        app.handle_health_dashboard_key(end);
+        assert_eq!(
+            app.health_dashboard.as_ref().map(|d| d.selected_index()),
+            Some(2),
+            "End should move to last host (index 2)"
+        );
+
+        // Home should go to first
+        let home = key_event(KeyCode::Home);
+        app.handle_health_dashboard_key(home);
+        assert_eq!(
+            app.health_dashboard.as_ref().map(|d| d.selected_index()),
+            Some(0),
+            "Home should move to first host (index 0)"
+        );
+    }
+
+    #[test]
+    fn test_diag_sequential_jjk_navigation() {
+        let Some(mut app) = create_test_app_with_hosts() else {
+            return;
+        };
+
+        // j, j, k => should end at index 1
+        app.handle_health_dashboard_key(key_event(KeyCode::Char('j')));
+        assert_eq!(app.health_dashboard.as_ref().map(|d| d.selected_index()), Some(1));
+
+        app.handle_health_dashboard_key(key_event(KeyCode::Char('j')));
+        assert_eq!(app.health_dashboard.as_ref().map(|d| d.selected_index()), Some(2));
+
+        app.handle_health_dashboard_key(key_event(KeyCode::Char('k')));
+        assert_eq!(
+            app.health_dashboard.as_ref().map(|d| d.selected_index()),
+            Some(1),
+            "j,j,k should end at index 1"
+        );
+    }
 }
