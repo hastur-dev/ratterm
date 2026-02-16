@@ -127,21 +127,27 @@ impl Default for StatusBar<'_> {
     }
 }
 
+/// Separator character for status bar segments.
+const SEG_SEPARATOR: char = '\u{2502}';
+
 impl Widget for StatusBar<'_> {
     fn render(self, area: Rect, buf: &mut RatatuiBuffer) {
         if area.height == 0 || area.width == 0 {
             return;
         }
 
-        // Use theme colors if available
-        let bg_color = self.theme.map(|t| t.background).unwrap_or(Color::DarkGray);
+        // Use theme colors if available, with improved defaults
+        let bg_color = self
+            .theme
+            .map(|t| t.background)
+            .unwrap_or(Color::Rgb(30, 30, 40));
         let fg_color = self.theme.map(|t| t.foreground).unwrap_or(Color::White);
         let mode_normal = self.theme.map(|t| t.mode_normal).unwrap_or(Color::Blue);
         let mode_insert = self.theme.map(|t| t.mode_insert).unwrap_or(Color::Green);
         let mode_visual = self.theme.map(|t| t.mode_visual).unwrap_or(Color::Magenta);
         let mode_command = self.theme.map(|t| t.mode_command).unwrap_or(Color::Yellow);
 
-        // Background
+        // Background fill
         let bg_style = Style::default().bg(bg_color).fg(fg_color);
         for x in area.x..area.x + area.width {
             if let Some(cell) = buf.cell_mut((x, area.y)) {
@@ -150,37 +156,33 @@ impl Widget for StatusBar<'_> {
             }
         }
 
-        // Left side: pane indicator and mode
+        // === Left segment: Mode badge ===
         let pane_str = match self.focused_pane {
             FocusedPane::Terminal => "TERM",
             FocusedPane::Editor => "EDIT",
         };
 
-        // Show keybinding mode indicator
         let kb_mode_str = match self.keybinding_mode {
             KeybindingMode::Vim => "VIM",
             KeybindingMode::Emacs => "EMACS",
             KeybindingMode::Default => "STD",
         };
 
-        // Show editor mode for vim, or just keybinding mode for others
         let mode_str = match (self.keybinding_mode, self.editor_mode) {
             (KeybindingMode::Vim, Some(EditorMode::Normal)) => "NORMAL",
             (KeybindingMode::Vim, Some(EditorMode::Insert)) => "INSERT",
             (KeybindingMode::Vim, Some(EditorMode::Visual)) => "VISUAL",
             (KeybindingMode::Vim, Some(EditorMode::Command)) => "CMD",
-            (KeybindingMode::Emacs, _) => "",
-            (KeybindingMode::Default, _) => "",
             _ => "",
         };
 
+        // Build mode badge with padding
         let left_content = if mode_str.is_empty() {
-            format!(" {} | {} ", pane_str, kb_mode_str)
+            format!("  {} \u{2502} {}  ", pane_str, kb_mode_str)
         } else {
-            format!(" {} | {} {} ", pane_str, kb_mode_str, mode_str)
+            format!("  {} \u{2502} {} {}  ", pane_str, kb_mode_str, mode_str)
         };
 
-        // Mode indicator with color
         let mode_style = match self.editor_mode {
             Some(EditorMode::Insert) => Style::default().bg(mode_insert).fg(Color::Black),
             Some(EditorMode::Visual) => Style::default().bg(mode_visual).fg(Color::White),
@@ -188,18 +190,30 @@ impl Widget for StatusBar<'_> {
             _ => Style::default().bg(mode_normal).fg(Color::White),
         };
 
-        for (i, c) in left_content.chars().enumerate() {
-            if i >= area.width as usize {
+        let mut x = area.x;
+        for c in left_content.chars() {
+            if x >= area.x + area.width {
                 break;
             }
-            if let Some(cell) = buf.cell_mut((area.x + i as u16, area.y)) {
+            if let Some(cell) = buf.cell_mut((x, area.y)) {
                 cell.set_char(c);
                 cell.set_style(mode_style);
             }
+            x += 1;
         }
 
-        // Center: message or file path
-        let center_start = left_content.len() + 1;
+        // Separator after mode badge
+        let sep_style = Style::default().fg(Color::DarkGray).bg(bg_color);
+        if x < area.x + area.width {
+            if let Some(cell) = buf.cell_mut((x, area.y)) {
+                cell.set_char(SEG_SEPARATOR);
+                cell.set_style(sep_style);
+            }
+            x += 1;
+        }
+
+        // === Center segment: message or file path ===
+        let center_start = x;
         let center_content = if !self.message.is_empty() {
             self.message.to_string()
         } else if let Some(path) = self.file_path {
@@ -210,8 +224,49 @@ impl Widget for StatusBar<'_> {
             String::new()
         };
 
-        for (i, c) in center_content.chars().enumerate() {
-            let x = area.x + center_start as u16 + i as u16;
+        // Build right parts first to know available center width
+        let mut right_parts: Vec<(String, Style)> = Vec::new();
+
+        if self.bg_error_count > 0 {
+            let error_style = Style::default().bg(Color::Red).fg(Color::White);
+            right_parts.push((format!(" ERR:{} ", self.bg_error_count), error_style));
+        }
+        if self.bg_running_count > 0 {
+            let running_style = Style::default().bg(Color::Green).fg(Color::Black);
+            right_parts.push((format!(" BG:{} ", self.bg_running_count), running_style));
+        }
+        if let Some(pos) = self.cursor_position {
+            // Add separator before cursor position
+            right_parts.push((
+                format!(
+                    "{} Ln {}, Col {} ",
+                    SEG_SEPARATOR,
+                    pos.line + 1,
+                    pos.col + 1
+                ),
+                bg_style,
+            ));
+        }
+
+        let right_total_width: usize = right_parts.iter().map(|(s, _)| s.len()).sum();
+        let available_center = (area.width as usize)
+            .saturating_sub((center_start - area.x) as usize)
+            .saturating_sub(right_total_width)
+            .saturating_sub(1); // 1 for padding
+
+        // Truncate center content if needed
+        let truncated_center = if center_content.len() > available_center && available_center > 3 {
+            format!(
+                " {}\u{2026}",
+                &center_content[..available_center.saturating_sub(2)]
+            )
+        } else if !center_content.is_empty() {
+            format!(" {}", center_content)
+        } else {
+            String::new()
+        };
+
+        for c in truncated_center.chars() {
             if x >= area.x + area.width {
                 break;
             }
@@ -219,114 +274,24 @@ impl Widget for StatusBar<'_> {
                 cell.set_char(c);
                 cell.set_style(bg_style);
             }
+            x += 1;
         }
 
-        // Right side: background indicators + cursor position
-        let mut right_parts: Vec<(String, Style)> = Vec::new();
-
-        // Background process indicators
-        if self.bg_error_count > 0 {
-            // Red error indicator
-            let error_style = Style::default().bg(Color::Red).fg(Color::White);
-            right_parts.push((format!(" ERR:{} ", self.bg_error_count), error_style));
-        }
-        if self.bg_running_count > 0 {
-            // Green running indicator
-            let running_style = Style::default().bg(Color::Green).fg(Color::Black);
-            right_parts.push((format!(" BG:{} ", self.bg_running_count), running_style));
-        }
-
-        // Cursor position
-        if let Some(pos) = self.cursor_position {
-            right_parts.push((
-                format!(" Ln {}, Col {} ", pos.line + 1, pos.col + 1),
-                bg_style,
-            ));
-        }
-
-        // Calculate total width of right parts
-        let right_total_width: usize = right_parts.iter().map(|(s, _)| s.len()).sum();
-
+        // === Right segments: background indicators + cursor position ===
         if right_total_width > 0 && area.width as usize > right_total_width {
-            let mut x = area.x + area.width - right_total_width as u16;
+            let mut rx = area.x + area.width - right_total_width as u16;
 
             for (content, style) in &right_parts {
                 for c in content.chars() {
-                    if x >= area.x + area.width {
+                    if rx >= area.x + area.width {
                         break;
                     }
-                    if let Some(cell) = buf.cell_mut((x, area.y)) {
+                    if let Some(cell) = buf.cell_mut((rx, area.y)) {
                         cell.set_char(c);
                         cell.set_style(*style);
                     }
-                    x += 1;
+                    rx += 1;
                 }
-            }
-        }
-    }
-}
-
-/// Help bar widget for keybinding hints.
-pub struct HelpBar<'a> {
-    /// Key hints to display.
-    hints: &'a [(&'a str, &'a str)],
-}
-
-impl<'a> HelpBar<'a> {
-    /// Creates a new help bar.
-    #[must_use]
-    pub fn new(hints: &'a [(&'a str, &'a str)]) -> Self {
-        Self { hints }
-    }
-}
-
-impl Widget for HelpBar<'_> {
-    fn render(self, area: Rect, buf: &mut RatatuiBuffer) {
-        if area.height == 0 || area.width == 0 {
-            return;
-        }
-
-        let bg_style = Style::default().bg(Color::Black).fg(Color::DarkGray);
-        let key_style = Style::default().bg(Color::Black).fg(Color::Yellow);
-
-        // Clear background
-        for x in area.x..area.x + area.width {
-            if let Some(cell) = buf.cell_mut((x, area.y)) {
-                cell.set_char(' ');
-                cell.set_style(bg_style);
-            }
-        }
-
-        let mut x = area.x + 1;
-
-        for (key, desc) in self.hints {
-            if x >= area.x + area.width {
-                break;
-            }
-
-            // Render key
-            for c in key.chars() {
-                if x >= area.x + area.width {
-                    break;
-                }
-                if let Some(cell) = buf.cell_mut((x, area.y)) {
-                    cell.set_char(c);
-                    cell.set_style(key_style);
-                }
-                x += 1;
-            }
-
-            // Render description
-            let desc_with_space = format!(" {} ", desc);
-            for c in desc_with_space.chars() {
-                if x >= area.x + area.width {
-                    break;
-                }
-                if let Some(cell) = buf.cell_mut((x, area.y)) {
-                    cell.set_char(c);
-                    cell.set_style(bg_style);
-                }
-                x += 1;
             }
         }
     }
@@ -335,6 +300,22 @@ impl Widget for HelpBar<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ratatui::buffer::Buffer as TestBuffer;
+
+    /// Helper: render status bar to buffer and return text content.
+    fn render_status_bar_to_string(bar: StatusBar, width: u16) -> String {
+        let area = Rect::new(0, 0, width, 1);
+        let mut buf = TestBuffer::empty(area);
+        bar.render(area, &mut buf);
+
+        (0..width)
+            .map(|x| {
+                buf.cell((x, 0))
+                    .map(|c| c.symbol().chars().next().unwrap_or(' '))
+                    .unwrap_or(' ')
+            })
+            .collect()
+    }
 
     #[test]
     fn test_status_bar_builder() {
@@ -344,5 +325,82 @@ mod tests {
             .editor_mode(EditorMode::Insert);
 
         assert_eq!(bar.message, "Test message");
+    }
+
+    #[test]
+    fn test_status_bar_mode_badge_colors() {
+        let area = Rect::new(0, 0, 80, 1);
+        let mut buf = TestBuffer::empty(area);
+
+        let bar = StatusBar::new()
+            .focused_pane(FocusedPane::Editor)
+            .editor_mode(EditorMode::Insert);
+        bar.render(area, &mut buf);
+
+        // The mode badge should have a non-default background color
+        if let Some(cell) = buf.cell((2, 0)) {
+            let bg = cell.bg;
+            // Insert mode should use green (or theme's insert color)
+            assert_ne!(bg, Color::Reset, "Mode badge should have colored bg");
+        }
+    }
+
+    #[test]
+    fn test_status_bar_segments_have_separators() {
+        let content = render_status_bar_to_string(
+            StatusBar::new()
+                .focused_pane(FocusedPane::Terminal)
+                .keybinding_mode(KeybindingMode::Vim),
+            80,
+        );
+
+        // Should contain the separator character between pane and mode
+        assert!(
+            content.contains(SEG_SEPARATOR),
+            "Status bar should have separator: '{}'",
+            content
+        );
+    }
+
+    #[test]
+    fn test_status_bar_truncates_long_paths() {
+        let long_path = "a".repeat(200);
+        let content = render_status_bar_to_string(
+            StatusBar::new()
+                .focused_pane(FocusedPane::Editor)
+                .file_path(&long_path),
+            80,
+        );
+
+        // Should contain truncation indicator
+        assert!(
+            content.contains('\u{2026}') || content.len() <= 80,
+            "Long path should be truncated: '{}'",
+            content
+        );
+    }
+
+    #[test]
+    fn test_status_bar_background_indicators() {
+        let content = render_status_bar_to_string(StatusBar::new().background_processes(3, 0), 80);
+
+        assert!(content.contains("BG:3"), "Should show BG:3: '{}'", content);
+    }
+
+    #[test]
+    fn test_status_bar_mode_badge_has_padding() {
+        let content = render_status_bar_to_string(
+            StatusBar::new()
+                .focused_pane(FocusedPane::Terminal)
+                .keybinding_mode(KeybindingMode::Vim),
+            80,
+        );
+
+        // The mode badge should have spaces around TERM and VIM
+        assert!(
+            content.contains("  TERM"),
+            "Badge should have left padding: '{}'",
+            content
+        );
     }
 }

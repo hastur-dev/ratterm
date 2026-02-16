@@ -202,6 +202,8 @@ pub struct App {
     pub(crate) health_dashboard: Option<HealthDashboard>,
     /// Daemon manager for real-time metrics collection.
     pub(crate) daemon_manager: Option<DaemonManager>,
+    /// Whether --test-keys mode is active (F1/F2/F3 open palette/SSH/Docker).
+    pub(crate) test_keys: bool,
 }
 
 impl App {
@@ -290,6 +292,7 @@ impl App {
             completion_suggestion: None,
             health_dashboard: None,
             daemon_manager: None,
+            test_keys: false,
         })
     }
 
@@ -508,6 +511,11 @@ impl App {
     /// Sets the status message.
     pub fn set_status(&mut self, msg: impl Into<String>) {
         self.status = msg.into();
+    }
+
+    /// Enables test-keys mode (F1/F2/F3 open palette/SSH/Docker).
+    pub fn enable_test_keys(&mut self) {
+        self.test_keys = true;
     }
 
     /// Returns information about open file tabs.

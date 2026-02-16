@@ -10,6 +10,7 @@ use crate::ui::{
     editor_widget::EditorWidget,
     file_picker::{FilePickerWidget, RemoteFilePickerWidget},
     health_dashboard::HealthDashboardWidget,
+    key_hint_bar::{KeyHint, KeyHintBar, KeyHintStyle},
     layout::FocusedPane,
     popup::{
         KeybindingNotificationWidget, ModeSwitcherWidget, PopupWidget, ShellInstallPromptWidget,
@@ -176,6 +177,11 @@ impl App {
                     debug!("AFTER_EDITOR y={}: | {}", y, boundary_info.join(" "));
                 }
             }
+        }
+
+        // Render help/key hint bar (only when no popup is open)
+        if !self.popup.is_visible() {
+            self.render_help_bar(frame, &areas);
         }
 
         // Render status bar
@@ -610,6 +616,32 @@ impl App {
         );
 
         frame.render_widget(status_bar, areas.status_bar);
+    }
+
+    /// Renders the context-aware key hint bar.
+    fn render_help_bar(&self, frame: &mut ratatui::Frame, areas: &crate::ui::layout::LayoutAreas) {
+        let hints = match self.layout.focused() {
+            FocusedPane::Terminal => vec![
+                KeyHint::styled("Ctrl+Shift+P", "Palette", KeyHintStyle::Highlighted),
+                KeyHint::new("Ctrl+Shift+U", "SSH"),
+                KeyHint::new("Ctrl+Shift+D", "Docker"),
+                KeyHint::new("Ctrl+T", "New Tab"),
+                KeyHint::new("Ctrl+S", "Split"),
+                KeyHint::new("Alt+Tab", "Switch Pane"),
+                KeyHint::styled("Ctrl+Q", "Quit", KeyHintStyle::Danger),
+            ],
+            FocusedPane::Editor => vec![
+                KeyHint::styled("Ctrl+Shift+P", "Palette", KeyHintStyle::Highlighted),
+                KeyHint::new("Ctrl+O", "Open"),
+                KeyHint::new("Ctrl+S", "Save"),
+                KeyHint::new("Ctrl+F", "Find"),
+                KeyHint::new("Alt+Tab", "Switch Pane"),
+                KeyHint::styled("Ctrl+Q", "Quit", KeyHintStyle::Danger),
+            ],
+        };
+
+        let bar = KeyHintBar::new(hints);
+        frame.render_widget(bar, areas.help_bar);
     }
 
     /// Renders the popup overlay.
