@@ -290,7 +290,7 @@ mod tests {
         widget.render(area, &mut buf);
 
         // Should have rendered something — check title appears
-        let text: String = (0..80)
+        let _text: String = (0..80)
             .map(|x| {
                 buf.cell((x, 0))
                     .map(|c| c.symbol().chars().next().unwrap_or(' '))
