@@ -8,6 +8,7 @@ pub mod editor_widget;
 pub mod file_picker;
 pub mod ghost_text;
 pub mod health_dashboard;
+pub mod hotkey_overlay;
 pub mod key_hint_bar;
 pub mod layout;
 pub mod manager_footer;

@@ -192,6 +192,16 @@ impl App {
             self.render_popup(frame, area);
         }
 
+        // Render hotkey overlay on top of everything
+        if let Some(ref overlay) = self.hotkey_overlay {
+            if overlay.is_visible() {
+                use crate::ui::hotkey_overlay::HotkeyOverlayWidget;
+                use ratatui::widgets::Widget as _;
+                let widget = HotkeyOverlayWidget::new(overlay);
+                widget.render(area, frame.buffer_mut());
+            }
+        }
+
         // On first 5 frames, log FINAL buffer state AFTER all rendering
         if frame_num < 5 && areas.has_terminal() && areas.has_editor() {
             let buf = frame.buffer_mut();

@@ -132,20 +132,13 @@ impl DockerManagerWidget<'_> {
             self.render_item_list(chunks[1], buf);
         }
 
-        // Render ManagerFooter with Docker hotkeys
+        // Render ManagerFooter with essential hints + [?] for full list
         let primary = vec![
-            KeyHint::styled("Enter", "Attach", KeyHintStyle::Success),
-            KeyHint::new("s", "Start"),
-            KeyHint::styled("S", "Stop", KeyHintStyle::Danger),
-            KeyHint::new("r", "Restart"),
-            KeyHint::new("n", "New Container"),
-            KeyHint::new("R", "Refresh"),
-        ];
-        let secondary = vec![
-            KeyHint::new("Tab", "Switch Section"),
-            KeyHint::new("Ctrl+Alt+1-9", "Quick Connect"),
+            KeyHint::styled("Enter", "Action", KeyHintStyle::Success),
+            KeyHint::new("Tab", "Section"),
             KeyHint::styled("Esc", "Close", KeyHintStyle::Danger),
         ];
+        let secondary = vec![KeyHint::new("?", "All shortcuts")];
         let footer = ManagerFooter::new(primary).secondary(secondary);
         footer.render(chunks[2], buf);
     }

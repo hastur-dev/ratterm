@@ -49,20 +49,13 @@ pub fn render_list(selector: &SSHManagerSelector, area: Rect, buf: &mut Buffer) 
         render_host_table(selector, chunks[1], buf);
     }
 
-    // Render ManagerFooter with all SSH hotkeys
+    // Render ManagerFooter with essential hints + [?] for full list
     let primary = vec![
         KeyHint::styled("Enter", "Connect", KeyHintStyle::Success),
-        KeyHint::new("a", "Add Host"),
-        KeyHint::new("e", "Edit"),
-        KeyHint::styled("d", "Delete", KeyHintStyle::Danger),
-        KeyHint::new("s", "Scan Network"),
-    ];
-    let secondary = vec![
-        KeyHint::new("c", "Credential Scan"),
-        KeyHint::new("Shift+S", "Scan Subnet"),
-        KeyHint::new("Ctrl+1-9", "Quick Connect"),
+        KeyHint::new("s", "Scan"),
         KeyHint::styled("Esc", "Close", KeyHintStyle::Danger),
     ];
+    let secondary = vec![KeyHint::new("?", "All shortcuts")];
 
     let footer = ManagerFooter::new(primary).secondary(secondary);
     footer.render(chunks[2], buf);

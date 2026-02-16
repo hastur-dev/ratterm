@@ -343,10 +343,27 @@ impl App {
     }
 
     /// Toggles the hotkey overlay for the health dashboard overview mode.
-    ///
-    /// Stub — actual overlay implementation is in Phase 2.
     pub fn toggle_hotkey_overlay_health_overview(&mut self) {
-        info!("Hotkey overlay toggled (stub — Phase 2 will implement)");
+        use crate::app::dashboard_hotkeys::health_dashboard_overview_hotkeys;
+        use crate::ui::hotkey_overlay::HotkeyOverlay;
+
+        if self.hotkey_overlay.as_ref().is_some_and(|o| o.is_visible()) {
+            self.hotkey_overlay = None;
+        } else {
+            self.hotkey_overlay = Some(HotkeyOverlay::new(health_dashboard_overview_hotkeys()));
+        }
+    }
+
+    /// Toggles the hotkey overlay for the health dashboard detail mode.
+    pub fn toggle_hotkey_overlay_health_detail(&mut self) {
+        use crate::app::dashboard_hotkeys::health_dashboard_detail_hotkeys;
+        use crate::ui::hotkey_overlay::HotkeyOverlay;
+
+        if self.hotkey_overlay.as_ref().is_some_and(|o| o.is_visible()) {
+            self.hotkey_overlay = None;
+        } else {
+            self.hotkey_overlay = Some(HotkeyOverlay::new(health_dashboard_detail_hotkeys()));
+        }
     }
 
     /// Returns a reference to the daemon manager.

@@ -18,6 +18,32 @@ impl App {
             key.code
         );
 
+        // Handle hotkey overlay if visible
+        if self.hotkey_overlay.as_ref().is_some_and(|o| o.is_visible()) {
+            match (key.modifiers, key.code) {
+                (KeyModifiers::NONE, KeyCode::Char('?')) | (KeyModifiers::NONE, KeyCode::Esc) => {
+                    self.hotkey_overlay = None;
+                    return;
+                }
+                (KeyModifiers::NONE, KeyCode::Up) | (KeyModifiers::NONE, KeyCode::Char('k')) => {
+                    if let Some(ref mut overlay) = self.hotkey_overlay {
+                        overlay.scroll_up();
+                    }
+                    return;
+                }
+                (KeyModifiers::NONE, KeyCode::Down) | (KeyModifiers::NONE, KeyCode::Char('j')) => {
+                    if let Some(ref mut overlay) = self.hotkey_overlay {
+                        overlay.scroll_down();
+                    }
+                    return;
+                }
+                _ => {
+                    // Any other key closes overlay and falls through
+                    self.hotkey_overlay = None;
+                }
+            }
+        }
+
         let Some(ref dashboard) = self.health_dashboard else {
             info!("DASHBOARD: dashboard is None, hiding popup");
             self.hide_popup();
@@ -110,6 +136,11 @@ impl App {
             // Close dashboard completely
             (KeyModifiers::NONE, KeyCode::Char('q')) => {
                 self.close_health_dashboard();
+            }
+
+            // Help overlay
+            (KeyModifiers::NONE, KeyCode::Char('?')) => {
+                self.toggle_hotkey_overlay_health_detail();
             }
 
             _ => {

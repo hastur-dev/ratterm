@@ -10,6 +10,31 @@ use super::App;
 impl App {
     /// Handles SSH manager key events.
     pub(super) fn handle_ssh_manager_key(&mut self, key: KeyEvent) {
+        // Handle hotkey overlay if visible
+        if self.hotkey_overlay.as_ref().is_some_and(|o| o.is_visible()) {
+            match (key.modifiers, key.code) {
+                (KeyModifiers::NONE, KeyCode::Char('?')) | (KeyModifiers::NONE, KeyCode::Esc) => {
+                    self.hotkey_overlay = None;
+                    return;
+                }
+                (KeyModifiers::NONE, KeyCode::Up) | (KeyModifiers::NONE, KeyCode::Char('k')) => {
+                    if let Some(ref mut overlay) = self.hotkey_overlay {
+                        overlay.scroll_up();
+                    }
+                    return;
+                }
+                (KeyModifiers::NONE, KeyCode::Down) | (KeyModifiers::NONE, KeyCode::Char('j')) => {
+                    if let Some(ref mut overlay) = self.hotkey_overlay {
+                        overlay.scroll_down();
+                    }
+                    return;
+                }
+                _ => {
+                    self.hotkey_overlay = None;
+                }
+            }
+        }
+
         let Some(ref mut manager) = self.ssh_manager else {
             return;
         };

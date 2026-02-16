@@ -3,6 +3,7 @@
 //! Orchestrates the terminal emulator, code editor, and file browser.
 
 mod commands;
+pub mod dashboard_hotkeys;
 pub mod dashboard_nav;
 mod docker_connect;
 mod docker_ops;
@@ -205,6 +206,8 @@ pub struct App {
     pub(crate) daemon_manager: Option<DaemonManager>,
     /// Whether --test-keys mode is active (F1/F2/F3 open palette/SSH/Docker).
     pub(crate) test_keys: bool,
+    /// Hotkey help overlay (shown with `?` in dashboards).
+    pub(crate) hotkey_overlay: Option<crate::ui::hotkey_overlay::HotkeyOverlay>,
 }
 
 impl App {
@@ -294,6 +297,7 @@ impl App {
             health_dashboard: None,
             daemon_manager: None,
             test_keys: false,
+            hotkey_overlay: None,
         })
     }
 

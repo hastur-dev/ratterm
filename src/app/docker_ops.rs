@@ -45,10 +45,15 @@ impl App {
     }
 
     /// Toggles the hotkey overlay for the Docker manager.
-    ///
-    /// Stub — actual overlay implementation is in Phase 2.
     pub fn toggle_hotkey_overlay_docker(&mut self) {
-        info!("Docker hotkey overlay toggled (stub — Phase 2 will implement)");
+        use crate::app::dashboard_hotkeys::docker_manager_list_hotkeys;
+        use crate::ui::hotkey_overlay::HotkeyOverlay;
+
+        if self.hotkey_overlay.as_ref().is_some_and(|o| o.is_visible()) {
+            self.hotkey_overlay = None;
+        } else {
+            self.hotkey_overlay = Some(HotkeyOverlay::new(docker_manager_list_hotkeys()));
+        }
     }
 
     /// Refreshes Docker container/image discovery.
