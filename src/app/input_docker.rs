@@ -3,7 +3,7 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use tracing::{debug, error, info, warn};
 
-use crate::app::input_traits::handle_full_list_navigation;
+use crate::app::dashboard_nav::{NavResult, apply_dashboard_navigation};
 use crate::docker::DockerAvailability;
 use crate::ui::docker_manager::{DockerListSection, DockerManagerMode};
 
@@ -12,6 +12,31 @@ use super::App;
 impl App {
     /// Handles key events for the Docker manager popup.
     pub fn handle_docker_manager_key(&mut self, key: KeyEvent) {
+        // Handle hotkey overlay if visible
+        if self.hotkey_overlay.as_ref().is_some_and(|o| o.is_visible()) {
+            match (key.modifiers, key.code) {
+                (KeyModifiers::NONE, KeyCode::Char('?')) | (KeyModifiers::NONE, KeyCode::Esc) => {
+                    self.hotkey_overlay = None;
+                    return;
+                }
+                (KeyModifiers::NONE, KeyCode::Up) | (KeyModifiers::NONE, KeyCode::Char('k')) => {
+                    if let Some(ref mut overlay) = self.hotkey_overlay {
+                        overlay.scroll_up();
+                    }
+                    return;
+                }
+                (KeyModifiers::NONE, KeyCode::Down) | (KeyModifiers::NONE, KeyCode::Char('j')) => {
+                    if let Some(ref mut overlay) = self.hotkey_overlay {
+                        overlay.scroll_down();
+                    }
+                    return;
+                }
+                _ => {
+                    self.hotkey_overlay = None;
+                }
+            }
+        }
+
         let Some(ref mut manager) = self.docker_manager else {
             return;
         };
@@ -91,34 +116,38 @@ impl App {
             return;
         }
 
-        // Handle standard list navigation using shared helper
+        // Unified dashboard navigation layer
         if let Some(ref mut manager) = self.docker_manager {
-            if handle_full_list_navigation(manager, &key) {
-                return;
+            match apply_dashboard_navigation(manager, &key) {
+                NavResult::Handled => return,
+                NavResult::ShowHelp => {
+                    self.toggle_hotkey_overlay_docker();
+                    return;
+                }
+                NavResult::Close => {
+                    self.hide_docker_manager();
+                    return;
+                }
+                NavResult::Activate => {
+                    self.docker_select_item();
+                    return;
+                }
+                NavResult::Unhandled => {}
             }
         }
 
-        // Handle Docker-specific 'g' for first (vim-style) and 'G' for last
+        // Docker-specific keys layered on top
         match (key.modifiers, key.code) {
+            // Vim-style first/last (g/G)
             (KeyModifiers::NONE, KeyCode::Char('g')) => {
                 if let Some(ref mut manager) = self.docker_manager {
                     manager.select_first();
                 }
-                return;
             }
             (KeyModifiers::SHIFT, KeyCode::Char('G')) => {
                 if let Some(ref mut manager) = self.docker_manager {
                     manager.select_last();
                 }
-                return;
-            }
-            _ => {}
-        }
-
-        match (key.modifiers, key.code) {
-            // Close manager
-            (KeyModifiers::NONE, KeyCode::Esc) => {
-                self.hide_docker_manager();
             }
 
             // Section switching
@@ -152,11 +181,6 @@ impl App {
                 if let Some(ref mut manager) = self.docker_manager {
                     manager.set_section(DockerListSection::Images);
                 }
-            }
-
-            // Select/connect
-            (KeyModifiers::NONE, KeyCode::Enter) => {
-                self.docker_select_item();
             }
 
             // Run with options (Ctrl+O)

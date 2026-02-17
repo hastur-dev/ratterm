@@ -8,6 +8,7 @@ pub mod editor_widget;
 pub mod file_picker;
 pub mod ghost_text;
 pub mod health_dashboard;
+pub mod hotkey_overlay;
 pub mod key_hint_bar;
 pub mod layout;
 pub mod manager_footer;
@@ -16,6 +17,7 @@ pub mod ssh_manager;
 pub mod statusbar;
 pub mod terminal_tabs;
 pub mod terminal_widget;
+pub mod window_position;
 
 pub use docker_manager::{
     DockerListSection, DockerManagerMode, DockerManagerSelector, DockerManagerWidget,

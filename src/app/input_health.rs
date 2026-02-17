@@ -3,7 +3,7 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use tracing::{debug, info};
 
-use crate::app::input_traits::handle_full_list_navigation;
+use crate::app::dashboard_nav::{NavResult, apply_dashboard_navigation};
 use crate::ui::health_dashboard::DashboardMode;
 
 use super::App;
@@ -17,6 +17,32 @@ impl App {
             "DASHBOARD: handle_health_dashboard_key called, code={:?}",
             key.code
         );
+
+        // Handle hotkey overlay if visible
+        if self.hotkey_overlay.as_ref().is_some_and(|o| o.is_visible()) {
+            match (key.modifiers, key.code) {
+                (KeyModifiers::NONE, KeyCode::Char('?')) | (KeyModifiers::NONE, KeyCode::Esc) => {
+                    self.hotkey_overlay = None;
+                    return;
+                }
+                (KeyModifiers::NONE, KeyCode::Up) | (KeyModifiers::NONE, KeyCode::Char('k')) => {
+                    if let Some(ref mut overlay) = self.hotkey_overlay {
+                        overlay.scroll_up();
+                    }
+                    return;
+                }
+                (KeyModifiers::NONE, KeyCode::Down) | (KeyModifiers::NONE, KeyCode::Char('j')) => {
+                    if let Some(ref mut overlay) = self.hotkey_overlay {
+                        overlay.scroll_down();
+                    }
+                    return;
+                }
+                _ => {
+                    // Any other key closes overlay and falls through
+                    self.hotkey_overlay = None;
+                }
+            }
+        }
 
         let Some(ref dashboard) = self.health_dashboard else {
             info!("DASHBOARD: dashboard is None, hiding popup");
@@ -40,23 +66,34 @@ impl App {
             key.code, key.modifiers
         );
 
-        // Handle list navigation using shared helper (uses ListSelectable trait)
+        // Unified dashboard navigation layer
         if let Some(ref mut dashboard) = self.health_dashboard {
-            if handle_full_list_navigation(dashboard, &key) {
-                info!("DASHBOARD: navigation handled by helper");
-                return;
+            match apply_dashboard_navigation(dashboard, &key) {
+                NavResult::Handled => {
+                    info!("DASHBOARD: navigation handled by unified layer");
+                    return;
+                }
+                NavResult::ShowHelp => {
+                    info!("DASHBOARD: show help requested");
+                    self.toggle_hotkey_overlay_health_overview();
+                    return;
+                }
+                NavResult::Close => {
+                    info!("DASHBOARD: close via nav layer");
+                    self.close_health_dashboard();
+                    return;
+                }
+                NavResult::Activate => {
+                    info!("DASHBOARD: enter_detail via nav layer");
+                    dashboard.enter_detail();
+                    return;
+                }
+                NavResult::Unhandled => {}
             }
         }
 
+        // Screen-specific keys layered on top
         match (key.modifiers, key.code) {
-            // Enter detail mode
-            (KeyModifiers::NONE, KeyCode::Enter) => {
-                info!("DASHBOARD: enter_detail");
-                if let Some(ref mut dashboard) = self.health_dashboard {
-                    dashboard.enter_detail();
-                }
-            }
-
             // Refresh
             (KeyModifiers::NONE, KeyCode::Char('r')) => {
                 info!("DASHBOARD: refresh");
@@ -69,9 +106,9 @@ impl App {
                 self.toggle_dashboard_auto_refresh();
             }
 
-            // Close dashboard
-            (KeyModifiers::NONE, KeyCode::Esc) | (KeyModifiers::NONE, KeyCode::Char('q')) => {
-                info!("DASHBOARD: close");
+            // Close dashboard (q as alias)
+            (KeyModifiers::NONE, KeyCode::Char('q')) => {
+                info!("DASHBOARD: close via q");
                 self.close_health_dashboard();
             }
 
@@ -99,6 +136,11 @@ impl App {
             // Close dashboard completely
             (KeyModifiers::NONE, KeyCode::Char('q')) => {
                 self.close_health_dashboard();
+            }
+
+            // Help overlay
+            (KeyModifiers::NONE, KeyCode::Char('?')) => {
+                self.toggle_hotkey_overlay_health_detail();
             }
 
             _ => {
@@ -410,5 +452,147 @@ mod tests {
         // (Dashboard is already closed, this tests robustness)
         app.mode = super::super::AppMode::HealthDashboard;
         app.handle_health_dashboard_key(esc_key);
+    }
+
+    // ========================================================================
+    // Phase 0 Diagnostic Tests — Verify selected_index changes
+    // ========================================================================
+
+    /// Helper: creates an App with a dashboard containing 3 mock hosts.
+    fn create_test_app_with_hosts() -> Option<App> {
+        use crate::ssh::SSHCredentials;
+
+        let mut app = App::new(80, 24).ok()?;
+
+        let mut ssh_hosts = SSHHostList::new();
+        let id1 = ssh_hosts.add_host("host1.example.com".into(), 22)?;
+        let id2 = ssh_hosts.add_host("host2.example.com".into(), 22)?;
+        let id3 = ssh_hosts.add_host("host3.example.com".into(), 22)?;
+
+        // Credentials are required for hosts to appear in the dashboard
+        ssh_hosts.set_credentials(id1, SSHCredentials::new("user".into(), Some("pass".into())));
+        ssh_hosts.set_credentials(id2, SSHCredentials::new("user".into(), Some("pass".into())));
+        ssh_hosts.set_credentials(id3, SSHCredentials::new("user".into(), Some("pass".into())));
+
+        let dashboard = HealthDashboard::new(&ssh_hosts);
+        assert_eq!(dashboard.host_count(), 3, "Dashboard should have 3 hosts");
+        assert_eq!(dashboard.selected_index(), 0, "Initial selection should be 0");
+
+        app.health_dashboard = Some(dashboard);
+        app.mode = super::super::AppMode::HealthDashboard;
+
+        Some(app)
+    }
+
+    #[test]
+    fn test_diag_down_arrow_changes_selected_index() {
+        let Some(mut app) = create_test_app_with_hosts() else {
+            return;
+        };
+
+        let down = key_event(KeyCode::Down);
+        app.handle_health_dashboard_key(down);
+
+        let idx = app.health_dashboard.as_ref().map(|d| d.selected_index());
+        assert_eq!(idx, Some(1), "Down arrow should move selection from 0 to 1");
+    }
+
+    #[test]
+    fn test_diag_up_arrow_changes_selected_index() {
+        let Some(mut app) = create_test_app_with_hosts() else {
+            return;
+        };
+
+        // Move down first, then up
+        let down = key_event(KeyCode::Down);
+        app.handle_health_dashboard_key(down);
+        assert_eq!(
+            app.health_dashboard.as_ref().map(|d| d.selected_index()),
+            Some(1)
+        );
+
+        let up = key_event(KeyCode::Up);
+        app.handle_health_dashboard_key(up);
+        assert_eq!(
+            app.health_dashboard.as_ref().map(|d| d.selected_index()),
+            Some(0),
+            "Up arrow should move selection back to 0"
+        );
+    }
+
+    #[test]
+    fn test_diag_j_key_changes_selected_index() {
+        let Some(mut app) = create_test_app_with_hosts() else {
+            return;
+        };
+
+        let j = key_event(KeyCode::Char('j'));
+        app.handle_health_dashboard_key(j);
+
+        let idx = app.health_dashboard.as_ref().map(|d| d.selected_index());
+        assert_eq!(idx, Some(1), "'j' should move selection from 0 to 1");
+    }
+
+    #[test]
+    fn test_diag_k_key_changes_selected_index() {
+        let Some(mut app) = create_test_app_with_hosts() else {
+            return;
+        };
+
+        // Move down first
+        let j = key_event(KeyCode::Char('j'));
+        app.handle_health_dashboard_key(j);
+
+        let k = key_event(KeyCode::Char('k'));
+        app.handle_health_dashboard_key(k);
+
+        let idx = app.health_dashboard.as_ref().map(|d| d.selected_index());
+        assert_eq!(idx, Some(0), "'k' should move selection back to 0");
+    }
+
+    #[test]
+    fn test_diag_home_end_change_selected_index() {
+        let Some(mut app) = create_test_app_with_hosts() else {
+            return;
+        };
+
+        // End should go to last
+        let end = key_event(KeyCode::End);
+        app.handle_health_dashboard_key(end);
+        assert_eq!(
+            app.health_dashboard.as_ref().map(|d| d.selected_index()),
+            Some(2),
+            "End should move to last host (index 2)"
+        );
+
+        // Home should go to first
+        let home = key_event(KeyCode::Home);
+        app.handle_health_dashboard_key(home);
+        assert_eq!(
+            app.health_dashboard.as_ref().map(|d| d.selected_index()),
+            Some(0),
+            "Home should move to first host (index 0)"
+        );
+    }
+
+    #[test]
+    fn test_diag_sequential_jjk_navigation() {
+        let Some(mut app) = create_test_app_with_hosts() else {
+            return;
+        };
+
+        // j, j, k => should end at index 1
+        app.handle_health_dashboard_key(key_event(KeyCode::Char('j')));
+        assert_eq!(app.health_dashboard.as_ref().map(|d| d.selected_index()), Some(1));
+
+        app.handle_health_dashboard_key(key_event(KeyCode::Char('j')));
+        assert_eq!(app.health_dashboard.as_ref().map(|d| d.selected_index()), Some(2));
+
+        app.handle_health_dashboard_key(key_event(KeyCode::Char('k')));
+        assert_eq!(
+            app.health_dashboard.as_ref().map(|d| d.selected_index()),
+            Some(1),
+            "j,j,k should end at index 1"
+        );
     }
 }
