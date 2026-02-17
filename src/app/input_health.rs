@@ -476,7 +476,11 @@ mod tests {
 
         let dashboard = HealthDashboard::new(&ssh_hosts);
         assert_eq!(dashboard.host_count(), 3, "Dashboard should have 3 hosts");
-        assert_eq!(dashboard.selected_index(), 0, "Initial selection should be 0");
+        assert_eq!(
+            dashboard.selected_index(),
+            0,
+            "Initial selection should be 0"
+        );
 
         app.health_dashboard = Some(dashboard);
         app.mode = super::super::AppMode::HealthDashboard;
@@ -583,10 +587,16 @@ mod tests {
 
         // j, j, k => should end at index 1
         app.handle_health_dashboard_key(key_event(KeyCode::Char('j')));
-        assert_eq!(app.health_dashboard.as_ref().map(|d| d.selected_index()), Some(1));
+        assert_eq!(
+            app.health_dashboard.as_ref().map(|d| d.selected_index()),
+            Some(1)
+        );
 
         app.handle_health_dashboard_key(key_event(KeyCode::Char('j')));
-        assert_eq!(app.health_dashboard.as_ref().map(|d| d.selected_index()), Some(2));
+        assert_eq!(
+            app.health_dashboard.as_ref().map(|d| d.selected_index()),
+            Some(2)
+        );
 
         app.handle_health_dashboard_key(key_event(KeyCode::Char('k')));
         assert_eq!(
