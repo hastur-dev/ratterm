@@ -114,7 +114,9 @@ impl Widget for HotkeyOverlayWidget<'_> {
 
         // Size: max 60 columns, max 80% height
         let max_w = 60.min(area.width.saturating_sub(4));
-        let max_h = (area.height * 80 / 100).max(10).min(area.height.saturating_sub(4));
+        let max_h = (area.height * 80 / 100)
+            .max(10)
+            .min(area.height.saturating_sub(4));
 
         // Use configured position or default to center
         let popup_area = match &self.position {
@@ -233,7 +235,10 @@ mod tests {
         assert!(!overlay.is_visible(), "Should be hidden after toggle");
 
         overlay.toggle();
-        assert!(overlay.is_visible(), "Should be visible after second toggle");
+        assert!(
+            overlay.is_visible(),
+            "Should be visible after second toggle"
+        );
     }
 
     #[test]

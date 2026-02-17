@@ -98,11 +98,7 @@ impl WindowPosition {
     /// Parses a grid position name (case-insensitive, accepts `-`, `_`, or space).
     fn parse_grid(s: &str) -> Result<Self, String> {
         // Normalize: lowercase, replace separators with '-'
-        let normalized = s
-            .to_lowercase()
-            .replace(['_', ' '], "-")
-            .trim()
-            .to_string();
+        let normalized = s.to_lowercase().replace(['_', ' '], "-").trim().to_string();
 
         match normalized.as_str() {
             "top-left" => Ok(Self::Grid(GridPosition::TopLeft)),
@@ -138,9 +134,7 @@ impl WindowPosition {
         let ph = popup_height.min(screen_height);
 
         let (x, y) = match self {
-            Self::Grid(grid) => {
-                Self::resolve_grid(*grid, pw, ph, screen_width, screen_height)
-            }
+            Self::Grid(grid) => Self::resolve_grid(*grid, pw, ph, screen_width, screen_height),
             Self::Offset(ox, oy) => {
                 Self::resolve_offset(*ox, *oy, pw, ph, screen_width, screen_height)
             }
@@ -150,13 +144,7 @@ impl WindowPosition {
     }
 
     /// Resolves a grid position to (x, y) coordinates.
-    fn resolve_grid(
-        grid: GridPosition,
-        pw: u16,
-        ph: u16,
-        sw: u16,
-        sh: u16,
-    ) -> (u16, u16) {
+    fn resolve_grid(grid: GridPosition, pw: u16, ph: u16, sw: u16, sh: u16) -> (u16, u16) {
         let margin = GRID_MARGIN;
 
         let x = match grid {
@@ -183,14 +171,7 @@ impl WindowPosition {
     }
 
     /// Resolves an offset position, clamped to screen bounds.
-    fn resolve_offset(
-        ox: u16,
-        oy: u16,
-        pw: u16,
-        ph: u16,
-        sw: u16,
-        sh: u16,
-    ) -> (u16, u16) {
+    fn resolve_offset(ox: u16, oy: u16, pw: u16, ph: u16, sw: u16, sh: u16) -> (u16, u16) {
         let x = ox.min(sw.saturating_sub(pw));
         let y = oy.min(sh.saturating_sub(ph));
         (x, y)
