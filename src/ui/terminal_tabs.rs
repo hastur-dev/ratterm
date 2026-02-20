@@ -10,7 +10,6 @@ use ratatui::{
     widgets::Widget,
 };
 
-use crate::config::command_palette_hotkey;
 use crate::terminal::multiplexer::TabInfo;
 
 /// Terminal tab bar widget.
@@ -90,13 +89,11 @@ impl Widget for TerminalTabBar<'_> {
             }
         }
 
-        // Add hint for creating new tab and command palette with explicit background
+        // Fill remaining width with background (hints now shown in KeyHintBar)
         let remaining_width = area.width as usize - spans.iter().map(|s| s.width()).sum::<usize>();
-        if remaining_width > 10 {
-            let cmd_palette_key = command_palette_hotkey();
-            let hint = format!(" Ctrl+T:new | {}:palette ", cmd_palette_key);
+        if remaining_width > 0 {
             spans.push(Span::styled(
-                format!("{:>width$}", hint, width = remaining_width),
+                " ".repeat(remaining_width),
                 Style::default().fg(Color::DarkGray).bg(bg_color),
             ));
         }

@@ -8,18 +8,24 @@ pub mod editor_widget;
 pub mod file_picker;
 pub mod ghost_text;
 pub mod health_dashboard;
+pub mod hotkey_overlay;
+pub mod key_hint_bar;
 pub mod layout;
+pub mod manager_footer;
 pub mod popup;
 pub mod ssh_manager;
 pub mod statusbar;
 pub mod terminal_tabs;
 pub mod terminal_widget;
+pub mod window_position;
 
 pub use docker_manager::{
     DockerListSection, DockerManagerMode, DockerManagerSelector, DockerManagerWidget,
 };
 pub use health_dashboard::{DashboardMode, HealthDashboard, HealthDashboardWidget};
+pub use key_hint_bar::{KeyHint, KeyHintBar, KeyHintStyle};
 pub use layout::{FocusedPane, LayoutAreas, SplitLayout};
+pub use manager_footer::ManagerFooter;
 pub use popup::{
     Command, CommandPalette, ModeSwitcher, ModeSwitcherWidget, Popup, PopupKind, PopupWidget,
     ShellInstallPrompt, ShellInstallPromptWidget, ShellSelector, ShellSelectorWidget,

@@ -24,7 +24,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, Paragraph, Widget},
+    widgets::{Block, BorderType, Borders, Clear, Paragraph, Widget},
 };
 
 /// Type of popup dialog.
@@ -469,7 +469,7 @@ impl Widget for PopupWidget<'_> {
         }
 
         let popup_area = self.popup_area(area);
-        let bg_color = Color::Rgb(30, 30, 30);
+        let bg_color = Color::Black;
 
         // Clear background and fill with explicit color
         Clear.render(popup_area, buf);
@@ -481,46 +481,69 @@ impl Widget for PopupWidget<'_> {
             }
         }
 
-        // Draw border with explicit background
+        // Use rounded borders for a modern look
+        let title_style = Style::default()
+            .fg(Color::White)
+            .add_modifier(Modifier::BOLD);
+
         let block = Block::default()
-            .title(self.popup.kind.title())
+            .title(Span::styled(
+                format!(" {} ", self.popup.kind.title()),
+                title_style,
+            ))
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::Cyan).bg(bg_color));
+            .border_type(BorderType::Rounded)
+            .border_style(Style::default().fg(Color::Cyan).bg(bg_color))
+            .style(Style::default().bg(bg_color));
 
         let inner = block.inner(popup_area);
         block.render(popup_area, buf);
 
-        // Layout: prompt + input, then results
-        let chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(1), // Prompt + input
-                Constraint::Length(1), // Error or space
-                Constraint::Min(0),    // Results
-            ])
-            .split(inner);
+        // Check if this is the command palette for enhanced rendering
+        let is_command_palette = self.popup.kind.is_command_palette();
+
+        // Layout depends on whether we have a hint line for command palette
+        let chunks = if is_command_palette {
+            Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Length(1), // Prompt + input
+                    Constraint::Length(1), // Error or space
+                    Constraint::Min(0),    // Results
+                    Constraint::Length(1), // Bottom hint line
+                ])
+                .split(inner)
+        } else {
+            Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Length(1), // Prompt + input
+                    Constraint::Length(1), // Error or space
+                    Constraint::Min(0),    // Results
+                ])
+                .split(inner)
+        };
 
         // Render prompt and input with explicit backgrounds
         let prompt = self.popup.kind.prompt();
+        let prompt_style = Style::default().fg(Color::Cyan).bg(bg_color);
+        let input_style = Style::default().fg(Color::White).bg(bg_color);
+
         let input_display = if let Some(ref suggestion) = self.popup.suggestion {
-            let input_style = Style::default().fg(Color::White).bg(bg_color);
             let suggestion_style = Style::default()
                 .fg(Color::DarkGray)
                 .bg(bg_color)
                 .add_modifier(Modifier::ITALIC);
 
             Line::from(vec![
-                Span::styled(prompt, Style::default().fg(Color::White).bg(bg_color)),
+                Span::styled(prompt, prompt_style),
                 Span::styled(&self.popup.input, input_style),
                 Span::styled(suggestion, suggestion_style),
             ])
         } else {
             Line::from(vec![
-                Span::styled(prompt, Style::default().fg(Color::White).bg(bg_color)),
-                Span::styled(
-                    &self.popup.input,
-                    Style::default().fg(Color::White).bg(bg_color),
-                ),
+                Span::styled(prompt, prompt_style),
+                Span::styled(&self.popup.input, input_style),
             ])
         };
 
@@ -560,17 +583,53 @@ impl Widget for PopupWidget<'_> {
                 .skip(scroll_offset)
                 .take(visible_count)
                 .map(|(i, result)| {
-                    let style = if i == self.popup.selected_result {
-                        Style::default().bg(Color::Blue).fg(Color::White)
+                    if i == self.popup.selected_result {
+                        let style = Style::default()
+                            .bg(Color::Blue)
+                            .fg(Color::White)
+                            .add_modifier(Modifier::BOLD);
+                        Line::styled(result.as_str(), style)
                     } else {
-                        Style::default().fg(Color::Gray).bg(bg_color)
-                    };
-                    Line::styled(result.as_str(), style)
+                        Line::styled(
+                            result.as_str(),
+                            Style::default().fg(Color::Gray).bg(bg_color),
+                        )
+                    }
                 })
                 .collect();
 
             let results_para = Paragraph::new(visible_results);
             results_para.render(chunks[2], buf);
+        }
+
+        // Render bottom hint line for command palette
+        if is_command_palette && chunks.len() > 3 {
+            let hint_line = Line::from(vec![
+                Span::styled(
+                    " \u{2191}\u{2193}",
+                    Style::default().fg(Color::Yellow).bg(bg_color),
+                ),
+                Span::styled(
+                    " Navigate ",
+                    Style::default().fg(Color::DarkGray).bg(bg_color),
+                ),
+                Span::styled(
+                    "\u{2502}",
+                    Style::default().fg(Color::DarkGray).bg(bg_color),
+                ),
+                Span::styled(" Enter", Style::default().fg(Color::Yellow).bg(bg_color)),
+                Span::styled(
+                    " Select ",
+                    Style::default().fg(Color::DarkGray).bg(bg_color),
+                ),
+                Span::styled(
+                    "\u{2502}",
+                    Style::default().fg(Color::DarkGray).bg(bg_color),
+                ),
+                Span::styled(" Esc", Style::default().fg(Color::Yellow).bg(bg_color)),
+                Span::styled(" Close", Style::default().fg(Color::DarkGray).bg(bg_color)),
+            ]);
+            Paragraph::new(hint_line).render(chunks[3], buf);
         }
     }
 }

@@ -5,8 +5,11 @@ use ratatui::{
     layout::{Constraint, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, Padding, Paragraph, Widget},
+    widgets::{Block, BorderType, Borders, Clear, Padding, Paragraph, Widget},
 };
+
+use crate::ui::key_hint_bar::{KeyHint, KeyHintStyle};
+use crate::ui::manager_footer::ManagerFooter;
 
 use super::selector::DockerManagerSelector;
 use super::types::DockerManagerMode;
@@ -14,13 +17,24 @@ use super::types::DockerManagerMode;
 /// Docker Manager widget.
 pub struct DockerManagerWidget<'a> {
     selector: &'a DockerManagerSelector,
+    position: Option<crate::ui::window_position::WindowPosition>,
 }
 
 impl<'a> DockerManagerWidget<'a> {
     /// Creates a new Docker manager widget.
     #[must_use]
     pub fn new(selector: &'a DockerManagerSelector) -> Self {
-        Self { selector }
+        Self {
+            selector,
+            position: None,
+        }
+    }
+
+    /// Sets the window position from config.
+    #[must_use]
+    pub fn position(mut self, pos: crate::ui::window_position::WindowPosition) -> Self {
+        self.position = Some(pos);
+        self
     }
 }
 
@@ -31,14 +45,19 @@ impl Widget for DockerManagerWidget<'_> {
             return;
         }
 
-        // Calculate popup dimensions (60% width, 70% height, centered)
+        // Calculate popup dimensions (60% width, 70% height)
         let popup_width = area.width.saturating_mul(60).saturating_div(100).max(50);
         let popup_height = area.height.saturating_mul(70).saturating_div(100).max(15);
 
-        let popup_x = area.x + (area.width.saturating_sub(popup_width)) / 2;
-        let popup_y = area.y + (area.height.saturating_sub(popup_height)) / 2;
-
-        let popup_area = Rect::new(popup_x, popup_y, popup_width, popup_height);
+        // Use configured position or default center
+        let popup_area = match &self.position {
+            Some(pos) => pos.resolve(popup_width, popup_height, area.width, area.height),
+            None => {
+                let popup_x = area.x + (area.width.saturating_sub(popup_width)) / 2;
+                let popup_y = area.y + (area.height.saturating_sub(popup_height)) / 2;
+                Rect::new(popup_x, popup_y, popup_width, popup_height)
+            }
+        };
 
         // Clear background
         Clear.render(popup_area, buf);
@@ -92,20 +111,26 @@ impl DockerManagerWidget<'_> {
             self.selector.total_count()
         );
 
+        let title_style = Style::default()
+            .fg(Color::White)
+            .add_modifier(Modifier::BOLD);
+
         let block = Block::default()
-            .title(title)
+            .title(Span::styled(title, title_style))
             .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
             .border_style(Style::default().fg(Color::Cyan))
-            .padding(Padding::horizontal(1));
+            .padding(Padding::horizontal(1))
+            .style(Style::default().bg(Color::Black));
 
         let inner = block.inner(area);
         block.render(area, buf);
 
-        // Layout: tabs, list, help
+        // Layout: tabs, list, footer (2 rows for ManagerFooter)
         let chunks = Layout::vertical([
             Constraint::Length(2), // Section tabs
             Constraint::Min(5),    // List
-            Constraint::Length(2), // Help text
+            Constraint::Length(2), // ManagerFooter (2 rows)
         ])
         .split(inner);
 
@@ -123,8 +148,15 @@ impl DockerManagerWidget<'_> {
             self.render_item_list(chunks[1], buf);
         }
 
-        // Render help text
-        self.render_help_text(chunks[2], buf);
+        // Render ManagerFooter with essential hints + [?] for full list
+        let primary = vec![
+            KeyHint::styled("Enter", "Action", KeyHintStyle::Success),
+            KeyHint::new("Tab", "Section"),
+            KeyHint::styled("Esc", "Close", KeyHintStyle::Danger),
+        ];
+        let secondary = vec![KeyHint::new("?", "All shortcuts")];
+        let footer = ManagerFooter::new(primary).secondary(secondary);
+        footer.render(chunks[2], buf);
     }
 
     /// Renders the section tabs.
@@ -258,25 +290,6 @@ impl DockerManagerWidget<'_> {
                     .set_style(Style::default().fg(Color::DarkGray));
             }
         }
-    }
-
-    /// Renders help text.
-    fn render_help_text(&self, area: Rect, buf: &mut Buffer) {
-        let help = match self.selector.section() {
-            super::types::DockerListSection::RunningContainers => {
-                "Enter:exec | c:create | h:host | Tab:section | r:refresh | 1-9:assign | Esc:close"
-            }
-            super::types::DockerListSection::StoppedContainers => {
-                "Enter:start+exec | c:create | h:host | Tab:section | r:refresh | d:remove | Esc:close"
-            }
-            super::types::DockerListSection::Images => {
-                "Enter:run | c:create | h:host | Tab:section | r:refresh | d:remove | Esc:close"
-            }
-        };
-
-        let style = Style::default().fg(Color::DarkGray);
-        let para = Paragraph::new(help).style(style);
-        para.render(area, buf);
     }
 
     /// Renders "Docker unavailable" message based on availability status.
@@ -443,8 +456,10 @@ impl DockerManagerWidget<'_> {
         let block = Block::default()
             .title(title)
             .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
             .border_style(Style::default().fg(Color::Yellow))
-            .padding(Padding::horizontal(1));
+            .padding(Padding::horizontal(1))
+            .style(Style::default().bg(Color::Black));
 
         let inner = block.inner(area);
         block.render(area, buf);
@@ -460,8 +475,10 @@ impl DockerManagerWidget<'_> {
         let block = Block::default()
             .title(title)
             .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
             .border_style(Style::default().fg(Color::Yellow))
-            .padding(Padding::horizontal(1));
+            .padding(Padding::horizontal(1))
+            .style(Style::default().bg(Color::Black));
 
         let inner = block.inner(area);
         block.render(area, buf);
@@ -488,8 +505,10 @@ impl DockerManagerWidget<'_> {
         let block = Block::default()
             .title(" Connecting ")
             .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
             .border_style(Style::default().fg(Color::Green))
-            .padding(Padding::horizontal(1));
+            .padding(Padding::horizontal(1))
+            .style(Style::default().bg(Color::Black));
 
         let inner = block.inner(area);
         block.render(area, buf);
@@ -514,8 +533,10 @@ impl DockerManagerWidget<'_> {
         let block = Block::default()
             .title(title)
             .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
             .border_style(Style::default().fg(Color::Magenta))
-            .padding(Padding::horizontal(1));
+            .padding(Padding::horizontal(1))
+            .style(Style::default().bg(Color::Black));
 
         let inner = block.inner(area);
         block.render(area, buf);
@@ -532,8 +553,10 @@ impl DockerManagerWidget<'_> {
         let block = Block::default()
             .title(title)
             .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
             .border_style(Style::default().fg(Color::Yellow))
-            .padding(Padding::horizontal(1));
+            .padding(Padding::horizontal(1))
+            .style(Style::default().bg(Color::Black));
 
         let inner = block.inner(area);
         block.render(area, buf);

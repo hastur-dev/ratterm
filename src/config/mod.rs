@@ -124,6 +124,20 @@ mode = vim
 # addon.my-tool = f3|/path/to/my-tool
 # addon.rat-squad = f2|~/.ratterm/extensions/rat-squad/rat-squad
 
+# Window Positions
+# ----------------
+# Control where popups and overlays appear on screen.
+# Grid positions: top-left, top-center, top-right,
+#                 middle-left, middle-center, middle-right,
+#                 bottom-left, bottom-center, bottom-right
+# Pixel offsets: "X x Y" (cell distance from top-left corner)
+#
+# hotkey_overlay_position = middle-center
+# command_palette_position = top-center
+# ssh_manager_position = middle-center
+# docker_manager_position = middle-center
+# health_dashboard_position = middle-center
+
 # Logging Configuration
 # ---------------------
 # Logs are stored in ~/.ratterm/logs/ with automatic cleanup.
@@ -169,6 +183,8 @@ pub struct Config {
     pub addon_commands: HashMap<KeyBinding, AddonCommand>,
     /// Logging configuration.
     pub log_config: LogConfig,
+    /// Window position overrides for specific popups/overlays.
+    pub window_positions: HashMap<String, crate::ui::window_position::WindowPosition>,
 }
 
 impl Default for Config {
@@ -186,6 +202,7 @@ impl Default for Config {
             ssh_number_setting: true,
             addon_commands: HashMap::new(),
             log_config: LogConfig::default(),
+            window_positions: HashMap::new(),
         }
     }
 }
@@ -348,8 +365,18 @@ impl Config {
                     matches!(value.to_lowercase().as_str(), "true" | "yes" | "1" | "on");
             }
             _ => {
+                // Check for window position settings: *_position = <value>
+                if key.ends_with("_position") {
+                    match crate::ui::window_position::WindowPosition::parse(value) {
+                        Ok(pos) => {
+                            self.window_positions.insert(key.to_string(), pos);
+                        }
+                        Err(e) => {
+                            tracing::warn!("Invalid window position '{}': {}", value, e);
+                        }
+                    }
                 // Check for addon.* pattern: addon.<name> = <hotkey>|<command>
-                if let Some(addon_name) = key.strip_prefix("addon.") {
+                } else if let Some(addon_name) = key.strip_prefix("addon.") {
                     if let Some((hotkey, command)) = value.split_once('|') {
                         let hotkey = hotkey.trim();
                         let command = command.trim();
@@ -371,6 +398,17 @@ impl Config {
                 }
             }
         }
+    }
+
+    /// Returns the configured position for a window, or the default.
+    ///
+    /// Looks up `{name}_position` in the window_positions map.
+    #[must_use]
+    pub fn window_position(&self, name: &str) -> crate::ui::window_position::WindowPosition {
+        self.window_positions
+            .get(&format!("{name}_position"))
+            .cloned()
+            .unwrap_or_default()
     }
 
     /// Reloads the configuration from disk.

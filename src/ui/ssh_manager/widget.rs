@@ -4,7 +4,7 @@ use ratatui::{
     buffer::Buffer,
     layout::{Alignment, Rect},
     style::{Color, Modifier, Style},
-    widgets::{Block, Borders, Clear, Paragraph, Widget},
+    widgets::{Block, BorderType, Borders, Clear, Paragraph, Widget},
 };
 
 use super::selector::SSHManagerSelector;
@@ -20,6 +20,8 @@ pub struct SSHManagerWidget<'a> {
     selector: &'a SSHManagerSelector,
     /// Whether the widget is focused.
     focused: bool,
+    /// Window position from config.
+    position: Option<crate::ui::window_position::WindowPosition>,
 }
 
 impl<'a> SSHManagerWidget<'a> {
@@ -29,6 +31,7 @@ impl<'a> SSHManagerWidget<'a> {
         Self {
             selector,
             focused: true,
+            position: None,
         }
     }
 
@@ -39,15 +42,26 @@ impl<'a> SSHManagerWidget<'a> {
         self
     }
 
-    /// Calculates the popup area centered in the terminal.
+    /// Sets the window position from config.
+    #[must_use]
+    pub fn position(mut self, pos: crate::ui::window_position::WindowPosition) -> Self {
+        self.position = Some(pos);
+        self
+    }
+
+    /// Calculates the popup area.
     fn popup_area(&self, area: Rect) -> Rect {
         let width = area.width.saturating_sub(8).min(80);
         let height = area.height.saturating_sub(4).min(20);
 
-        let x = (area.width.saturating_sub(width)) / 2;
-        let y = (area.height.saturating_sub(height)) / 2;
-
-        Rect::new(x, y, width, height)
+        match &self.position {
+            Some(pos) => pos.resolve(width, height, area.width, area.height),
+            None => {
+                let x = (area.width.saturating_sub(width)) / 2;
+                let y = (area.height.saturating_sub(height)) / 2;
+                Rect::new(x, y, width, height)
+            }
+        }
     }
 
     /// Renders the content based on current mode.
@@ -97,9 +111,17 @@ impl Widget for SSHManagerWidget<'_> {
             Style::default().fg(Color::DarkGray)
         };
 
+        let title_style = Style::default()
+            .fg(Color::White)
+            .add_modifier(Modifier::BOLD);
+
         let block = Block::default()
-            .title(title)
+            .title(ratatui::text::Span::styled(
+                format!(" {} ", title),
+                title_style,
+            ))
             .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
             .border_style(border_style)
             .style(Style::default().bg(Color::Black));
 

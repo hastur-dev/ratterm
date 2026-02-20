@@ -44,6 +44,18 @@ impl App {
         self.request_redraw();
     }
 
+    /// Toggles the hotkey overlay for the Docker manager.
+    pub fn toggle_hotkey_overlay_docker(&mut self) {
+        use crate::app::dashboard_hotkeys::docker_manager_list_hotkeys;
+        use crate::ui::hotkey_overlay::HotkeyOverlay;
+
+        if self.hotkey_overlay.as_ref().is_some_and(|o| o.is_visible()) {
+            self.hotkey_overlay = None;
+        } else {
+            self.hotkey_overlay = Some(HotkeyOverlay::new(docker_manager_list_hotkeys()));
+        }
+    }
+
     /// Refreshes Docker container/image discovery.
     pub fn refresh_docker_discovery(&mut self) {
         info!("refresh_docker_discovery: starting");

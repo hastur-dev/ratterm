@@ -625,6 +625,76 @@ You can also change themes without editing `.ratrc` directly:
 
 ---
 
+### Window Positions
+
+All popup windows (hotkey overlay, SSH manager, Docker manager) support configurable positioning via `.ratrc`.
+
+Two position formats are supported:
+
+#### Grid Positions
+
+A 3×3 named grid aligned to screen edges (with a 2-cell margin):
+
+```
+hotkey_overlay_position = <grid-name>
+ssh_manager_position = <grid-name>
+docker_manager_position = <grid-name>
+```
+
+| Grid Name | Description |
+|-----------|-------------|
+| `top-left` | Upper-left corner |
+| `top-center` | Top edge, horizontally centered |
+| `top-right` | Upper-right corner |
+| `middle-left` | Left edge, vertically centered |
+| `middle-center` | Screen center (default) |
+| `middle-right` | Right edge, vertically centered |
+| `bottom-left` | Lower-left corner |
+| `bottom-center` | Bottom edge, horizontally centered |
+| `bottom-right` | Lower-right corner |
+
+Grid names are **case-insensitive** and accept `-`, `_`, or space as separators (e.g., `top-left`, `top_left`, `Top Left` are all equivalent).
+
+#### Pixel Offsets
+
+Absolute cell distance from the top-left corner of the screen:
+
+```
+hotkey_overlay_position = 10 x 5
+```
+
+Format: `<X> x <Y>` where X is the column and Y is the row. Values are clamped to keep the popup fully visible on screen.
+
+#### Available Windows
+
+| Setting | Window | Default |
+|---------|--------|---------|
+| `hotkey_overlay_position` | Hotkey help popup (`?`) | `middle-center` |
+| `ssh_manager_position` | SSH Manager panel | `middle-center` |
+| `docker_manager_position` | Docker Manager panel | `middle-center` |
+
+#### Examples
+
+```
+# Center all popups (default behavior)
+hotkey_overlay_position = middle-center
+ssh_manager_position = middle-center
+docker_manager_position = middle-center
+
+# Place SSH manager in the top-right corner
+ssh_manager_position = top-right
+
+# Place hotkey overlay at exact coordinates
+hotkey_overlay_position = 10 x 5
+
+# Place Docker manager at bottom-center
+docker_manager_position = bottom-center
+```
+
+---
+
+---
+
 ### Logging Configuration
 
 Ratterm includes a file-based logging system for debugging and troubleshooting.

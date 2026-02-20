@@ -10,6 +10,7 @@ use crate::ui::{
     editor_widget::EditorWidget,
     file_picker::{FilePickerWidget, RemoteFilePickerWidget},
     health_dashboard::HealthDashboardWidget,
+    key_hint_bar::{KeyHint, KeyHintBar, KeyHintStyle},
     layout::FocusedPane,
     popup::{
         KeybindingNotificationWidget, ModeSwitcherWidget, PopupWidget, ShellInstallPromptWidget,
@@ -178,12 +179,28 @@ impl App {
             }
         }
 
+        // Render help/key hint bar (only when no popup is open)
+        if !self.popup.is_visible() {
+            self.render_help_bar(frame, &areas);
+        }
+
         // Render status bar
         self.render_status_bar(frame, &areas);
 
         // Render popup if visible
         if self.popup.is_visible() {
             self.render_popup(frame, area);
+        }
+
+        // Render hotkey overlay on top of everything
+        if let Some(ref overlay) = self.hotkey_overlay {
+            if overlay.is_visible() {
+                use crate::ui::hotkey_overlay::HotkeyOverlayWidget;
+                use ratatui::widgets::Widget as _;
+                let pos = self.config.window_position("hotkey_overlay");
+                let widget = HotkeyOverlayWidget::new(overlay).position(pos);
+                widget.render(area, frame.buffer_mut());
+            }
         }
 
         // On first 5 frames, log FINAL buffer state AFTER all rendering
@@ -612,6 +629,32 @@ impl App {
         frame.render_widget(status_bar, areas.status_bar);
     }
 
+    /// Renders the context-aware key hint bar.
+    fn render_help_bar(&self, frame: &mut ratatui::Frame, areas: &crate::ui::layout::LayoutAreas) {
+        let hints = match self.layout.focused() {
+            FocusedPane::Terminal => vec![
+                KeyHint::styled("Ctrl+Shift+P", "Palette", KeyHintStyle::Highlighted),
+                KeyHint::new("Ctrl+Shift+U", "SSH"),
+                KeyHint::new("Ctrl+Shift+D", "Docker"),
+                KeyHint::new("Ctrl+T", "New Tab"),
+                KeyHint::new("Ctrl+S", "Split"),
+                KeyHint::new("Alt+Tab", "Switch Pane"),
+                KeyHint::styled("Ctrl+Q", "Quit", KeyHintStyle::Danger),
+            ],
+            FocusedPane::Editor => vec![
+                KeyHint::styled("Ctrl+Shift+P", "Palette", KeyHintStyle::Highlighted),
+                KeyHint::new("Ctrl+O", "Open"),
+                KeyHint::new("Ctrl+S", "Save"),
+                KeyHint::new("Ctrl+F", "Find"),
+                KeyHint::new("Alt+Tab", "Switch Pane"),
+                KeyHint::styled("Ctrl+Q", "Quit", KeyHintStyle::Danger),
+            ],
+        };
+
+        let bar = KeyHintBar::new(hints);
+        frame.render_widget(bar, areas.help_bar);
+    }
+
     /// Renders the popup overlay.
     fn render_popup(&self, frame: &mut ratatui::Frame, area: ratatui::layout::Rect) {
         // Use special widget for mode switcher
@@ -632,11 +675,13 @@ impl App {
             frame.render_widget(widget, area);
         } else if let Some(ref manager) = self.ssh_manager {
             // Use special widget for SSH manager
-            let widget = SSHManagerWidget::new(manager);
+            let pos = self.config.window_position("ssh_manager");
+            let widget = SSHManagerWidget::new(manager).position(pos);
             frame.render_widget(widget, area);
         } else if let Some(ref manager) = self.docker_manager {
             // Use special widget for Docker manager
-            let widget = DockerManagerWidget::new(manager);
+            let pos = self.config.window_position("docker_manager");
+            let widget = DockerManagerWidget::new(manager).position(pos);
             frame.render_widget(widget, area);
         } else if self.popup.kind().is_keybinding_notification() {
             // Use special widget for Windows 11 keybinding notification

@@ -512,10 +512,8 @@ fn render_detail(dashboard: &HealthDashboard, area: Rect, buf: &mut Buffer) {
 /// Renders the footer with help text.
 fn render_footer(dashboard: &HealthDashboard, area: Rect, buf: &mut Buffer) {
     let help = match dashboard.mode() {
-        DashboardMode::Overview => {
-            "[↑/↓] Navigate  [Enter] Details  [r] Refresh  [Space] Toggle auto  [q/Esc] Close"
-        }
-        DashboardMode::Detail => "[Backspace] Back  [r] Refresh  [q/Esc] Close",
+        DashboardMode::Overview => "[↑/↓] Navigate  [Enter] Details  [?] All shortcuts",
+        DashboardMode::Detail => "[Backspace] Back  [r] Refresh  [?] All shortcuts",
     };
 
     let footer = Line::from(Span::styled(help, Style::default().fg(Color::DarkGray)));

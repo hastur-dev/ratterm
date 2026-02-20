@@ -44,6 +44,18 @@ impl App {
         self.hide_popup();
     }
 
+    /// Toggles the hotkey overlay for the SSH manager.
+    pub fn toggle_hotkey_overlay_ssh(&mut self) {
+        use crate::app::dashboard_hotkeys::ssh_manager_list_hotkeys;
+        use crate::ui::hotkey_overlay::HotkeyOverlay;
+
+        if self.hotkey_overlay.as_ref().is_some_and(|o| o.is_visible()) {
+            self.hotkey_overlay = None;
+        } else {
+            self.hotkey_overlay = Some(HotkeyOverlay::new(ssh_manager_list_hotkeys()));
+        }
+    }
+
     /// Loads SSH hosts from storage.
     pub(crate) fn load_ssh_hosts(&mut self) {
         info!(

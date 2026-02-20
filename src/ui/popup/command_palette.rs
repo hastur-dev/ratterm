@@ -51,6 +51,25 @@ impl Command {
             format!("{}: {}", self.category, self.label)
         }
     }
+
+    /// Returns the color associated with this command's category.
+    #[must_use]
+    pub fn category_color(&self) -> ratatui::style::Color {
+        use ratatui::style::Color;
+        match self.category {
+            "File" => Color::Blue,
+            "Edit" => Color::Green,
+            "Search" => Color::Yellow,
+            "View" => Color::Cyan,
+            "Terminal" => Color::Green,
+            "SSH" => Color::Cyan,
+            "Docker" => Color::Magenta,
+            "Theme" => Color::LightYellow,
+            "Extension" => Color::LightBlue,
+            "Application" => Color::Gray,
+            _ => Color::DarkGray,
+        }
+    }
 }
 
 /// Command palette state and filtering.

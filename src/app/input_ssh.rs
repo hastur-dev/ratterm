@@ -2,7 +2,7 @@
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use crate::app::input_traits::handle_full_list_navigation;
+use crate::app::dashboard_nav::{NavResult, apply_dashboard_navigation};
 use crate::ui::ssh_manager::SSHManagerMode;
 
 use super::App;
@@ -10,6 +10,31 @@ use super::App;
 impl App {
     /// Handles SSH manager key events.
     pub(super) fn handle_ssh_manager_key(&mut self, key: KeyEvent) {
+        // Handle hotkey overlay if visible
+        if self.hotkey_overlay.as_ref().is_some_and(|o| o.is_visible()) {
+            match (key.modifiers, key.code) {
+                (KeyModifiers::NONE, KeyCode::Char('?')) | (KeyModifiers::NONE, KeyCode::Esc) => {
+                    self.hotkey_overlay = None;
+                    return;
+                }
+                (KeyModifiers::NONE, KeyCode::Up) | (KeyModifiers::NONE, KeyCode::Char('k')) => {
+                    if let Some(ref mut overlay) = self.hotkey_overlay {
+                        overlay.scroll_up();
+                    }
+                    return;
+                }
+                (KeyModifiers::NONE, KeyCode::Down) | (KeyModifiers::NONE, KeyCode::Char('j')) => {
+                    if let Some(ref mut overlay) = self.hotkey_overlay {
+                        overlay.scroll_down();
+                    }
+                    return;
+                }
+                _ => {
+                    self.hotkey_overlay = None;
+                }
+            }
+        }
+
         let Some(ref mut manager) = self.ssh_manager else {
             return;
         };
@@ -31,16 +56,28 @@ impl App {
 
     /// Handles SSH manager list mode keys.
     fn handle_ssh_list_key(&mut self, key: KeyEvent) {
-        // Handle list navigation using shared helper
+        // Unified dashboard navigation layer
         if let Some(ref mut manager) = self.ssh_manager {
-            if handle_full_list_navigation(manager, &key) {
-                return;
+            match apply_dashboard_navigation(manager, &key) {
+                NavResult::Handled => return,
+                NavResult::ShowHelp => {
+                    self.toggle_hotkey_overlay_ssh();
+                    return;
+                }
+                NavResult::Close => {
+                    self.hide_ssh_manager();
+                    return;
+                }
+                NavResult::Activate => {
+                    self.ssh_connect_selected();
+                    return;
+                }
+                NavResult::Unhandled => {}
             }
         }
 
+        // SSH-specific keys layered on top
         match (key.modifiers, key.code) {
-            (KeyModifiers::NONE, KeyCode::Esc) => self.hide_ssh_manager(),
-            (KeyModifiers::NONE, KeyCode::Enter) => self.ssh_connect_selected(),
             (KeyModifiers::NONE, KeyCode::Char('s')) => self.start_ssh_scan(),
             (KeyModifiers::SHIFT, KeyCode::Char('S')) => self.show_ssh_subnet_prompt(),
             (KeyModifiers::NONE, KeyCode::Char('a'))
