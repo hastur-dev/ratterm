@@ -1,3 +1,4 @@
+#![cfg(windows)]
 //! E2E ConPTY tests for the SSH Health Dashboard.
 //!
 //! Verifies that the health dashboard remains responsive (navigation, close)

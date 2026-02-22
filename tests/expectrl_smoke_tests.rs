@@ -1,3 +1,4 @@
+#![cfg(windows)]
 //! Baseline expectrl smoke tests for the ratterm binary.
 //!
 //! These tests validate the test harness works and establish baseline behavior.

@@ -1,3 +1,4 @@
+#![cfg(windows)]
 //! E2E tests verifying all help bar hotkey hints appear on screen.
 //!
 //! Terminal focused hints: Palette, SSH, Docker, New Tab, Split, Switch Pane, Quit

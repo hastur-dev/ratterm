@@ -1,3 +1,4 @@
+#![cfg(windows)]
 //! E2E tests verifying visual consistency across popups.
 //!
 //! Run with: `cargo build --release && cargo test --test expectrl_visual_polish_tests -- --ignored`

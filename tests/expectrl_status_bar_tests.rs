@@ -1,3 +1,4 @@
+#![cfg(windows)]
 //! E2E tests verifying the status bar renders correctly.
 //!
 //! Run with: `cargo build --release && cargo test --test expectrl_status_bar_tests -- --ignored`
