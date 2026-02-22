@@ -221,10 +221,15 @@ impl HealthDashboard {
         }
     }
 
-    /// Polls the collector and updates metrics.
+    /// Polls the collector for new results and updates host metrics.
+    ///
+    /// Uses `try_recv()` internally — never blocks the main thread.
     pub fn poll(&mut self) {
-        let all_metrics = self.collector.get_all_metrics();
+        // Drain completed results from background threads (non-blocking).
+        self.collector.poll_results();
 
+        // Update dashboard hosts with the latest cached metrics.
+        let all_metrics = self.collector.get_all_metrics();
         for host in &mut self.hosts {
             if let Some(metrics) = all_metrics.get(&host.host_id) {
                 host.metrics = metrics.clone();
