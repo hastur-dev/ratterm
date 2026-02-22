@@ -87,7 +87,7 @@ impl HostCollectionInfo {
 /// Uses an `mpsc` channel so background threads never contend with the
 /// main thread.  Background threads `send()` completed metrics through
 /// the channel; the main thread drains them with `try_recv()` inside
-/// [`poll_results`].  This guarantees the main event loop is never
+/// [`Self::poll_results`].  This guarantees the main event loop is never
 /// blocked by SSH timeout / lock contention.
 pub struct MetricsCollector {
     /// Local (main-thread-only) cache of metrics by host ID.
