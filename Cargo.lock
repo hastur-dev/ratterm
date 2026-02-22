@@ -2012,6 +2012,7 @@ dependencies = [
  "atty",
  "axum",
  "chrono",
+ "conpty",
  "crossterm 0.29.0",
  "dirs",
  "expectrl",

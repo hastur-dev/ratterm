@@ -160,46 +160,41 @@ impl DaemonManager {
 
         self.receiver_thread = Some(handle);
 
-        // Wait for the receiver to start (with timeout)
-        let start = std::time::Instant::now();
-        let timeout = std::time::Duration::from_secs(5);
-
-        while !self.active.load(Ordering::Relaxed) && start.elapsed() < timeout {
-            std::thread::sleep(std::time::Duration::from_millis(50));
-        }
-
-        if self.active.load(Ordering::Relaxed) {
-            info!("Daemon manager started successfully");
-            Ok(())
-        } else {
-            Err(DaemonError::ServerError(
-                "Receiver failed to start within timeout".to_string(),
-            ))
-        }
+        // Return immediately — the background thread sets `active` when
+        // the receiver is ready.  The dashboard falls back to SSH-based
+        // collection until the daemon reports active, so blocking here
+        // only freezes the UI for no benefit.
+        info!("Daemon manager thread spawned (receiver starting in background)");
+        Ok(())
     }
 
     /// Stops the metrics receiver and cleans up.
+    ///
+    /// Uses `try_lock()` to avoid blocking the main thread if a
+    /// background thread currently holds the mutex.  The shutdown
+    /// flag ensures the background thread will exit on its own.
     pub fn stop(&mut self) {
         info!("Stopping daemon manager");
 
-        // Signal shutdown
+        // Signal shutdown first — the background thread checks this
+        // every 100ms and will exit on its own.
         self.shutdown.store(true, Ordering::Relaxed);
         self.active.store(false, Ordering::Relaxed);
 
-        // Stop the receiver
-        if let Ok(mut guard) = self.receiver.lock() {
+        // Stop the receiver (non-blocking: skip if lock is contended).
+        if let Ok(mut guard) = self.receiver.try_lock() {
             if let Some(mut recv) = guard.take() {
                 recv.stop();
             }
         }
 
-        // Wait for the background thread
-        if let Some(handle) = self.receiver_thread.take() {
-            let _ = handle.join();
-        }
+        // Drop the thread handle without joining — the thread will exit
+        // on its own within 100ms when it sees the shutdown flag.
+        // Joining would block the main event loop and freeze the UI.
+        drop(self.receiver_thread.take());
 
-        // Clear active hosts
-        if let Ok(mut guard) = self.active_hosts.lock() {
+        // Clear active hosts (non-blocking: skip if lock is contended).
+        if let Ok(mut guard) = self.active_hosts.try_lock() {
             guard.clear();
         }
 
@@ -371,19 +366,79 @@ mod tests {
         assert!(!manager.is_active());
     }
 
+    /// Polls `is_active()` until it becomes true or timeout is reached.
+    fn wait_for_active(manager: &DaemonManager, timeout_ms: u64) -> bool {
+        let start = std::time::Instant::now();
+        let deadline = std::time::Duration::from_millis(timeout_ms);
+        while start.elapsed() < deadline {
+            if manager.is_active() {
+                return true;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        false
+    }
+
     #[test]
     fn test_daemon_manager_start_stop() {
         let mut manager = DaemonManager::new();
 
-        // Start might fail if port is in use
         match manager.start() {
             Ok(()) => {
+                // start() is non-blocking; poll until active or skip
+                if !wait_for_active(&manager, 2000) {
+                    println!("Skipping: receiver did not become active (port in use?)");
+                    manager.stop();
+                    return;
+                }
                 assert!(manager.is_active());
                 manager.stop();
                 assert!(!manager.is_active());
             }
             Err(e) => {
-                // Port likely in use, skip test
+                println!("Skipping test, start failed: {}", e);
+            }
+        }
+    }
+
+    #[test]
+    fn test_daemon_manager_start_is_nonblocking() {
+        let mut manager = DaemonManager::new();
+        let start = std::time::Instant::now();
+
+        // start() should return immediately (no 5-second busy-wait)
+        let _ = manager.start();
+        let elapsed = start.elapsed();
+
+        assert!(
+            elapsed.as_millis() < 500,
+            "start() took {}ms, should be < 500ms (was blocking)",
+            elapsed.as_millis()
+        );
+
+        manager.stop();
+    }
+
+    #[test]
+    fn test_daemon_manager_stop_is_nonblocking() {
+        let mut manager = DaemonManager::new();
+
+        match manager.start() {
+            Ok(()) => {
+                // Give receiver time to start
+                let _ = wait_for_active(&manager, 1000);
+
+                let start = std::time::Instant::now();
+                manager.stop();
+                let elapsed = start.elapsed();
+
+                assert!(
+                    elapsed.as_millis() < 500,
+                    "stop() took {}ms, should be < 500ms (was blocking on join)",
+                    elapsed.as_millis()
+                );
+            }
+            Err(e) => {
                 println!("Skipping test, port in use: {}", e);
             }
         }
@@ -430,6 +485,12 @@ mod tests {
         // Start the manager (may fail if port in use)
         match manager.start() {
             Ok(()) => {
+                // start() is non-blocking; poll until active or skip
+                if !wait_for_active(&manager, 2000) {
+                    println!("Skipping: receiver did not become active (port in use?)");
+                    manager.stop();
+                    return;
+                }
                 assert!(manager.is_active());
 
                 // Send a test metric via HTTP POST

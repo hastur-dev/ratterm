@@ -1,3 +1,4 @@
+#![cfg(windows)]
 //! E2E tests verifying all Docker Manager hotkey hints are visible.
 //!
 //! Primary hints: Enter/Attach, s/Start, S/Stop, r/Restart, n/New Container, R/Refresh

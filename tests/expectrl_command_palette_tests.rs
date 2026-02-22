@@ -1,3 +1,4 @@
+#![cfg(windows)]
 //! E2E tests verifying all Command Palette UI hints are visible.
 //!
 //! Bottom hint line: ↑↓ Navigate │ Enter Select │ Esc Close

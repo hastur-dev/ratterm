@@ -145,7 +145,7 @@ impl App {
                 self.show_file_browser();
                 true
             }
-            // Test-keys mode: F1=Palette, F2=SSH, F3=Docker
+            // Test-keys mode: F1=Palette, F2=SSH, F3=Docker, F4=Health Dashboard
             (KeyModifiers::NONE, KeyCode::F(1)) if self.test_keys => {
                 self.show_popup(PopupKind::CommandPalette);
                 true
@@ -156,6 +156,10 @@ impl App {
             }
             (KeyModifiers::NONE, KeyCode::F(3)) if self.test_keys => {
                 self.show_docker_manager();
+                true
+            }
+            (KeyModifiers::NONE, KeyCode::F(4)) if self.test_keys => {
+                self.open_health_dashboard();
                 true
             }
             // Command palette: F1 on Windows 11, Ctrl+Shift+P on other platforms

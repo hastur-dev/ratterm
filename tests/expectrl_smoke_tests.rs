@@ -1,3 +1,4 @@
+#![cfg(windows)]
 //! Baseline expectrl smoke tests for the ratterm binary.
 //!
 //! These tests validate the test harness works and establish baseline behavior.
@@ -14,7 +15,7 @@ use helpers::tui_harness::TuiTestSession;
 #[test]
 #[ignore] // Requires `cargo build --release` first
 fn test_binary_version_flag() {
-    let mut session = TuiTestSession::spawn_with_args(&["--version"])
+    let session = TuiTestSession::spawn_with_args(&["--version"])
         .expect("Failed to spawn binary with --version");
 
     let result = session.expect_text("ratterm v", Duration::from_secs(5));
@@ -24,7 +25,7 @@ fn test_binary_version_flag() {
 #[test]
 #[ignore] // Requires `cargo build --release` first
 fn test_binary_verify_flag() {
-    let mut session = TuiTestSession::spawn_with_args(&["--verify"])
+    let session = TuiTestSession::spawn_with_args(&["--verify"])
         .expect("Failed to spawn binary with --verify");
 
     let result = session.expect_text("verify-ok", Duration::from_secs(5));

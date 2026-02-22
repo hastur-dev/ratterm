@@ -1,3 +1,4 @@
+#![cfg(windows)]
 //! E2E tests verifying all SSH Manager hotkey hints are visible.
 //!
 //! Primary hints: Enter/Connect, a/Add Host, e/Edit, d/Delete, s/Scan Network

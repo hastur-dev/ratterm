@@ -82,6 +82,9 @@ pretty_assertions = "1.4"
 expectrl = "0.7"
 strip-ansi-escapes = "0.2"
 
+[target.'cfg(windows)'.dev-dependencies]
+conpty = "0.5"
+
 [profile.release]
 lto = true
 codegen-units = 1
