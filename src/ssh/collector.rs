@@ -7,7 +7,8 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::mpsc;
+use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
@@ -28,7 +29,13 @@ use tracing::{debug, error, info, warn};
 use super::host::{SSHCredentials, SSHHost, SSHHostList};
 use super::metrics::{
     DeviceMetrics, GpuMetrics, GpuType, MAX_CONCURRENT_CONNECTIONS, MetricStatus,
+    SSH_COMMAND_TIMEOUT_SECS,
 };
+
+/// Total process timeout for SSH commands in seconds.
+/// Must exceed the SSH `ConnectTimeout` (5s) to let the SSH client
+/// report its own timeout errors before we force-kill the process.
+const SSH_PROCESS_TIMEOUT_SECS: u64 = SSH_COMMAND_TIMEOUT_SECS + 5;
 
 /// Combined command to collect all metrics in one SSH exec.
 const METRICS_COMMAND: &str = r#"echo "===CPU===" && cat /proc/loadavg && nproc && echo "===MEM===" && cat /proc/meminfo | grep -E 'MemTotal|MemAvailable|MemFree|SwapTotal|SwapFree' && echo "===DISK===" && df -BG / | tail -1 && echo "===GPU===" && (nvidia-smi --query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu --format=csv,noheader,nounits 2>/dev/null || rocm-smi --showuse 2>/dev/null || echo "NO_GPU")"#;
@@ -76,10 +83,20 @@ impl HostCollectionInfo {
 }
 
 /// Metrics collector for SSH hosts.
+///
+/// Uses an `mpsc` channel so background threads never contend with the
+/// main thread.  Background threads `send()` completed metrics through
+/// the channel; the main thread drains them with `try_recv()` inside
+/// [`poll_results`].  This guarantees the main event loop is never
+/// blocked by SSH timeout / lock contention.
 pub struct MetricsCollector {
-    /// Cached metrics by host ID.
-    metrics: Arc<Mutex<HashMap<u32, DeviceMetrics>>>,
-    /// Flag to stop collection.
+    /// Local (main-thread-only) cache of metrics by host ID.
+    metrics: HashMap<u32, DeviceMetrics>,
+    /// Receiver end of the results channel (main thread only).
+    results_rx: mpsc::Receiver<(u32, DeviceMetrics)>,
+    /// Sender end cloned into each background thread.
+    results_tx: mpsc::Sender<(u32, DeviceMetrics)>,
+    /// Flag to cancel running collection threads.
     running: Arc<AtomicBool>,
     /// Collection thread handles.
     handles: Vec<JoinHandle<()>>,
@@ -91,8 +108,11 @@ impl MetricsCollector {
     /// Creates a new metrics collector.
     #[must_use]
     pub fn new() -> Self {
+        let (tx, rx) = mpsc::channel();
         Self {
-            metrics: Arc::new(Mutex::new(HashMap::new())),
+            metrics: HashMap::new(),
+            results_rx: rx,
+            results_tx: tx,
             running: Arc::new(AtomicBool::new(false)),
             handles: Vec::new(),
             last_collection: Instant::now(),
@@ -105,20 +125,33 @@ impl MetricsCollector {
         self.running.load(Ordering::Relaxed)
     }
 
-    /// Gets cached metrics for a host.
-    #[must_use]
-    pub fn get_metrics(&self, host_id: u32) -> Option<DeviceMetrics> {
-        let guard = self.metrics.lock().ok()?;
-        guard.get(&host_id).cloned()
+    /// Drains completed results from background threads (non-blocking).
+    ///
+    /// Call this from the main event loop every tick.  It uses
+    /// `try_recv()` so it never blocks — if no results are ready it
+    /// returns immediately.
+    pub fn poll_results(&mut self) {
+        // Drain up to 50 results per tick to stay bounded.
+        for _ in 0..50 {
+            match self.results_rx.try_recv() {
+                Ok((host_id, metrics)) => {
+                    self.metrics.insert(host_id, metrics);
+                }
+                Err(mpsc::TryRecvError::Empty | mpsc::TryRecvError::Disconnected) => break,
+            }
+        }
     }
 
-    /// Gets all cached metrics.
+    /// Gets cached metrics for a host (main thread only, no lock).
     #[must_use]
-    pub fn get_all_metrics(&self) -> HashMap<u32, DeviceMetrics> {
-        self.metrics
-            .lock()
-            .map(|guard| guard.clone())
-            .unwrap_or_default()
+    pub fn get_metrics(&self, host_id: u32) -> Option<DeviceMetrics> {
+        self.metrics.get(&host_id).cloned()
+    }
+
+    /// Gets all cached metrics (main thread only, no lock).
+    #[must_use]
+    pub fn get_all_metrics(&self) -> &HashMap<u32, DeviceMetrics> {
+        &self.metrics
     }
 
     /// Starts a collection cycle for the given hosts.
@@ -148,15 +181,12 @@ impl MetricsCollector {
             debug!("Cleaned up {} finished threads", before - after);
         }
 
-        // Only set "Collecting" status for hosts that don't have data yet
-        // Preserve existing metrics while collecting new ones
-        if let Ok(mut guard) = self.metrics.lock() {
-            for host in hosts {
-                guard
-                    .entry(host.host_id)
-                    .or_insert_with(|| DeviceMetrics::collecting(host.host_id));
-                // Don't reset status to Collecting if we already have valid data
-            }
+        // Set "Collecting" status for hosts that don't have data yet.
+        // This is now a local HashMap — no lock contention.
+        for host in hosts {
+            self.metrics
+                .entry(host.host_id)
+                .or_insert_with(|| DeviceMetrics::collecting(host.host_id));
         }
 
         self.last_collection = Instant::now();
@@ -167,7 +197,7 @@ impl MetricsCollector {
         for chunk in hosts.chunks(chunk_size) {
             for host in chunk {
                 let host_info = host.clone();
-                let metrics = Arc::clone(&self.metrics);
+                let tx = self.results_tx.clone();
                 let running = Arc::clone(&self.running);
 
                 let handle = thread::spawn(move || {
@@ -186,9 +216,8 @@ impl MetricsCollector {
                         host_info.hostname, result.status
                     );
 
-                    if let Ok(mut guard) = metrics.lock() {
-                        guard.insert(host_info.host_id, result);
-                    }
+                    // Send through channel — never blocks the main thread.
+                    let _ = tx.send((host_info.host_id, result));
                 });
 
                 self.handles.push(handle);
@@ -478,6 +507,46 @@ fn collect_with_sshpass(host: &HostCollectionInfo, password: &str) -> DeviceMetr
     execute_ssh_command(cmd, host.host_id)
 }
 
+/// Spawns a command and waits for completion with a process-level timeout.
+///
+/// If the process doesn't exit within `timeout_secs`, it is killed and
+/// an error is returned. This prevents SSH processes from hanging
+/// indefinitely when a host is partially reachable (accepts TCP but
+/// stalls during authentication or command execution).
+fn spawn_with_timeout(
+    cmd: &mut Command,
+    timeout_secs: u64,
+) -> Result<std::process::Output, String> {
+    assert!(timeout_secs > 0, "timeout must be positive");
+
+    let mut child = cmd
+        .spawn()
+        .map_err(|e| format!("Failed to execute SSH: {e}"))?;
+
+    let deadline = Instant::now() + Duration::from_secs(timeout_secs);
+
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => {
+                return child
+                    .wait_with_output()
+                    .map_err(|e| format!("Failed to read SSH output: {e}"));
+            }
+            Ok(None) if Instant::now() >= deadline => {
+                let _ = child.kill();
+                let _ = child.wait(); // Reap the process
+                return Err("SSH command timed out".to_string());
+            }
+            Ok(None) => {
+                std::thread::sleep(Duration::from_millis(100));
+            }
+            Err(e) => {
+                return Err(format!("Error waiting for SSH process: {e}"));
+            }
+        }
+    }
+}
+
 /// Executes an SSH command and parses the output into metrics.
 fn execute_ssh_command(mut cmd: Command, host_id: u32) -> DeviceMetrics {
     // Configure for non-interactive execution
@@ -494,11 +563,8 @@ fn execute_ssh_command(mut cmd: Command, host_id: u32) -> DeviceMetrics {
 
     debug!("Executing SSH command for host_id={}", host_id);
 
-    // Execute with timeout
-    let output = match cmd
-        .output()
-        .map_err(|e| format!("Failed to execute SSH: {}", e))
-    {
+    // Execute with process-level timeout to prevent indefinite hangs
+    let output = match spawn_with_timeout(&mut cmd, SSH_PROCESS_TIMEOUT_SECS) {
         Ok(output) => output,
         Err(e) => {
             error!("SSH execution failed for host_id={}: {}", host_id, e);
@@ -960,5 +1026,134 @@ mod tests {
         let collector = MetricsCollector::new();
         assert!(!collector.is_running());
         assert!(collector.get_all_metrics().is_empty());
+    }
+
+    #[test]
+    fn test_collector_poll_results_is_nonblocking() {
+        let mut collector = MetricsCollector::new();
+        assert!(collector.get_all_metrics().is_empty());
+
+        // poll_results on an empty channel should return instantly.
+        let start = std::time::Instant::now();
+        collector.poll_results();
+        let elapsed = start.elapsed();
+
+        assert!(
+            elapsed.as_millis() < 50,
+            "poll_results() should be non-blocking (took {}ms)",
+            elapsed.as_millis()
+        );
+        assert!(collector.get_all_metrics().is_empty());
+    }
+
+    #[test]
+    fn test_collector_receives_results_via_channel() {
+        let mut collector = MetricsCollector::new();
+
+        // Manually send a result through the internal channel.
+        let tx = collector.results_tx.clone();
+        let metrics = DeviceMetrics::new(42);
+        tx.send((42, metrics)).unwrap();
+
+        // Before polling, cache should be empty.
+        assert!(collector.get_all_metrics().is_empty());
+
+        // After polling, the result should appear.
+        collector.poll_results();
+        assert_eq!(collector.get_all_metrics().len(), 1);
+        assert!(collector.get_metrics(42).is_some());
+    }
+
+    // ========================================================================
+    // spawn_with_timeout tests
+    // ========================================================================
+
+    #[test]
+    fn test_spawn_with_timeout_completes_fast_command() {
+        let mut cmd = if cfg!(target_os = "windows") {
+            let mut c = Command::new("cmd");
+            c.args(["/c", "echo", "hello"]);
+            c
+        } else {
+            let mut c = Command::new("echo");
+            c.arg("hello");
+            c
+        };
+        cmd.stdout(Stdio::piped());
+        cmd.stderr(Stdio::piped());
+
+        let result = spawn_with_timeout(&mut cmd, 5);
+        assert!(result.is_ok(), "Fast command should succeed: {:?}", result);
+
+        let output = result.unwrap();
+        assert!(output.status.success());
+        assert!(!output.stdout.is_empty(), "Should capture stdout");
+    }
+
+    #[test]
+    fn test_spawn_with_timeout_kills_slow_process() {
+        // Spawn a process that runs much longer than the timeout
+        let mut cmd = if cfg!(target_os = "windows") {
+            let mut c = Command::new("ping");
+            c.args(["-n", "30", "127.0.0.1"]);
+            c
+        } else {
+            let mut c = Command::new("sleep");
+            c.arg("30");
+            c
+        };
+        cmd.stdout(Stdio::piped());
+        cmd.stderr(Stdio::piped());
+
+        let start = Instant::now();
+        let result = spawn_with_timeout(&mut cmd, 1);
+        let elapsed = start.elapsed();
+
+        assert!(result.is_err(), "Should timeout");
+        assert!(
+            result.unwrap_err().contains("timed out"),
+            "Error should mention timeout"
+        );
+        // Should finish in about 1-2 seconds, not 30
+        assert!(
+            elapsed.as_secs() < 5,
+            "Should be killed quickly, took {}s",
+            elapsed.as_secs()
+        );
+    }
+
+    #[test]
+    fn test_spawn_with_timeout_returns_error_on_bad_command() {
+        let mut cmd = Command::new("this_command_does_not_exist_99999");
+        cmd.stdout(Stdio::piped());
+        cmd.stderr(Stdio::piped());
+
+        let result = spawn_with_timeout(&mut cmd, 5);
+        assert!(result.is_err(), "Bad command should return error");
+        assert!(
+            result.unwrap_err().contains("Failed to execute"),
+            "Should report spawn failure"
+        );
+    }
+
+    #[test]
+    fn test_spawn_with_timeout_captures_nonzero_exit() {
+        // Command that exits with non-zero status
+        let mut cmd = if cfg!(target_os = "windows") {
+            let mut c = Command::new("cmd");
+            c.args(["/c", "exit", "1"]);
+            c
+        } else {
+            Command::new("false")
+        };
+        cmd.stdout(Stdio::piped());
+        cmd.stderr(Stdio::piped());
+
+        let result = spawn_with_timeout(&mut cmd, 5);
+        assert!(result.is_ok(), "Should return output even on non-zero exit");
+        assert!(
+            !result.unwrap().status.success(),
+            "Exit status should be non-zero"
+        );
     }
 }

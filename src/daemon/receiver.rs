@@ -100,25 +100,27 @@ impl MetricsReceiver {
         })
     }
 
-    /// Gets metrics for a specific host by ID.
+    /// Gets metrics for a specific host by ID (non-blocking).
+    ///
+    /// Returns `None` if the lock is contended or no metrics exist.
     #[must_use]
     pub fn get_metrics(&self, host_id: u32) -> Option<DeviceMetrics> {
-        let guard = self.metrics.lock().ok()?;
+        let guard = self.metrics.try_lock().ok()?;
         let host_id_str = host_id.to_string();
         guard.get(&host_id_str).map(|m| m.to_device_metrics())
     }
 
-    /// Gets raw daemon metrics for a specific host.
+    /// Gets raw daemon metrics for a specific host (non-blocking).
     #[must_use]
     pub fn get_raw_metrics(&self, host_id: &str) -> Option<DaemonMetrics> {
-        let guard = self.metrics.lock().ok()?;
+        let guard = self.metrics.try_lock().ok()?;
         guard.get(host_id).cloned()
     }
 
-    /// Gets all cached metrics.
+    /// Gets all cached metrics (non-blocking).
     #[must_use]
     pub fn get_all_metrics(&self) -> HashMap<u32, DeviceMetrics> {
-        let guard = match self.metrics.lock() {
+        let guard = match self.metrics.try_lock() {
             Ok(g) => g,
             Err(_) => return HashMap::new(),
         };
@@ -132,10 +134,10 @@ impl MetricsReceiver {
             .collect()
     }
 
-    /// Returns the number of cached metrics entries.
+    /// Returns the number of cached metrics entries (non-blocking).
     #[must_use]
     pub fn cached_count(&self) -> usize {
-        self.metrics.lock().map(|g| g.len()).unwrap_or(0)
+        self.metrics.try_lock().map(|g| g.len()).unwrap_or(0)
     }
 
     /// Returns the port the receiver is running on.
