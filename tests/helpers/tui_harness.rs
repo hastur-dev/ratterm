@@ -101,23 +101,24 @@ impl TuiTestSession {
         // Background reader thread — CRITICAL for ConPTY.
         // Without continuous draining, the pipe buffer fills and
         // the child process deadlocks on its next write.
-        let reader_thread = thread::Builder::new()
-            .name("conpty-reader".into())
-            .spawn(move || {
-                let mut reader = reader;
-                let mut buf = [0u8; 8192];
-                loop {
-                    match reader.read(&mut buf) {
-                        Ok(0) => break,
-                        Ok(n) => {
-                            if let Ok(mut guard) = output_clone.lock() {
-                                guard.extend_from_slice(&buf[..n]);
+        let reader_thread =
+            thread::Builder::new()
+                .name("conpty-reader".into())
+                .spawn(move || {
+                    let mut reader = reader;
+                    let mut buf = [0u8; 8192];
+                    loop {
+                        match reader.read(&mut buf) {
+                            Ok(0) => break,
+                            Ok(n) => {
+                                if let Ok(mut guard) = output_clone.lock() {
+                                    guard.extend_from_slice(&buf[..n]);
+                                }
                             }
+                            Err(_) => break,
                         }
-                        Err(_) => break,
                     }
-                }
-            })?;
+                })?;
 
         Ok(Self {
             process: proc,

@@ -47,8 +47,7 @@ const MAX_OPEN_CLOSE_SECS: u64 = 5;
 #[test]
 #[ignore] // Requires `cargo build --release` first
 fn test_health_dashboard_opens_without_blocking() {
-    let mut session =
-        TuiTestSession::spawn_with_args(&["--test-keys"]).expect("Failed to spawn");
+    let mut session = TuiTestSession::spawn_with_args(&["--test-keys"]).expect("Failed to spawn");
     session.wait_startup();
 
     let start = Instant::now();
@@ -84,8 +83,7 @@ fn test_health_dashboard_opens_without_blocking() {
 #[test]
 #[ignore]
 fn test_dashboard_j_key_responsive_during_collection() {
-    let mut session =
-        TuiTestSession::spawn_with_args(&["--test-keys"]).expect("Failed to spawn");
+    let mut session = TuiTestSession::spawn_with_args(&["--test-keys"]).expect("Failed to spawn");
     session.wait_startup();
 
     let start = Instant::now();
@@ -116,8 +114,7 @@ fn test_dashboard_j_key_responsive_during_collection() {
 #[test]
 #[ignore]
 fn test_dashboard_k_key_responsive_during_collection() {
-    let mut session =
-        TuiTestSession::spawn_with_args(&["--test-keys"]).expect("Failed to spawn");
+    let mut session = TuiTestSession::spawn_with_args(&["--test-keys"]).expect("Failed to spawn");
     session.wait_startup();
 
     let start = Instant::now();
@@ -145,8 +142,7 @@ fn test_dashboard_k_key_responsive_during_collection() {
 #[test]
 #[ignore]
 fn test_dashboard_arrow_keys_responsive_during_collection() {
-    let mut session =
-        TuiTestSession::spawn_with_args(&["--test-keys"]).expect("Failed to spawn");
+    let mut session = TuiTestSession::spawn_with_args(&["--test-keys"]).expect("Failed to spawn");
     session.wait_startup();
 
     let start = Instant::now();
@@ -177,8 +173,7 @@ fn test_dashboard_arrow_keys_responsive_during_collection() {
 #[test]
 #[ignore]
 fn test_dashboard_rapid_navigation_during_collection() {
-    let mut session =
-        TuiTestSession::spawn_with_args(&["--test-keys"]).expect("Failed to spawn");
+    let mut session = TuiTestSession::spawn_with_args(&["--test-keys"]).expect("Failed to spawn");
     session.wait_startup();
 
     let start = Instant::now();
@@ -217,8 +212,7 @@ fn test_dashboard_rapid_navigation_during_collection() {
 #[test]
 #[ignore]
 fn test_dashboard_escape_closes_during_collection() {
-    let mut session =
-        TuiTestSession::spawn_with_args(&["--test-keys"]).expect("Failed to spawn");
+    let mut session = TuiTestSession::spawn_with_args(&["--test-keys"]).expect("Failed to spawn");
     session.wait_startup();
 
     let _ = session.send_f4();
@@ -242,8 +236,7 @@ fn test_dashboard_escape_closes_during_collection() {
 #[test]
 #[ignore]
 fn test_dashboard_q_closes_during_collection() {
-    let mut session =
-        TuiTestSession::spawn_with_args(&["--test-keys"]).expect("Failed to spawn");
+    let mut session = TuiTestSession::spawn_with_args(&["--test-keys"]).expect("Failed to spawn");
     session.wait_startup();
 
     let _ = session.send_f4();
@@ -271,8 +264,7 @@ fn test_dashboard_q_closes_during_collection() {
 #[test]
 #[ignore]
 fn test_dashboard_reopen_after_close_not_blocked() {
-    let mut session =
-        TuiTestSession::spawn_with_args(&["--test-keys"]).expect("Failed to spawn");
+    let mut session = TuiTestSession::spawn_with_args(&["--test-keys"]).expect("Failed to spawn");
     session.wait_startup();
 
     let start = Instant::now();
@@ -311,8 +303,7 @@ fn test_dashboard_reopen_after_close_not_blocked() {
 #[test]
 #[ignore]
 fn test_dashboard_navigate_then_close_during_collection() {
-    let mut session =
-        TuiTestSession::spawn_with_args(&["--test-keys"]).expect("Failed to spawn");
+    let mut session = TuiTestSession::spawn_with_args(&["--test-keys"]).expect("Failed to spawn");
     session.wait_startup();
 
     let start = Instant::now();
@@ -350,8 +341,7 @@ fn test_dashboard_navigate_then_close_during_collection() {
 #[test]
 #[ignore]
 fn test_dashboard_help_overlay_during_collection() {
-    let mut session =
-        TuiTestSession::spawn_with_args(&["--test-keys"]).expect("Failed to spawn");
+    let mut session = TuiTestSession::spawn_with_args(&["--test-keys"]).expect("Failed to spawn");
     session.wait_startup();
 
     let start = Instant::now();
@@ -389,8 +379,7 @@ fn test_dashboard_help_overlay_during_collection() {
 #[test]
 #[ignore]
 fn test_dashboard_refresh_responsive_during_collection() {
-    let mut session =
-        TuiTestSession::spawn_with_args(&["--test-keys"]).expect("Failed to spawn");
+    let mut session = TuiTestSession::spawn_with_args(&["--test-keys"]).expect("Failed to spawn");
     session.wait_startup();
 
     let start = Instant::now();
@@ -423,8 +412,7 @@ fn test_dashboard_refresh_responsive_during_collection() {
 #[test]
 #[ignore]
 fn test_dashboard_process_exits_cleanly() {
-    let mut session =
-        TuiTestSession::spawn_with_args(&["--test-keys"]).expect("Failed to spawn");
+    let mut session = TuiTestSession::spawn_with_args(&["--test-keys"]).expect("Failed to spawn");
     session.wait_startup();
 
     // Full dashboard interaction cycle
