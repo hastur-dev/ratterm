@@ -485,6 +485,12 @@ mod manager_tests {
         // Start might fail if port is in use
         match manager.start() {
             Ok(()) => {
+                // start() spawns a background thread that sets active
+                // asynchronously — poll with a timeout.
+                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+                while !manager.is_active() && std::time::Instant::now() < deadline {
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                }
                 assert!(manager.is_active(), "Manager should be active after start");
 
                 // Can start again without error (idempotent)
