@@ -240,6 +240,37 @@ impl TuiTestSession {
         self.send_escape_seq("\x1b[A")
     }
 
+    /// Sends Space key.
+    pub fn send_space(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        self.send_key(' ')
+    }
+
+    /// Sends Page Up key.
+    pub fn send_page_up(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        self.send_escape_seq("\x1b[5~")
+    }
+
+    /// Sends Page Down key.
+    pub fn send_page_down(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        self.send_escape_seq("\x1b[6~")
+    }
+
+    /// Sends Home key.
+    pub fn send_home(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        self.send_escape_seq("\x1b[H")
+    }
+
+    /// Sends End key.
+    pub fn send_end(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        self.send_escape_seq("\x1b[F")
+    }
+
+    /// Sends a string as a sequence of key presses.
+    pub fn send_string(&mut self, s: &str) -> Result<(), Box<dyn std::error::Error>> {
+        self.writer.write_all(s.as_bytes())?;
+        Ok(())
+    }
+
     /// Returns whether the child process is still running.
     pub fn is_alive(&self) -> bool {
         self.process.is_alive()
