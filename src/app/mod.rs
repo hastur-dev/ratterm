@@ -6,6 +6,7 @@ mod commands;
 pub mod dashboard_hotkeys;
 pub mod dashboard_nav;
 mod docker_connect;
+mod docker_logs_ops;
 mod docker_ops;
 mod extension_ops;
 mod file_ops;
@@ -13,6 +14,7 @@ mod health_ops;
 mod input;
 mod input_docker;
 mod input_docker_create;
+mod input_docker_logs;
 mod input_editor;
 mod input_health;
 mod input_mouse;
@@ -208,6 +210,10 @@ pub struct App {
     pub(crate) test_keys: bool,
     /// Hotkey help overlay (shown with `?` in dashboards).
     pub(crate) hotkey_overlay: Option<crate::ui::hotkey_overlay::HotkeyOverlay>,
+    /// Active Docker log stream handle.
+    pub(crate) docker_log_stream: Option<crate::docker_logs::log_stream::LogStream>,
+    /// Receiver for Docker log entries from the streaming task.
+    pub(crate) docker_log_rx: Option<tokio::sync::mpsc::Receiver<crate::docker_logs::types::LogEntry>>,
 }
 
 impl App {
@@ -298,6 +304,8 @@ impl App {
             daemon_manager: None,
             test_keys: false,
             hotkey_overlay: None,
+            docker_log_stream: None,
+            docker_log_rx: None,
         })
     }
 
@@ -589,6 +597,7 @@ impl App {
         self.background_manager.update_counts();
         self.poll_ssh_scanner();
         self.poll_health_dashboard();
+        self.poll_docker_log_stream();
         self.update_completion_suggestion();
 
         if !self.file_browser.is_visible() && !self.is_health_dashboard_open() {

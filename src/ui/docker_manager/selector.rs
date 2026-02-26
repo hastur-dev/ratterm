@@ -71,6 +71,9 @@ pub struct DockerManagerSelector {
     // --- Container creation state ---
     /// State for container creation workflow.
     pub(super) creation_state: ContainerCreationState,
+    // --- Docker log viewer state ---
+    /// State for Docker log viewer (when in LogView mode).
+    pub(crate) docker_logs_state: Option<crate::docker_logs::ui::state::DockerLogsState>,
 }
 
 impl DockerManagerSelector {
@@ -107,6 +110,8 @@ impl DockerManagerSelector {
             cred_field: HostCredentialField::Username,
             // Container creation
             creation_state: ContainerCreationState::new(),
+            // Docker logs
+            docker_logs_state: None,
         }
     }
 
@@ -174,6 +179,33 @@ impl DockerManagerSelector {
     #[must_use]
     pub fn total_count(&self) -> usize {
         self.running_containers.len() + self.stopped_containers.len() + self.images.len()
+    }
+
+    /// Returns all containers as log info entries for the log viewer.
+    #[must_use]
+    pub fn all_container_log_infos(
+        &self,
+    ) -> Vec<crate::docker_logs::types::ContainerLogInfo> {
+        let mut result = Vec::new();
+        for c in &self.running_containers {
+            result.push(crate::docker_logs::types::ContainerLogInfo {
+                id: c.id.clone(),
+                name: c.display().to_string(),
+                image: c.image.clone(),
+                status: "running".to_string(),
+                access: crate::docker_logs::types::AccessStatus::Unknown,
+            });
+        }
+        for c in &self.stopped_containers {
+            result.push(crate::docker_logs::types::ContainerLogInfo {
+                id: c.id.clone(),
+                name: c.display().to_string(),
+                image: c.image.clone(),
+                status: "exited".to_string(),
+                access: crate::docker_logs::types::AccessStatus::Unknown,
+            });
+        }
+        result
     }
 
     /// Returns the current mode.

@@ -559,6 +559,48 @@ Similar to SSH, you can assign containers and images to quick-connect slots:
 
 ---
 
+### Docker Logs Configuration
+
+The Docker Logs viewer can be customized with the following `.ratrc` settings:
+
+#### Buffer and Display
+
+| Setting | Description | Default |
+|---------|-------------|---------|
+| `docker_log_buffer_size` | Max log entries kept in memory (1000–1000000) | `10000` |
+| `docker_log_tail_lines` | Initial lines to fetch when connecting | `500` |
+| `docker_log_auto_scroll` | Auto-scroll to new entries | `true` |
+| `docker_log_timestamps` | Show timestamps on each log line | `true` |
+| `docker_log_color` | Color-code log lines by level | `true` |
+
+#### Storage
+
+| Setting | Description | Default |
+|---------|-------------|---------|
+| `docker_log_storage` | Enable persistent log storage | `true` |
+| `docker_log_retention` | Hours to keep stored logs (1–8760) | `168` (7 days) |
+
+Log files are stored as gzip-compressed JSONL at `~/.ratterm/docker_logs/<container_id>/<date>.jsonl.gz`.
+
+#### Saved Searches
+
+Saved search patterns are stored at `~/.ratterm/docker_logs/saved_searches.json`. Use `Ctrl+S` in search mode to save a filter, and `s` in streaming mode to browse saved searches.
+
+#### Example
+
+```
+# Docker Logs settings
+docker_log_buffer_size = 20000
+docker_log_tail_lines = 1000
+docker_log_auto_scroll = true
+docker_log_timestamps = true
+docker_log_color = true
+docker_log_storage = true
+docker_log_retention = 336
+```
+
+---
+
 ## Example Configuration
 
 ```
@@ -605,6 +647,12 @@ ssh_number_setting = true
 # Docker Manager settings
 # Docker quick-connect uses Ctrl+Alt+1-9 (not configurable yet)
 # Docker settings are stored in ~/.ratterm/docker_items.toml
+
+# Docker Logs settings
+docker_log_buffer_size = 10000
+docker_log_tail_lines = 500
+docker_log_timestamps = true
+docker_log_color = true
 ```
 
 ---

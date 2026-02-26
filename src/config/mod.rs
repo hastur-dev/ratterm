@@ -15,6 +15,7 @@ pub use keybindings::{KeyAction, KeyBinding, KeybindingMode, Keybindings};
 pub use platform::{command_palette_hotkey, is_windows_11};
 pub use shell::{ShellDetector, ShellInfo, ShellInstallInfo, ShellInstaller, ShellType};
 
+use crate::docker_logs::config::LogStreamConfig;
 use crate::logging::LogConfig;
 use crate::ssh::StorageMode;
 use crate::theme::{ThemeManager, ThemeSettings};
@@ -183,6 +184,8 @@ pub struct Config {
     pub addon_commands: HashMap<KeyBinding, AddonCommand>,
     /// Logging configuration.
     pub log_config: LogConfig,
+    /// Docker log streaming configuration.
+    pub docker_log_config: LogStreamConfig,
     /// Window position overrides for specific popups/overlays.
     pub window_positions: HashMap<String, crate::ui::window_position::WindowPosition>,
 }
@@ -202,6 +205,7 @@ impl Default for Config {
             ssh_number_setting: true,
             addon_commands: HashMap::new(),
             log_config: LogConfig::default(),
+            docker_log_config: LogStreamConfig::default(),
             window_positions: HashMap::new(),
         }
     }
@@ -363,6 +367,10 @@ impl Config {
             "log_enabled" | "logging" => {
                 self.log_config.enabled =
                     matches!(value.to_lowercase().as_str(), "true" | "yes" | "1" | "on");
+            }
+            // Docker log streaming settings
+            k if k.starts_with("docker_log_") => {
+                self.docker_log_config.apply_setting(key, value);
             }
             _ => {
                 // Check for window position settings: *_position = <value>

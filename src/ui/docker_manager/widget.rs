@@ -95,6 +95,10 @@ impl Widget for DockerManagerWidget<'_> {
             | DockerManagerMode::CreationError => {
                 super::widget_create::render_creation_mode(self.selector, popup_area, buf);
             }
+            // Docker log viewer mode
+            DockerManagerMode::LogView => {
+                self.render_log_view(popup_area, buf);
+            }
         }
     }
 }
@@ -152,6 +156,7 @@ impl DockerManagerWidget<'_> {
         let primary = vec![
             KeyHint::styled("Enter", "Action", KeyHintStyle::Success),
             KeyHint::new("Tab", "Section"),
+            KeyHint::new("l", "Logs"),
             KeyHint::styled("Esc", "Close", KeyHintStyle::Danger),
         ];
         let secondary = vec![KeyHint::new("?", "All shortcuts")];
@@ -562,5 +567,33 @@ impl DockerManagerWidget<'_> {
         block.render(area, buf);
 
         super::widget_forms::render_host_credentials_form(self.selector, inner, buf);
+    }
+
+    /// Renders the Docker log viewer mode (placeholder until Phase 5).
+    fn render_log_view(&self, area: Rect, buf: &mut Buffer) {
+        let title = " Docker Logs ";
+
+        let block = Block::default()
+            .title(Span::styled(
+                title,
+                Style::default()
+                    .fg(Color::White)
+                    .add_modifier(Modifier::BOLD),
+            ))
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
+            .border_style(Style::default().fg(Color::Cyan))
+            .padding(Padding::horizontal(1))
+            .style(Style::default().bg(Color::Black));
+
+        let inner = block.inner(area);
+        block.render(area, buf);
+
+        if let Some(ref state) = self.selector.docker_logs_state {
+            crate::docker_logs::ui::widget::render_docker_logs(state, inner, buf);
+        } else {
+            let para = Paragraph::new("No log state available");
+            para.render(inner, buf);
+        }
     }
 }

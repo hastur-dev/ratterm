@@ -41,6 +41,7 @@ pub mod completion;
 pub mod config;
 pub mod daemon;
 pub mod docker;
+pub mod docker_logs;
 pub mod editor;
 pub mod extension;
 pub mod filebrowser;

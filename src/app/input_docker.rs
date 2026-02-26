@@ -73,6 +73,10 @@ impl App {
             | DockerManagerMode::CreationError => {
                 self.handle_docker_create_key(key);
             }
+            // Docker log viewer mode
+            DockerManagerMode::LogView => {
+                self.handle_docker_logs_key(key);
+            }
         }
     }
 
@@ -207,6 +211,11 @@ impl App {
             // Create new container
             (KeyModifiers::NONE, KeyCode::Char('c')) => {
                 self.docker_start_container_creation();
+            }
+
+            // View container logs
+            (KeyModifiers::NONE, KeyCode::Char('l')) => {
+                self.docker_open_logs();
             }
 
             // Debug: Show current host info (Shift+D)
