@@ -258,9 +258,16 @@ impl App {
     ///
     /// This should be called in the main update loop.
     /// Checks both daemon metrics (if available) and SSH collector.
+    /// Also syncs derived connection statuses into `host_statuses` for
+    /// the SSH manager to consume.
     pub fn poll_health_dashboard(&mut self) {
+        use super::status_sync::statuses_from_dashboard;
+
         // First, collect daemon metrics if available
         let daemon_metrics = self.collect_daemon_metrics();
+
+        // Derived statuses extracted after the dashboard borrow ends.
+        let mut derived_statuses = Vec::new();
 
         if let Some(ref mut dashboard) = self.health_dashboard {
             // Apply daemon metrics to dashboard hosts
@@ -282,10 +289,34 @@ impl App {
             // Poll for new metrics from SSH collector
             dashboard.poll();
 
+            // Extract statuses while we have the borrow
+            derived_statuses = statuses_from_dashboard(dashboard.hosts());
+
             // Check if we need an auto-refresh
             if dashboard.needs_refresh() {
                 dashboard.refresh(&self.ssh_hosts);
             }
+        }
+
+        // Update persistent cache (no dashboard borrow held)
+        for (host_id, status) in derived_statuses {
+            self.host_statuses.insert(host_id, status);
+        }
+
+        // If the SSH manager is open, apply cached statuses live
+        self.apply_cached_statuses_to_ssh_manager();
+    }
+
+    /// Applies cached `host_statuses` to the SSH manager's display list.
+    ///
+    /// This is a no-op if the SSH manager is not open.
+    fn apply_cached_statuses_to_ssh_manager(&mut self) {
+        let Some(ref mut manager) = self.ssh_manager else {
+            return;
+        };
+
+        for (&host_id, &status) in &self.host_statuses {
+            manager.set_host_status(host_id, status);
         }
     }
 

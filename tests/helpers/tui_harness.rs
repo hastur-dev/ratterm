@@ -180,6 +180,17 @@ impl TuiTestSession {
         self.output.lock().map_or(0, |g| g.len())
     }
 
+    /// Clears the accumulated output buffer.
+    ///
+    /// Useful for isolating screen content between different views
+    /// or for polling fresh renders during wait loops. The background
+    /// reader thread continues writing new output after clearing.
+    pub fn clear_output(&self) {
+        if let Ok(mut guard) = self.output.lock() {
+            guard.clear();
+        }
+    }
+
     /// Sends a raw control code (e.g., Ctrl+Q = 0x11).
     pub fn send_control(&mut self, byte: u8) -> Result<(), Box<dyn std::error::Error>> {
         self.writer.write_all(&[byte])?;
@@ -240,6 +251,37 @@ impl TuiTestSession {
         self.send_escape_seq("\x1b[A")
     }
 
+    /// Sends Space key.
+    pub fn send_space(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        self.send_key(' ')
+    }
+
+    /// Sends Page Up key.
+    pub fn send_page_up(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        self.send_escape_seq("\x1b[5~")
+    }
+
+    /// Sends Page Down key.
+    pub fn send_page_down(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        self.send_escape_seq("\x1b[6~")
+    }
+
+    /// Sends Home key.
+    pub fn send_home(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        self.send_escape_seq("\x1b[H")
+    }
+
+    /// Sends End key.
+    pub fn send_end(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        self.send_escape_seq("\x1b[F")
+    }
+
+    /// Sends a string as a sequence of key presses.
+    pub fn send_string(&mut self, s: &str) -> Result<(), Box<dyn std::error::Error>> {
+        self.writer.write_all(s.as_bytes())?;
+        Ok(())
+    }
+
     /// Returns whether the child process is still running.
     pub fn is_alive(&self) -> bool {
         self.process.is_alive()
@@ -253,6 +295,36 @@ impl TuiTestSession {
         while self.process.is_alive() && Instant::now() < deadline {
             thread::sleep(Duration::from_millis(100));
         }
+        Ok(())
+    }
+
+    /// Forces a full screen redraw by toggling the ConPTY console size.
+    ///
+    /// Ratatui uses double-buffered differential rendering — after
+    /// `clear_output()`, only changed cells are sent to ConPTY, so
+    /// hostnames and other static content are missing from the buffer.
+    ///
+    /// This method resizes the console to a different size, waits for
+    /// the app to process the resize event and complete a full draw
+    /// cycle at the new size, then clears the accumulated output and
+    /// resizes back to the original 120x40. The second resize triggers
+    /// another full (non-differential) draw because the buffer size
+    /// changed. The result is a clean buffer containing only the
+    /// complete current screen.
+    ///
+    /// The 500ms delays ensure the app's event loop detects the resize,
+    /// updates its layout, and calls `draw()`.
+    pub fn force_redraw(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        // Phase 1: resize to a different size so the app renders a full frame.
+        self.process.resize(121, 41)?;
+        thread::sleep(Duration::from_millis(500));
+
+        // Phase 2: clear accumulated output, then resize back. The app
+        // renders another full frame at the original size, which is the
+        // ONLY content now in the buffer.
+        self.clear_output();
+        self.process.resize(120, 40)?;
+        thread::sleep(Duration::from_millis(500));
         Ok(())
     }
 
