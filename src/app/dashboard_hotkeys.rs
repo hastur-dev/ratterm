@@ -244,6 +244,73 @@ pub fn ssh_manager_list_hotkeys() -> Vec<HotkeyEntry> {
     ]
 }
 
+/// Returns hotkey entries for the Docker Logs viewer.
+#[must_use]
+pub fn docker_logs_hotkeys() -> Vec<HotkeyEntry> {
+    vec![
+        // Navigation
+        HotkeyEntry {
+            key: "Up/Down or j/k",
+            description: "Scroll logs / navigate list",
+            category: "Navigation",
+        },
+        HotkeyEntry {
+            key: "Home/End",
+            description: "Jump to top/bottom",
+            category: "Navigation",
+        },
+        HotkeyEntry {
+            key: "PgUp/PgDn",
+            description: "Page scroll",
+            category: "Navigation",
+        },
+        HotkeyEntry {
+            key: "Enter",
+            description: "Select container",
+            category: "Navigation",
+        },
+        HotkeyEntry {
+            key: "Esc/q",
+            description: "Back / close",
+            category: "Navigation",
+        },
+        // Streaming
+        HotkeyEntry {
+            key: "Space",
+            description: "Pause/resume stream",
+            category: "Streaming",
+        },
+        // Search
+        HotkeyEntry {
+            key: "/ or Ctrl+F",
+            description: "Search/filter logs",
+            category: "Search",
+        },
+        HotkeyEntry {
+            key: "Shift+S",
+            description: "Saved searches",
+            category: "Search",
+        },
+        // Actions
+        HotkeyEntry {
+            key: "c",
+            description: "Clear logs",
+            category: "Actions",
+        },
+        HotkeyEntry {
+            key: "t",
+            description: "Toggle timestamps",
+            category: "Actions",
+        },
+        // Help
+        HotkeyEntry {
+            key: "?",
+            description: "Toggle this help",
+            category: "Help",
+        },
+    ]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

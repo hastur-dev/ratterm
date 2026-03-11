@@ -38,7 +38,7 @@ use super::metrics::{
 const SSH_PROCESS_TIMEOUT_SECS: u64 = SSH_COMMAND_TIMEOUT_SECS + 5;
 
 /// Combined command to collect all metrics in one SSH exec.
-const METRICS_COMMAND: &str = r#"echo "===CPU===" && cat /proc/loadavg && nproc && echo "===MEM===" && cat /proc/meminfo | grep -E 'MemTotal|MemAvailable|MemFree|SwapTotal|SwapFree' && echo "===DISK===" && df -BG / | tail -1 && echo "===GPU===" && (nvidia-smi --query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu --format=csv,noheader,nounits 2>/dev/null || rocm-smi --showuse 2>/dev/null || echo "NO_GPU")"#;
+const METRICS_COMMAND: &str = r#"echo "===CPU===" && cat /proc/loadavg && nproc && echo "===MEM===" && cat /proc/meminfo | grep -E 'MemTotal|MemAvailable|MemFree|SwapTotal|SwapFree' && echo "===DISK===" && df -BG / | tail -1 && echo "===GPU===" && (timeout 3 nvidia-smi --query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu --format=csv,noheader,nounits 2>/dev/null || timeout 3 rocm-smi --showuse 2>/dev/null || echo "NO_GPU")"#;
 
 /// Information needed to collect metrics from a host.
 #[derive(Debug, Clone)]
@@ -261,6 +261,31 @@ impl Drop for MetricsCollector {
     }
 }
 
+/// Authentication strategy for a host.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AuthStrategy {
+    /// Try key-based auth first, fall back to password on auth failure.
+    KeyThenPassword,
+    /// Go straight to password auth (skip key-based entirely).
+    PasswordOnly,
+    /// Try key-based auth only (SSH agent / default keys).
+    KeyOnly,
+}
+
+/// Chooses the best authentication strategy based on available credentials.
+///
+/// - Password but no explicit key → `PasswordOnly` (avoids wasting timeout on key auth)
+/// - Explicit key path → `KeyThenPassword` (key was deliberately configured)
+/// - No password and no key → `KeyOnly` (rely on SSH agent / default keys)
+fn choose_auth_strategy(has_password: bool, has_explicit_key: bool) -> AuthStrategy {
+    // All combinations of (bool, bool) are valid — no assertion needed.
+    match (has_password, has_explicit_key) {
+        (true, false) => AuthStrategy::PasswordOnly,
+        (_, true) => AuthStrategy::KeyThenPassword,
+        (false, false) => AuthStrategy::KeyOnly,
+    }
+}
+
 /// Collects metrics from a single host via SSH.
 fn collect_host_metrics(host: &HostCollectionInfo) -> DeviceMetrics {
     debug!(
@@ -271,51 +296,56 @@ fn collect_host_metrics(host: &HostCollectionInfo) -> DeviceMetrics {
         host.jump_host.is_some()
     );
 
-    // Strategy: Try key-based auth first (uses SSH agent/default keys), then fall back to password
-    // This is because many servers are configured for key-only auth, and the user's SSH
-    // terminal connections work via keys even when passwords are stored in the app.
-
-    // First, try key-based authentication (works with SSH agent and ~/.ssh/ keys)
+    let strategy = choose_auth_strategy(host.password.is_some(), host.key_path.is_some());
     info!(
-        "Trying key-based authentication first for {}",
-        host.hostname
+        "Auth strategy for {}: {:?}",
+        host.hostname, strategy
     );
-    let key_result = collect_with_key(host);
 
-    // If key-based auth succeeded, return the result
-    if key_result.status != MetricStatus::Error {
-        info!(
-            "Key-based auth succeeded for {}: {:?}",
-            host.hostname, key_result.status
-        );
-        return key_result;
-    }
-
-    // Key-based auth failed - check if we have a password to try
-    if let Some(ref password) = host.password {
-        // Check if the error was auth-related (worth trying password) vs network (don't bother)
-        let error_msg = key_result.error.as_deref().unwrap_or("");
-        if error_msg.contains("timed out") || error_msg.contains("Connection refused") {
-            info!(
-                "Key-based auth failed with network error for {}, not trying password: {}",
-                host.hostname, error_msg
-            );
-            return key_result;
+    match strategy {
+        AuthStrategy::PasswordOnly => {
+            let password = host.password.as_deref().unwrap_or("");
+            info!("Using password-only auth for {}", host.hostname);
+            collect_with_password(host, password)
         }
+        AuthStrategy::KeyOnly => {
+            info!("Using key-only auth for {}", host.hostname);
+            collect_with_key(host)
+        }
+        AuthStrategy::KeyThenPassword => {
+            info!("Trying key-based auth first for {}", host.hostname);
+            let key_result = collect_with_key(host);
 
-        info!(
-            "Key-based auth failed for {}, trying password authentication. Error was: {}",
-            host.hostname, error_msg
-        );
-        return collect_with_password(host, password);
+            if key_result.status != MetricStatus::Error {
+                info!(
+                    "Key-based auth succeeded for {}: {:?}",
+                    host.hostname, key_result.status
+                );
+                return key_result;
+            }
+
+            // Key failed — check if network error (don't bother with password)
+            let error_msg = key_result.error.as_deref().unwrap_or("");
+            if error_msg.contains("timed out") || error_msg.contains("Connection refused") {
+                info!(
+                    "Network error for {}, not trying password: {}",
+                    host.hostname, error_msg
+                );
+                return key_result;
+            }
+
+            // Auth failure — try password
+            if let Some(ref password) = host.password {
+                info!(
+                    "Key auth failed for {}, falling back to password. Error: {}",
+                    host.hostname, error_msg
+                );
+                return collect_with_password(host, password);
+            }
+
+            key_result
+        }
     }
-
-    // No password available, return the key-based auth error
-    info!(
-        "Key-based auth failed for {} and no password available",
-        host.hostname
-    );
-    key_result
 }
 
 /// Collects metrics using SSH key authentication.
@@ -326,7 +356,8 @@ fn collect_with_key(host: &HostCollectionInfo) -> DeviceMetrics {
 
     // Build SSH arguments for key-based auth
     cmd.arg("-o").arg("BatchMode=yes");
-    cmd.arg("-o").arg("ConnectTimeout=5");
+    cmd.arg("-o")
+        .arg(format!("ConnectTimeout={SSH_COMMAND_TIMEOUT_SECS}"));
     cmd.arg("-o").arg("StrictHostKeyChecking=no");
 
     // Add key path if specified
@@ -398,9 +429,10 @@ fn collect_with_password(host: &HostCollectionInfo, password: &str) -> DeviceMet
 
 /// Collects metrics using plink (PuTTY) on Windows.
 ///
-/// Uses cmd.exe to pipe 'y' to plink to auto-accept host key prompts.
+/// Pipes `y\n` on stdin to auto-accept the host key prompt, then reads
+/// stdout/stderr with a timeout.  This avoids the `-batch` flag which
+/// refuses to connect when the host key is not in PuTTY's registry cache.
 fn collect_with_plink(host: &HostCollectionInfo, password: &str) -> DeviceMetrics {
-    // Check if plink is available
     if !is_plink_available() {
         return DeviceMetrics::with_error(
             host.host_id,
@@ -408,27 +440,17 @@ fn collect_with_plink(host: &HostCollectionInfo, password: &str) -> DeviceMetric
         );
     }
 
-    // Build the plink command string
-    // We use cmd.exe to pipe 'y' to auto-accept host key if not cached
-    let port_arg = if host.port != 22 {
-        format!("-P {} ", host.port)
-    } else {
-        String::new()
-    };
-
     let target = format!("{}@{}", host.username, host.hostname);
 
-    // Build plink command - use -batch to avoid interactive prompts
-    // Don't use cmd.exe wrapper - call plink directly to avoid shell escaping issues
     info!(
-        "plink command for {}: plink -batch -no-antispoof -pw *** {}{}",
-        host.hostname, port_arg, target
+        "plink command for {}: plink -no-antispoof -pw *** {}",
+        host.hostname, target
     );
 
     let mut cmd = Command::new("plink");
-    cmd.arg("-batch"); // Non-interactive mode, auto-accept host key
+    // NOTE: No -batch flag — we pipe "y\n" via stdin instead.
     cmd.arg("-no-antispoof");
-    cmd.arg("-pw").arg(password); // Pass password directly, no escaping needed
+    cmd.arg("-pw").arg(password);
 
     if host.port != 22 {
         cmd.arg("-P").arg(host.port.to_string());
@@ -437,15 +459,13 @@ fn collect_with_plink(host: &HostCollectionInfo, password: &str) -> DeviceMetric
     cmd.arg(&target);
     cmd.arg(METRICS_COMMAND);
 
-    let result = execute_ssh_command(cmd, host.host_id);
+    let result = execute_plink_command(cmd, host.host_id);
 
-    // Log the result
     info!(
         "plink result for {}: status={:?}, error={:?}",
         host.hostname, result.status, result.error
     );
 
-    // If plink still failed, show helpful message
     if result.status == MetricStatus::Error {
         if let Some(ref err) = result.error {
             error!("plink failed for {}: {}", host.hostname, err);
@@ -460,6 +480,127 @@ fn collect_with_plink(host: &HostCollectionInfo, password: &str) -> DeviceMetric
     }
 
     result
+}
+
+/// Executes a plink command with piped stdin to auto-accept host keys.
+///
+/// Writes `y\n` to stdin immediately after spawn so plink accepts the
+/// "Store key in cache?" prompt, then waits for completion with a
+/// process-level timeout identical to [`execute_ssh_command`].
+fn execute_plink_command(mut cmd: Command, host_id: u32) -> DeviceMetrics {
+    cmd.stdin(Stdio::piped());
+    cmd.stdout(Stdio::piped());
+    cmd.stderr(Stdio::piped());
+
+    #[cfg(windows)]
+    cmd.creation_flags(DETACHED_PROCESS | CREATE_NO_WINDOW);
+
+    debug!("Executing plink command for host_id={}", host_id);
+
+    let mut child = match cmd.spawn() {
+        Ok(c) => c,
+        Err(e) => {
+            error!("Failed to spawn plink for host_id={}: {}", host_id, e);
+            return DeviceMetrics::with_error(host_id, format!("Failed to execute plink: {e}"));
+        }
+    };
+
+    // Write "y\n" to accept host key prompt, then drop stdin so plink
+    // does not wait for further input.
+    if let Some(mut stdin) = child.stdin.take() {
+        use std::io::Write;
+        let _ = stdin.write_all(b"y\n");
+        // stdin dropped here — signals EOF to plink
+    }
+
+    // Wait with the same timeout as execute_ssh_command.
+    let deadline = Instant::now() + Duration::from_secs(SSH_PROCESS_TIMEOUT_SECS);
+
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => {
+                let output = match child.wait_with_output() {
+                    Ok(o) => o,
+                    Err(e) => {
+                        return DeviceMetrics::with_error(
+                            host_id,
+                            format!("Failed to read plink output: {e}"),
+                        );
+                    }
+                };
+                return process_ssh_output(output, host_id);
+            }
+            Ok(None) if Instant::now() >= deadline => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return DeviceMetrics::with_error(host_id, "SSH command timed out".to_string());
+            }
+            Ok(None) => {
+                std::thread::sleep(Duration::from_millis(100));
+            }
+            Err(e) => {
+                return DeviceMetrics::with_error(
+                    host_id,
+                    format!("Error waiting for plink process: {e}"),
+                );
+            }
+        }
+    }
+}
+
+/// Shared output processing logic used by both `execute_ssh_command` and
+/// `execute_plink_command`.
+fn process_ssh_output(output: std::process::Output, host_id: u32) -> DeviceMetrics {
+    debug!(
+        "SSH command completed for host_id={}: exit_code={:?}",
+        host_id,
+        output.status.code()
+    );
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+
+        error!(
+            "SSH failed for host_id={}: exit_code={:?}",
+            host_id,
+            output.status.code()
+        );
+        error!("  STDERR: {}", stderr);
+        error!(
+            "  STDOUT (len={}): {}",
+            stdout.len(),
+            stdout.chars().take(200).collect::<String>()
+        );
+
+        let error = if stderr.contains("Permission denied") || stderr.contains("permission denied")
+        {
+            "Permission denied".to_string()
+        } else if stderr.contains("Access denied") || stderr.contains("access denied") {
+            "Access denied".to_string()
+        } else if stderr.contains("Connection refused") {
+            "Connection refused".to_string()
+        } else if stderr.contains("Connection timed out") || stderr.contains("timed out") {
+            "Connection timed out".to_string()
+        } else if stderr.contains("No such file") || stderr.contains("not found") {
+            "SSH client not found".to_string()
+        } else if stderr.is_empty() {
+            format!("SSH failed (exit code {:?})", output.status.code())
+        } else {
+            stderr.chars().take(100).collect()
+        };
+        return DeviceMetrics::with_error(host_id, error);
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    debug!(
+        "SSH stdout for host_id={} (len={}): {}",
+        host_id,
+        stdout.len(),
+        stdout.chars().take(200).collect::<String>()
+    );
+
+    parse_metrics_output(&stdout, host_id)
 }
 
 /// Collects metrics using sshpass on Linux/Mac.
@@ -479,7 +620,8 @@ fn collect_with_sshpass(host: &HostCollectionInfo, password: &str) -> DeviceMetr
 
     // SSH command
     cmd.arg("ssh");
-    cmd.arg("-o").arg("ConnectTimeout=5");
+    cmd.arg("-o")
+        .arg(format!("ConnectTimeout={SSH_COMMAND_TIMEOUT_SECS}"));
     cmd.arg("-o").arg("StrictHostKeyChecking=no");
 
     // Add key path if specified (in addition to password)
@@ -572,58 +714,7 @@ fn execute_ssh_command(mut cmd: Command, host_id: u32) -> DeviceMetrics {
         }
     };
 
-    debug!(
-        "SSH command completed for host_id={}: exit_code={:?}",
-        host_id,
-        output.status.code()
-    );
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let stdout = String::from_utf8_lossy(&output.stdout);
-
-        // Log full stderr for debugging
-        error!(
-            "SSH failed for host_id={}: exit_code={:?}",
-            host_id,
-            output.status.code()
-        );
-        error!("  STDERR: {}", stderr);
-        error!(
-            "  STDOUT (len={}): {}",
-            stdout.len(),
-            stdout.chars().take(200).collect::<String>()
-        );
-
-        let error = if stderr.contains("Permission denied") || stderr.contains("permission denied")
-        {
-            "Permission denied".to_string()
-        } else if stderr.contains("Access denied") || stderr.contains("access denied") {
-            "Access denied".to_string()
-        } else if stderr.contains("Connection refused") {
-            "Connection refused".to_string()
-        } else if stderr.contains("Connection timed out") || stderr.contains("timed out") {
-            "Connection timed out".to_string()
-        } else if stderr.contains("No such file") || stderr.contains("not found") {
-            "SSH client not found".to_string()
-        } else if stderr.is_empty() {
-            format!("SSH failed (exit code {:?})", output.status.code())
-        } else {
-            // Return first 100 chars of stderr for unknown errors
-            stderr.chars().take(100).collect()
-        };
-        return DeviceMetrics::with_error(host_id, error);
-    }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    debug!(
-        "SSH stdout for host_id={} (len={}): {}",
-        host_id,
-        stdout.len(),
-        stdout.chars().take(200).collect::<String>()
-    );
-
-    parse_metrics_output(&stdout, host_id)
+    process_ssh_output(output, host_id)
 }
 
 /// Checks if sshpass is available on the system.
@@ -669,7 +760,7 @@ fn collect_with_wsl_sshpass(host: &HostCollectionInfo, password: &str) -> Device
         password.to_string(),
         "ssh".to_string(),
         "-o".to_string(),
-        "ConnectTimeout=5".to_string(),
+        format!("ConnectTimeout={SSH_COMMAND_TIMEOUT_SECS}"),
         "-o".to_string(),
         "StrictHostKeyChecking=no".to_string(),
     ];
@@ -1155,5 +1246,140 @@ mod tests {
             !result.unwrap().status.success(),
             "Exit status should be non-zero"
         );
+    }
+
+    // ========================================================================
+    // process_ssh_output tests
+    // ========================================================================
+
+    #[test]
+    fn test_process_ssh_output_success() {
+        // Simulate a successful SSH command with valid metrics output
+        let metrics_output = "===CPU===\n0.50 0.60 0.40 1/200 1234\n4\n===MEM===\nMemTotal:       8192000 kB\nMemAvailable:   4096000 kB\nSwapTotal:      2048000 kB\nSwapFree:       2048000 kB\n===DISK===\n/dev/sda1 100G 50G 50G 50% /\n===GPU===\nNO_GPU\n";
+
+        let output = std::process::Output {
+            status: make_success_status(),
+            stdout: metrics_output.as_bytes().to_vec(),
+            stderr: Vec::new(),
+        };
+
+        let result = process_ssh_output(output, 99);
+        assert_eq!(result.host_id, 99);
+        assert_eq!(result.status, MetricStatus::Online);
+        assert!(result.error.is_none());
+    }
+
+    #[test]
+    fn test_process_ssh_output_permission_denied() {
+        let output = std::process::Output {
+            status: make_failure_status(),
+            stdout: Vec::new(),
+            stderr: b"Permission denied (publickey,password).".to_vec(),
+        };
+
+        let result = process_ssh_output(output, 1);
+        assert_eq!(result.status, MetricStatus::Error);
+        assert_eq!(result.error.as_deref(), Some("Permission denied"));
+    }
+
+    #[test]
+    fn test_process_ssh_output_connection_refused() {
+        let output = std::process::Output {
+            status: make_failure_status(),
+            stdout: Vec::new(),
+            stderr: b"Connection refused".to_vec(),
+        };
+
+        let result = process_ssh_output(output, 2);
+        assert_eq!(result.status, MetricStatus::Error);
+        assert_eq!(result.error.as_deref(), Some("Connection refused"));
+    }
+
+    #[test]
+    fn test_process_ssh_output_empty_stderr() {
+        let output = std::process::Output {
+            status: make_failure_status(),
+            stdout: Vec::new(),
+            stderr: Vec::new(),
+        };
+
+        let result = process_ssh_output(output, 3);
+        assert_eq!(result.status, MetricStatus::Error);
+        assert!(result.error.is_some());
+        assert!(result.error.unwrap().contains("exit code"));
+    }
+
+    // ========================================================================
+    // execute_plink_command tests
+    // ========================================================================
+
+    #[test]
+    fn test_execute_plink_command_with_nonexistent_binary() {
+        // If plink is not installed, spawn fails gracefully.
+        let cmd = Command::new("this_plink_binary_does_not_exist_999");
+        let result = execute_plink_command(cmd, 77);
+        assert_eq!(result.status, MetricStatus::Error);
+        assert!(result.error.is_some());
+        assert!(
+            result.error.as_deref().unwrap().contains("Failed to execute"),
+            "Error was: {:?}",
+            result.error
+        );
+    }
+
+    // ========================================================================
+    // choose_auth_strategy tests
+    // ========================================================================
+
+    #[test]
+    fn test_auth_strategy_password_only_when_no_key() {
+        // Host has password but no explicit key → skip key auth entirely
+        let strategy = choose_auth_strategy(true, false);
+        assert_eq!(strategy, AuthStrategy::PasswordOnly);
+    }
+
+    #[test]
+    fn test_auth_strategy_key_then_password_with_explicit_key() {
+        // Host has explicit key_path → try key first
+        let strategy = choose_auth_strategy(true, true);
+        assert_eq!(strategy, AuthStrategy::KeyThenPassword);
+    }
+
+    #[test]
+    fn test_auth_strategy_key_then_password_key_only_explicit() {
+        // No password but explicit key → still KeyThenPassword (no password to fall back to,
+        // but the strategy is the same dispatch path)
+        let strategy = choose_auth_strategy(false, true);
+        assert_eq!(strategy, AuthStrategy::KeyThenPassword);
+    }
+
+    #[test]
+    fn test_auth_strategy_key_only_no_credentials() {
+        // No password, no key → rely on SSH agent / default keys
+        let strategy = choose_auth_strategy(false, false);
+        assert_eq!(strategy, AuthStrategy::KeyOnly);
+    }
+
+    // ── Helpers ─────────────────────────────────────────────────────
+
+    /// Creates a fake successful exit status.
+    fn make_success_status() -> std::process::ExitStatus {
+        // Run a trivial command that exits 0.
+        let child = if cfg!(target_os = "windows") {
+            Command::new("cmd").args(["/c", "exit", "0"]).status()
+        } else {
+            Command::new("true").status()
+        };
+        child.unwrap()
+    }
+
+    /// Creates a fake failure exit status.
+    fn make_failure_status() -> std::process::ExitStatus {
+        let child = if cfg!(target_os = "windows") {
+            Command::new("cmd").args(["/c", "exit", "1"]).status()
+        } else {
+            Command::new("false").status()
+        };
+        child.unwrap()
     }
 }

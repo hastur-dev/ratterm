@@ -2,7 +2,7 @@
 
 use tracing::{debug, info, warn};
 
-use crate::ssh::{NetworkScanner, SSHCredentials, ScanResult};
+use crate::ssh::{ConnectionStatus, NetworkScanner, SSHCredentials, ScanResult};
 use crate::ui::ssh_manager::SSHManagerMode;
 
 use super::App;
@@ -93,8 +93,10 @@ impl App {
                     if !self.ssh_hosts.contains_hostname(&ip) {
                         if let Some(id) = self.ssh_hosts.add_host(ip.clone(), 22) {
                             debug!("Found SSH host: {} (id={})", ip, id);
+                            self.host_statuses.insert(id, ConnectionStatus::Reachable);
                             if let Some(ref mut manager) = self.ssh_manager {
                                 manager.update_from_list(&self.ssh_hosts);
+                                manager.set_host_status(id, ConnectionStatus::Reachable);
                             }
                             self.set_status(format!("Found SSH host: {}", ip));
                         }
@@ -133,8 +135,8 @@ impl App {
                         manager.update_auth_counts(success, fail);
                     }
                 }
-                ScanResult::AuthSuccess(ip, _port) => {
-                    self.handle_auth_success_result(ip);
+                ScanResult::AuthSuccess(ip, _port, hostname) => {
+                    self.handle_auth_success_result(ip, hostname);
                 }
                 ScanResult::AuthComplete(hosts) => {
                     self.handle_auth_complete_result(hosts);
@@ -152,8 +154,16 @@ impl App {
     }
 
     /// Handles an AuthSuccess scan result.
-    fn handle_auth_success_result(&mut self, ip: String) {
-        info!("AuthSuccess received for ip: {}", ip);
+    ///
+    /// If `remote_hostname` is `Some`, it is used as the display name
+    /// for the host (the "computer type/name"). The IP address is always
+    /// stored as the hostname for connectivity; the display name is the
+    /// user-friendly label shown in the SSH manager list.
+    fn handle_auth_success_result(&mut self, ip: String, remote_hostname: Option<String>) {
+        info!(
+            "AuthSuccess received for ip: {}, remote_hostname: {:?}",
+            ip, remote_hostname
+        );
         if !self.ssh_hosts.contains_hostname(&ip) {
             let (username, password) = if let Some(ref manager) = self.ssh_manager {
                 (
@@ -165,11 +175,28 @@ impl App {
                 return;
             };
 
-            if let Some(id) = self.ssh_hosts.add_host(ip.clone(), 22) {
-                info!("Added SSH host: {} with id={}", ip, id);
+            let id = if let Some(ref name) = remote_hostname {
+                self.ssh_hosts.add_host_with_name(ip.clone(), 22, name.clone())
+            } else {
+                self.ssh_hosts.add_host(ip.clone(), 22)
+            };
+
+            if let Some(id) = id {
+                let label = remote_hostname.as_deref().unwrap_or(&ip);
+                info!("Added SSH host: {} ({}) with id={}", label, ip, id);
                 let creds = SSHCredentials::new(username, Some(password));
                 self.ssh_hosts.set_credentials(id, creds);
-                self.set_status(format!("Authenticated: {}", ip));
+                self.host_statuses
+                    .insert(id, ConnectionStatus::Authenticated);
+                if let Some(ref mut manager) = self.ssh_manager {
+                    manager.set_host_status(id, ConnectionStatus::Authenticated);
+                }
+                self.set_status(format!("Authenticated: {} ({})", label, ip));
+
+                // Best-effort: save the host key to ~/.ssh/known_hosts
+                if let Err(e) = NetworkScanner::save_host_key(&ip, 22) {
+                    warn!("Failed to save host key for {}: {}", ip, e);
+                }
             } else {
                 info!("WARNING: add_host returned None for ip: {}", ip);
             }

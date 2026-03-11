@@ -15,7 +15,8 @@ impl App {
         // Handle hotkey overlay if visible
         if self.hotkey_overlay.as_ref().is_some_and(|o| o.is_visible()) {
             match (key.modifiers, key.code) {
-                (KeyModifiers::NONE, KeyCode::Char('?')) | (KeyModifiers::NONE, KeyCode::Esc) => {
+                (KeyModifiers::NONE | KeyModifiers::SHIFT, KeyCode::Char('?'))
+                | (KeyModifiers::NONE, KeyCode::Esc) => {
                     self.hotkey_overlay = None;
                     return;
                 }
@@ -72,6 +73,10 @@ impl App {
             | DockerManagerMode::CreateConfirm
             | DockerManagerMode::CreationError => {
                 self.handle_docker_create_key(key);
+            }
+            // Docker log viewer mode
+            DockerManagerMode::LogView => {
+                self.handle_docker_logs_key(key);
             }
         }
     }
@@ -207,6 +212,11 @@ impl App {
             // Create new container
             (KeyModifiers::NONE, KeyCode::Char('c')) => {
                 self.docker_start_container_creation();
+            }
+
+            // View container logs
+            (KeyModifiers::NONE, KeyCode::Char('l')) => {
+                self.docker_open_logs();
             }
 
             // Debug: Show current host info (Shift+D)

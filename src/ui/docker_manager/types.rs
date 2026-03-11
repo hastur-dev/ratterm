@@ -49,6 +49,8 @@ pub enum DockerManagerMode {
     CreateConfirm,
     /// Displaying an error from container creation.
     CreationError,
+    /// Viewing container logs.
+    LogView,
 }
 
 impl DockerManagerMode {
@@ -91,6 +93,7 @@ impl DockerManagerMode {
             Self::StartupCommand => "Startup Command",
             Self::CreateConfirm => "Confirm Creation",
             Self::CreationError => "Error",
+            Self::LogView => "Docker Logs",
         }
     }
 }

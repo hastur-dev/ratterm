@@ -554,6 +554,60 @@ When inside a Docker session (after exec into container):
 | `Ctrl+T` | Show container stats (split panel) |
 | `Ctrl+L` | Show container logs (split panel) |
 
+### Docker Logs
+
+Open from the Docker Manager list with `l`. Provides live log streaming from containers.
+
+#### Container List
+
+| Hotkey | Action |
+|--------|--------|
+| `Up` / `k` | Previous container |
+| `Down` / `j` | Next container |
+| `Home` / `g` | First container |
+| `End` / `G` | Last container |
+| `Enter` | Start streaming logs |
+| `Esc` / `q` | Back to Docker Manager |
+| `?` | Show all shortcuts |
+
+#### Streaming / Paused
+
+| Hotkey | Action |
+|--------|--------|
+| `Up` / `k` | Scroll up (auto-pauses) |
+| `Down` / `j` | Scroll down |
+| `Home` / `g` | Jump to top |
+| `End` / `G` | Jump to bottom |
+| `PgUp` | Page up |
+| `PgDn` | Page down |
+| `Space` | Toggle pause/resume |
+| `/` | Start search/filter |
+| `c` | Clear log buffer |
+| `t` | Toggle timestamps |
+| `s` | Open saved searches |
+| `Esc` / `q` | Back to container list |
+| `?` | Show all shortcuts |
+
+#### Searching
+
+| Hotkey | Action |
+|--------|--------|
+| Type text | Filter logs (live) |
+| `Enter` | Apply filter |
+| `Esc` | Cancel filter |
+| `Backspace` | Delete character |
+| `Ctrl+S` | Save current search |
+
+#### Saved Searches
+
+| Hotkey | Action |
+|--------|--------|
+| `Up` / `k` | Previous search |
+| `Down` / `j` | Next search |
+| `Enter` | Apply saved search |
+| `d` | Delete saved search |
+| `Esc` | Back |
+
 ---
 
 ## Mouse Support
