@@ -29,9 +29,11 @@ mod session_ops;
 mod ssh_connect;
 mod ssh_ops;
 mod ssh_scan;
+mod status_sync;
 mod terminal_ops;
 
 use std::cell::Cell;
+use std::collections::HashMap;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, TryRecvError};
@@ -51,7 +53,7 @@ use crate::editor::Editor;
 use crate::extension::ExtensionManager;
 use crate::filebrowser::FileBrowser;
 use crate::remote::{RemoteFileBrowser, RemoteFileManager};
-use crate::ssh::{NetworkScanner, SSHHostList, SSHStorage};
+use crate::ssh::{NetworkScanner, SSHHostList, SSHStorage, StatusChecker};
 use crate::terminal::{BackgroundManager, TerminalMultiplexer, pty::PtyError};
 use crate::ui::health_dashboard::HealthDashboard;
 use crate::ui::{
@@ -182,6 +184,8 @@ pub struct App {
     pub(crate) ssh_hosts: SSHHostList,
     /// Network scanner for SSH host discovery.
     pub(crate) ssh_scanner: Option<NetworkScanner>,
+    /// Background TCP status checker for SSH hosts.
+    pub(crate) status_checker: Option<StatusChecker>,
     /// Remote file manager for SFTP operations.
     pub(crate) remote_manager: RemoteFileManager,
     /// Remote file browser for SSH directory navigation (active when browsing remote).
@@ -206,6 +210,11 @@ pub struct App {
     pub(crate) health_dashboard: Option<HealthDashboard>,
     /// Daemon manager for real-time metrics collection.
     pub(crate) daemon_manager: Option<DaemonManager>,
+    /// Cached host connection statuses from daemon/health metrics.
+    ///
+    /// Persists across SSH manager open/close cycles so statuses
+    /// survive navigation between dashboards.
+    pub(crate) host_statuses: HashMap<u32, crate::ssh::ConnectionStatus>,
     /// Whether --test-keys mode is active (F1/F2/F3 open palette/SSH/Docker).
     pub(crate) test_keys: bool,
     /// Hotkey help overlay (shown with `?` in dashboards).
@@ -290,6 +299,7 @@ impl App {
             ssh_storage: SSHStorage::new(),
             ssh_hosts: SSHHostList::new(),
             ssh_scanner: None,
+            status_checker: None,
             remote_manager: RemoteFileManager::new(),
             remote_file_browser: None,
             docker_manager: None,
@@ -302,6 +312,7 @@ impl App {
             completion_suggestion: None,
             health_dashboard: None,
             daemon_manager: None,
+            host_statuses: HashMap::new(),
             test_keys: false,
             hotkey_overlay: None,
             docker_log_stream: None,
@@ -596,6 +607,7 @@ impl App {
         self.process_api_requests();
         self.background_manager.update_counts();
         self.poll_ssh_scanner();
+        self.poll_status_checker();
         self.poll_health_dashboard();
         self.poll_docker_log_stream();
         self.update_completion_suggestion();

@@ -53,7 +53,7 @@ pub fn apply_dashboard_navigation<T: ListSelectable>(
 
     // 2. Handle universal dashboard keys
     match (key.modifiers, key.code) {
-        (KeyModifiers::NONE, KeyCode::Char('?')) => NavResult::ShowHelp,
+        (KeyModifiers::NONE | KeyModifiers::SHIFT, KeyCode::Char('?')) => NavResult::ShowHelp,
         (KeyModifiers::NONE, KeyCode::Esc) => NavResult::Close,
         (KeyModifiers::NONE, KeyCode::Enter) => NavResult::Activate,
         _ => NavResult::Unhandled,
@@ -162,6 +162,18 @@ mod tests {
         let result = apply_dashboard_navigation(&mut list, &key(KeyCode::Char('?')));
         assert_eq!(result, NavResult::ShowHelp);
         // Navigation methods should NOT be called
+        assert_eq!(list.next_calls, 0);
+        assert_eq!(list.prev_calls, 0);
+    }
+
+    #[test]
+    fn test_question_mark_with_shift_shows_help() {
+        let mut list = MockList::new();
+        let result = apply_dashboard_navigation(
+            &mut list,
+            &key_mod(KeyCode::Char('?'), KeyModifiers::SHIFT),
+        );
+        assert_eq!(result, NavResult::ShowHelp);
         assert_eq!(list.next_calls, 0);
         assert_eq!(list.prev_calls, 0);
     }

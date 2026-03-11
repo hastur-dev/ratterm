@@ -4,7 +4,7 @@ use ratatui::{
     buffer::Buffer,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
-    widgets::{Paragraph, Row, Table, Widget},
+    widgets::{Cell, Paragraph, Row, Table, Widget},
 };
 
 use crate::ssh::ConnectionStatus;
@@ -86,20 +86,16 @@ pub fn render_host_table(selector: &SSHManagerSelector, area: Rect, buf: &mut Bu
                 Style::default()
             };
 
-            let _status_style = match host.status {
-                ConnectionStatus::Unknown => Style::default().fg(Color::DarkGray),
-                ConnectionStatus::Reachable => Style::default().fg(Color::Green),
-                ConnectionStatus::Unreachable => Style::default().fg(Color::Red),
-                ConnectionStatus::Authenticated => Style::default().fg(Color::Cyan),
-            };
-
             let creds_indicator = if host.has_credentials { "*" } else { "" };
 
+            let status_cell_style = status_to_style(host.status);
+            let status_cell = Cell::from(host.status.as_str().to_string()).style(status_cell_style);
+
             Row::new(vec![
-                format!("{}", idx + 1),
-                format!("{}{}", host.host.display(), creds_indicator),
-                host.host.connection_string(),
-                host.status.as_str().to_string(),
+                Cell::from(format!("{}", idx + 1)),
+                Cell::from(format!("{}{}", host.host.display(), creds_indicator)),
+                Cell::from(host.host.connection_string()),
+                status_cell,
             ])
             .style(style)
             .height(1)
@@ -256,6 +252,17 @@ pub fn render_scanning(selector: &SSHManagerSelector, area: Rect, buf: &mut Buff
     cancel_hint.render(chunks[4], buf);
 }
 
+/// Maps a connection status to its display style color.
+#[must_use]
+pub fn status_to_style(status: ConnectionStatus) -> Style {
+    match status {
+        ConnectionStatus::Unknown => Style::default().fg(Color::DarkGray),
+        ConnectionStatus::Reachable => Style::default().fg(Color::Green),
+        ConnectionStatus::Unreachable => Style::default().fg(Color::Red),
+        ConnectionStatus::Authenticated => Style::default().fg(Color::Cyan),
+    }
+}
+
 /// Renders the authenticated scanning mode.
 pub fn render_authenticated_scanning(selector: &SSHManagerSelector, area: Rect, buf: &mut Buffer) {
     let (scanned, total) = selector.scan_progress().unwrap_or((0, 0));
@@ -327,4 +334,34 @@ pub fn render_authenticated_scanning(selector: &SSHManagerSelector, area: Rect, 
         .alignment(Alignment::Center)
         .style(Style::default().fg(Color::DarkGray))
         .render(chunks[5], buf);
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_status_to_style_unknown() {
+        let style = status_to_style(ConnectionStatus::Unknown);
+        assert_eq!(style.fg, Some(Color::DarkGray));
+    }
+
+    #[test]
+    fn test_status_to_style_reachable() {
+        let style = status_to_style(ConnectionStatus::Reachable);
+        assert_eq!(style.fg, Some(Color::Green));
+    }
+
+    #[test]
+    fn test_status_to_style_unreachable() {
+        let style = status_to_style(ConnectionStatus::Unreachable);
+        assert_eq!(style.fg, Some(Color::Red));
+    }
+
+    #[test]
+    fn test_status_to_style_authenticated() {
+        let style = status_to_style(ConnectionStatus::Authenticated);
+        assert_eq!(style.fg, Some(Color::Cyan));
+    }
 }

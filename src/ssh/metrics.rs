@@ -12,7 +12,7 @@ pub const MAX_MONITORED_HOSTS: usize = 50;
 pub const DEFAULT_REFRESH_INTERVAL_MS: u64 = 1000;
 
 /// SSH command timeout in seconds.
-pub const SSH_COMMAND_TIMEOUT_SECS: u64 = 5;
+pub const SSH_COMMAND_TIMEOUT_SECS: u64 = 8;
 
 /// Maximum concurrent SSH connections for metric collection.
 pub const MAX_CONCURRENT_CONNECTIONS: usize = 5;

@@ -13,7 +13,8 @@ impl App {
         // Handle hotkey overlay if visible
         if self.hotkey_overlay.as_ref().is_some_and(|o| o.is_visible()) {
             match (key.modifiers, key.code) {
-                (KeyModifiers::NONE, KeyCode::Char('?')) | (KeyModifiers::NONE, KeyCode::Esc) => {
+                (KeyModifiers::NONE | KeyModifiers::SHIFT, KeyCode::Char('?'))
+                | (KeyModifiers::NONE, KeyCode::Esc) => {
                     self.hotkey_overlay = None;
                     return;
                 }

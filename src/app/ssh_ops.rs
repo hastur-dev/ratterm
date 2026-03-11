@@ -2,6 +2,8 @@
 
 use tracing::{debug, info, warn};
 
+use crate::ssh::status_checker::{StatusChecker, StatusTarget};
+
 use crate::ui::{popup::PopupKind, ssh_manager::SSHManagerMode};
 
 use super::{App, AppMode};
@@ -22,9 +24,18 @@ impl App {
         // Create or update the SSH manager selector
         let mut selector = self.ssh_manager.take().unwrap_or_default();
         selector.update_from_list(&self.ssh_hosts);
+
+        // Apply cached connection statuses from daemon/health metrics
+        for (&host_id, &status) in &self.host_statuses {
+            selector.set_host_status(host_id, status);
+        }
+
         selector.set_mode(SSHManagerMode::List);
         selector.clear_error();
         self.ssh_manager = Some(selector);
+
+        // Spawn background status checks for hosts without a known status.
+        self.start_status_checks();
 
         // Show the popup
         self.popup.set_kind(PopupKind::SSHManager);
@@ -213,6 +224,54 @@ impl App {
     pub fn show_ssh_add_host(&mut self) {
         if let Some(ref mut manager) = self.ssh_manager {
             manager.set_mode(SSHManagerMode::AddHost);
+        }
+    }
+
+    /// Spawns background TCP status checks for all loaded hosts.
+    ///
+    /// Skips hosts that already have a cached status in `host_statuses`.
+    fn start_status_checks(&mut self) {
+        let targets: Vec<StatusTarget> = self
+            .ssh_hosts
+            .hosts()
+            .filter(|h| !self.host_statuses.contains_key(&h.id))
+            .map(|h| StatusTarget::new(h.id, h.hostname.clone(), h.port))
+            .collect();
+
+        if targets.is_empty() {
+            debug!("start_status_checks: all hosts already have cached statuses");
+            return;
+        }
+
+        info!(
+            "start_status_checks: checking {} hosts in background",
+            targets.len()
+        );
+        self.status_checker = Some(StatusChecker::new(targets));
+    }
+
+    /// Drains results from the background status checker into
+    /// `host_statuses` and pushes them to the SSH manager display.
+    pub(crate) fn poll_status_checker(&mut self) {
+        let Some(ref checker) = self.status_checker else {
+            return;
+        };
+
+        let results = checker.poll_results();
+        let is_done = checker.is_complete();
+
+        // Apply results to cache + SSH manager
+        for (host_id, status) in results {
+            self.host_statuses.insert(host_id, status);
+
+            if let Some(ref mut manager) = self.ssh_manager {
+                manager.set_host_status(host_id, status);
+            }
+        }
+
+        // Clean up once all threads have finished and results drained
+        if is_done {
+            self.status_checker = None;
         }
     }
 }

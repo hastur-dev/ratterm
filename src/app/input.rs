@@ -29,7 +29,8 @@ impl App {
         let dominated_key = key.code == KeyCode::Esc
             || key.modifiers.contains(KeyModifiers::CONTROL)
             || key.modifiers.contains(KeyModifiers::ALT)
-            || key.modifiers.contains(KeyModifiers::SHIFT);
+            || (key.modifiers.contains(KeyModifiers::SHIFT)
+                && !matches!(key.code, KeyCode::Char(_)));
 
         if key.kind != KeyEventKind::Press {
             if key.kind == KeyEventKind::Release && dominated_key {
@@ -686,5 +687,183 @@ impl App {
             }
             _ => {}
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers};
+
+    /// Helper: determines whether a key event should be accepted by the
+    /// input filter (i.e., not early-returned). This mirrors the logic in
+    /// `App::handle_key` without needing a full `App` instance.
+    fn should_accept_key(key: &KeyEvent) -> bool {
+        let dominated_key = key.code == KeyCode::Esc
+            || key.modifiers.contains(KeyModifiers::CONTROL)
+            || key.modifiers.contains(KeyModifiers::ALT)
+            || (key.modifiers.contains(KeyModifiers::SHIFT)
+                && !matches!(key.code, KeyCode::Char(_)));
+
+        if key.kind != KeyEventKind::Press {
+            if key.kind == KeyEventKind::Release && dominated_key {
+                return true; // accepted via workaround
+            }
+            return false; // filtered out
+        }
+        true // Press events always accepted
+    }
+
+    fn make_key(code: KeyCode, mods: KeyModifiers, kind: KeyEventKind) -> KeyEvent {
+        KeyEvent {
+            code,
+            modifiers: mods,
+            kind,
+            state: KeyEventState::NONE,
+        }
+    }
+
+    // ================================================================
+    // Press events should always be accepted
+    // ================================================================
+
+    #[test]
+    fn test_press_plain_char_accepted() {
+        let key = make_key(KeyCode::Char('a'), KeyModifiers::NONE, KeyEventKind::Press);
+        assert!(should_accept_key(&key));
+    }
+
+    #[test]
+    fn test_press_shifted_char_accepted() {
+        let key = make_key(
+            KeyCode::Char('A'),
+            KeyModifiers::SHIFT,
+            KeyEventKind::Press,
+        );
+        assert!(should_accept_key(&key));
+    }
+
+    #[test]
+    fn test_press_ctrl_char_accepted() {
+        let key = make_key(
+            KeyCode::Char('c'),
+            KeyModifiers::CONTROL,
+            KeyEventKind::Press,
+        );
+        assert!(should_accept_key(&key));
+    }
+
+    #[test]
+    fn test_press_esc_accepted() {
+        let key = make_key(KeyCode::Esc, KeyModifiers::NONE, KeyEventKind::Press);
+        assert!(should_accept_key(&key));
+    }
+
+    // ================================================================
+    // Release events for shifted chars must be REJECTED (the bug fix)
+    // ================================================================
+
+    #[test]
+    fn test_release_shifted_char_rejected() {
+        let key = make_key(
+            KeyCode::Char('A'),
+            KeyModifiers::SHIFT,
+            KeyEventKind::Release,
+        );
+        assert!(
+            !should_accept_key(&key),
+            "Release of Shift+Char must be filtered to prevent double input"
+        );
+    }
+
+    #[test]
+    fn test_release_plain_char_rejected() {
+        let key = make_key(
+            KeyCode::Char('a'),
+            KeyModifiers::NONE,
+            KeyEventKind::Release,
+        );
+        assert!(!should_accept_key(&key));
+    }
+
+    // ================================================================
+    // Release events for dominated keys should still be accepted
+    // (plink workaround)
+    // ================================================================
+
+    #[test]
+    fn test_release_esc_accepted() {
+        let key = make_key(KeyCode::Esc, KeyModifiers::NONE, KeyEventKind::Release);
+        assert!(
+            should_accept_key(&key),
+            "Release of Esc should be accepted (plink workaround)"
+        );
+    }
+
+    #[test]
+    fn test_release_ctrl_char_accepted() {
+        let key = make_key(
+            KeyCode::Char('c'),
+            KeyModifiers::CONTROL,
+            KeyEventKind::Release,
+        );
+        assert!(
+            should_accept_key(&key),
+            "Release of Ctrl+Char should be accepted (plink workaround)"
+        );
+    }
+
+    #[test]
+    fn test_release_alt_char_accepted() {
+        let key = make_key(
+            KeyCode::Char('x'),
+            KeyModifiers::ALT,
+            KeyEventKind::Release,
+        );
+        assert!(
+            should_accept_key(&key),
+            "Release of Alt+Char should be accepted (plink workaround)"
+        );
+    }
+
+    #[test]
+    fn test_release_shift_tab_accepted() {
+        let key = make_key(KeyCode::Tab, KeyModifiers::SHIFT, KeyEventKind::Release);
+        assert!(
+            should_accept_key(&key),
+            "Release of Shift+Tab should be accepted (non-char shifted key)"
+        );
+    }
+
+    #[test]
+    fn test_release_shift_backtab_accepted() {
+        let key = make_key(
+            KeyCode::BackTab,
+            KeyModifiers::SHIFT,
+            KeyEventKind::Release,
+        );
+        assert!(
+            should_accept_key(&key),
+            "Release of Shift+BackTab should be accepted"
+        );
+    }
+
+    // ================================================================
+    // Repeat events should be filtered out
+    // ================================================================
+
+    #[test]
+    fn test_repeat_plain_char_rejected() {
+        let key = make_key(KeyCode::Char('a'), KeyModifiers::NONE, KeyEventKind::Repeat);
+        assert!(!should_accept_key(&key));
+    }
+
+    #[test]
+    fn test_repeat_shifted_char_rejected() {
+        let key = make_key(
+            KeyCode::Char('A'),
+            KeyModifiers::SHIFT,
+            KeyEventKind::Repeat,
+        );
+        assert!(!should_accept_key(&key));
     }
 }

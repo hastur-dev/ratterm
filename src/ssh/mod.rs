@@ -16,10 +16,12 @@ pub mod collector;
 pub mod host;
 pub mod metrics;
 pub mod scanner;
+pub mod status_checker;
 pub mod storage;
 
 pub use collector::{HostCollectionInfo, MetricsCollector, build_collection_info};
 pub use host::{ConnectionStatus, JumpHostInfo, SSHCredentials, SSHHost, SSHHostList};
 pub use metrics::{DeviceMetrics, GpuMetrics, GpuType, MetricStatus};
 pub use scanner::{NetworkInterface, NetworkScanner, ScanResult};
+pub use status_checker::{StatusChecker, StatusTarget};
 pub use storage::{SSHStorage, StorageError, StorageMode};

@@ -1074,4 +1074,71 @@ mod tests {
         assert_eq!(passwords.len(), 1);
         assert_eq!(passwords[0], "password1");
     }
+
+    // ==================== Scan Display Name Tests ====================
+
+    /// Simulates the auth scan flow: when a hostname is discovered,
+    /// add_host_with_name sets it as the display name.
+    #[test]
+    fn test_add_host_with_name_sets_display_name() {
+        let mut list = SSHHostList::new();
+        let id = list
+            .add_host_with_name(
+                "192.168.1.50".to_string(),
+                22,
+                "ubuntu-server".to_string(),
+            )
+            .unwrap();
+
+        let host = list.get_by_id(id).unwrap();
+        assert_eq!(host.hostname, "192.168.1.50");
+        assert_eq!(host.display_name, Some("ubuntu-server".to_string()));
+        assert_eq!(host.display(), "ubuntu-server");
+    }
+
+    /// When no hostname is discovered, add_host leaves display_name
+    /// as None and display() falls back to the IP address.
+    #[test]
+    fn test_add_host_without_name_falls_back_to_ip() {
+        let mut list = SSHHostList::new();
+        let id = list.add_host("192.168.1.50".to_string(), 22).unwrap();
+
+        let host = list.get_by_id(id).unwrap();
+        assert_eq!(host.hostname, "192.168.1.50");
+        assert!(host.display_name.is_none());
+        assert_eq!(host.display(), "192.168.1.50");
+    }
+
+    /// Simulates the exact decision in handle_auth_success_result:
+    /// if hostname is Some, use add_host_with_name; else use add_host.
+    #[test]
+    fn test_scan_result_display_name_decision() {
+        let mut list = SSHHostList::new();
+
+        // Case 1: hostname discovered
+        let hostname_a: Option<String> = Some("raspberry-pi".to_string());
+        let id_a = if let Some(ref name) = hostname_a {
+            list.add_host_with_name("10.0.0.1".to_string(), 22, name.clone())
+        } else {
+            list.add_host("10.0.0.1".to_string(), 22)
+        }
+        .unwrap();
+
+        // Case 2: no hostname discovered
+        let hostname_b: Option<String> = None;
+        let id_b = if let Some(ref name) = hostname_b {
+            list.add_host_with_name("10.0.0.2".to_string(), 22, name.clone())
+        } else {
+            list.add_host("10.0.0.2".to_string(), 22)
+        }
+        .unwrap();
+
+        let host_a = list.get_by_id(id_a).unwrap();
+        assert_eq!(host_a.display(), "raspberry-pi");
+        assert_eq!(host_a.hostname, "10.0.0.1");
+
+        let host_b = list.get_by_id(id_b).unwrap();
+        assert_eq!(host_b.display(), "10.0.0.2");
+        assert_eq!(host_b.hostname, "10.0.0.2");
+    }
 }

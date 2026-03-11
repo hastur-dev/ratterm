@@ -87,7 +87,7 @@ fn handle_container_list_key(key: &KeyEvent) -> LogAction {
         // Close
         (KeyModifiers::NONE, KeyCode::Esc) => LogAction::Close,
         // Help
-        (KeyModifiers::NONE, KeyCode::Char('?')) => LogAction::ShowHelp,
+        (KeyModifiers::NONE | KeyModifiers::SHIFT, KeyCode::Char('?')) => LogAction::ShowHelp,
         _ => LogAction::None,
     }
 }
@@ -125,7 +125,7 @@ fn handle_streaming_key(key: &KeyEvent) -> LogAction {
             LogAction::Close
         }
         // Help
-        (KeyModifiers::NONE, KeyCode::Char('?')) => LogAction::ShowHelp,
+        (KeyModifiers::NONE | KeyModifiers::SHIFT, KeyCode::Char('?')) => LogAction::ShowHelp,
         _ => LogAction::None,
     }
 }
@@ -176,7 +176,7 @@ fn handle_saved_searches_key(key: &KeyEvent) -> LogAction {
         // Close
         (KeyModifiers::NONE, KeyCode::Esc) => LogAction::Close,
         // Help
-        (KeyModifiers::NONE, KeyCode::Char('?')) => LogAction::ShowHelp,
+        (KeyModifiers::NONE | KeyModifiers::SHIFT, KeyCode::Char('?')) => LogAction::ShowHelp,
         _ => LogAction::None,
     }
 }
@@ -254,6 +254,39 @@ mod tests {
     fn test_container_list_help() {
         assert_eq!(
             handle_log_input(LogViewMode::ContainerList, &key(KeyCode::Char('?'))),
+            LogAction::ShowHelp
+        );
+    }
+
+    #[test]
+    fn test_container_list_help_with_shift() {
+        assert_eq!(
+            handle_log_input(
+                LogViewMode::ContainerList,
+                &key_mod(KeyCode::Char('?'), KeyModifiers::SHIFT)
+            ),
+            LogAction::ShowHelp
+        );
+    }
+
+    #[test]
+    fn test_streaming_help_with_shift() {
+        assert_eq!(
+            handle_log_input(
+                LogViewMode::Streaming,
+                &key_mod(KeyCode::Char('?'), KeyModifiers::SHIFT)
+            ),
+            LogAction::ShowHelp
+        );
+    }
+
+    #[test]
+    fn test_saved_searches_help_with_shift() {
+        assert_eq!(
+            handle_log_input(
+                LogViewMode::SavedSearches,
+                &key_mod(KeyCode::Char('?'), KeyModifiers::SHIFT)
+            ),
             LogAction::ShowHelp
         );
     }
