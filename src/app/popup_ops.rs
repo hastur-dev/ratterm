@@ -401,7 +401,8 @@ impl App {
             | PopupKind::SSHMasterPassword
             | PopupKind::SSHSubnetEntry
             | PopupKind::DockerManager
-            | PopupKind::HealthDashboard => {
+            | PopupKind::HealthDashboard
+            | PopupKind::GitDashboard => {
                 // These popups handle their own Enter actions
                 self.hide_popup();
             }

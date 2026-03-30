@@ -5,7 +5,9 @@ use ratatui::style::{Color, Style};
 use tracing::debug;
 
 use crate::ui::{
+    debug_panel::DebugPanelWidget,
     docker_manager::DockerManagerWidget,
+    git_dashboard::GitDashboardWidget,
     editor_tabs::EditorTabBar,
     editor_widget::EditorWidget,
     file_picker::{FilePickerWidget, RemoteFilePickerWidget},
@@ -192,6 +194,9 @@ impl App {
             self.render_popup(frame, area);
         }
 
+        // Render LSP overlays (hover, references, code actions, symbols, signature, diagnostics)
+        self.render_lsp_overlays(frame, area);
+
         // Render hotkey overlay on top of everything
         if let Some(ref overlay) = self.hotkey_overlay {
             if overlay.is_visible() {
@@ -235,6 +240,128 @@ impl App {
                     ed_chars.trim_end()
                 );
             }
+        }
+    }
+
+    /// Renders LSP overlay widgets (hover, references, code actions, etc.).
+    fn render_lsp_overlays(&self, frame: &mut ratatui::Frame, screen: ratatui::layout::Rect) {
+        // Hover popup
+        if let Some(ref hover) = self.lsp_hover {
+            use crate::ui::lsp_hover::LspHoverWidget;
+            let (cx, cy) = self.lsp_hover_cursor;
+            let widget = LspHoverWidget::new(hover, cx, cy);
+            let popup_area = widget.calculate_area(screen);
+            widget.render_in_area(popup_area, frame.buffer_mut());
+        }
+
+        // Signature help
+        if let Some(ref sig) = self.lsp_signature_help {
+            use crate::ui::lsp_signature::LspSignatureWidget;
+            let (cx, cy) = self.lsp_hover_cursor;
+            let widget = LspSignatureWidget::new(sig, cx, cy);
+            let popup_area = widget.calculate_area(screen);
+            widget.render_in_area(popup_area, frame.buffer_mut());
+        }
+
+        // References panel (takes half the screen)
+        if let Some(ref groups) = self.lsp_references {
+            use crate::ui::lsp_references::LspReferencesWidget;
+            use ratatui::widgets::Widget as _;
+            let panel_area = ratatui::layout::Rect::new(
+                screen.width / 4,
+                screen.height / 4,
+                screen.width / 2,
+                screen.height / 2,
+            );
+            let widget = LspReferencesWidget::new(
+                groups,
+                self.lsp_references_selected,
+                self.lsp_references_scroll,
+            );
+            widget.render(panel_area, frame.buffer_mut());
+        }
+
+        // Code actions popup
+        if let Some(ref actions) = self.lsp_code_actions {
+            use crate::ui::lsp_actions::LspActionsWidget;
+            let (cx, cy) = self.lsp_hover_cursor;
+            let widget = LspActionsWidget::new(actions, self.lsp_code_action_selected);
+            let popup_area = widget.calculate_area(cx, cy, screen);
+            widget.render_in_area(popup_area, frame.buffer_mut());
+        }
+
+        // Document symbols panel
+        if let Some(ref symbols) = self.lsp_document_symbols {
+            use crate::ui::lsp_symbols::LspDocumentSymbolsWidget;
+            use ratatui::widgets::Widget as _;
+            let panel_area = ratatui::layout::Rect::new(
+                screen.width / 4,
+                screen.height / 4,
+                screen.width / 2,
+                screen.height / 2,
+            );
+            let widget = LspDocumentSymbolsWidget::new(
+                symbols,
+                self.lsp_symbols_selected,
+                self.lsp_symbols_scroll,
+            );
+            widget.render(panel_area, frame.buffer_mut());
+        }
+
+        // Workspace symbols panel
+        if let Some(ref symbols) = self.lsp_workspace_symbols {
+            use crate::ui::lsp_symbols::LspWorkspaceSymbolsWidget;
+            use ratatui::widgets::Widget as _;
+            let panel_area = ratatui::layout::Rect::new(
+                screen.width / 4,
+                screen.height / 4,
+                screen.width / 2,
+                screen.height / 2,
+            );
+            let widget = LspWorkspaceSymbolsWidget::new(
+                symbols,
+                self.lsp_workspace_selected,
+                0,
+                &self.lsp_workspace_query,
+            );
+            widget.render(panel_area, frame.buffer_mut());
+        }
+
+        // Diagnostics panel (bottom quarter of screen)
+        if self.lsp_diagnostics_panel_visible {
+            use crate::ui::lsp_diagnostics::LspDiagnosticsWidget;
+            use ratatui::widgets::Widget as _;
+            let all_diags = self.diagnostic_store.all();
+            let panel_area = ratatui::layout::Rect::new(
+                0,
+                screen.height * 3 / 4,
+                screen.width,
+                screen.height / 4,
+            );
+            let widget = LspDiagnosticsWidget::new(
+                &all_diags,
+                self.lsp_diagnostics_selected,
+                self.lsp_diagnostics_scroll,
+            );
+            widget.render(panel_area, frame.buffer_mut());
+        }
+
+        // Rename input popup
+        if let Some(ref rename_text) = self.lsp_rename_input {
+            use ratatui::widgets::{Block, Borders, Clear, Paragraph, Widget as _};
+            let width = 40u16.min(screen.width);
+            let height = 3u16;
+            let x = screen.width.saturating_sub(width) / 2;
+            let y = screen.height.saturating_sub(height) / 2;
+            let popup_area = ratatui::layout::Rect::new(x, y, width, height);
+            Clear.render(popup_area, frame.buffer_mut());
+            let block = Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Cyan))
+                .title(" Rename ");
+            let content = format!("{rename_text}_");
+            let p = Paragraph::new(content).block(block);
+            p.render(popup_area, frame.buffer_mut());
         }
     }
 
@@ -563,12 +690,41 @@ impl App {
             let tab_bar = EditorTabBar::new(&editor_tabs).focused(is_focused);
             frame.render_widget(tab_bar, editor_chunks[0]);
 
-            // Render editor content with completion suggestion
-            let widget = EditorWidget::new(&self.editor)
-                .focused(is_focused)
-                .theme(&self.config.theme_manager.current().editor)
-                .suggestion(self.completion_suggestion());
-            frame.render_widget(widget, editor_chunks[1]);
+            // Split editor area for debug panel if active
+            let show_debug_panel = self.debug_panel_visible
+                && self.debug_session.is_some();
+            let bp_lines = self.current_file_breakpoints();
+
+            if show_debug_panel {
+                // Split: editor on top, debug panel on bottom
+                let split = Layout::default()
+                    .direction(Direction::Vertical)
+                    .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
+                    .split(editor_chunks[1]);
+
+                let widget = EditorWidget::new(&self.editor)
+                    .focused(is_focused)
+                    .theme(&self.config.theme_manager.current().editor)
+                    .suggestion(self.completion_suggestion())
+                    .git_gutter(&self.git_gutter)
+                    .breakpoints(&bp_lines);
+                frame.render_widget(widget, split[0]);
+
+                // Render debug panel
+                if let Some(ref session) = self.debug_session {
+                    let debug_widget = DebugPanelWidget::new(session);
+                    frame.render_widget(debug_widget, split[1]);
+                }
+            } else {
+                // Render editor content with completion suggestion and git gutter
+                let widget = EditorWidget::new(&self.editor)
+                    .focused(is_focused)
+                    .theme(&self.config.theme_manager.current().editor)
+                    .suggestion(self.completion_suggestion())
+                    .git_gutter(&self.git_gutter)
+                    .breakpoints(&bp_lines);
+                frame.render_widget(widget, editor_chunks[1]);
+            }
         }
     }
 
@@ -618,6 +774,17 @@ impl App {
 
         if !final_message.is_empty() && final_message != self.status {
             status_bar = status_bar.message(&final_message);
+        }
+
+        // Add debug state indicator if debugging
+        let debug_msg;
+        if let Some(debug_text) = self.debug_status_text() {
+            debug_msg = if final_message.is_empty() {
+                debug_text
+            } else {
+                format!("{} {}", debug_text, final_message)
+            };
+            status_bar = status_bar.message(&debug_msg);
         }
 
         // Add background process indicators
@@ -682,6 +849,11 @@ impl App {
             // Use special widget for Docker manager
             let pos = self.config.window_position("docker_manager");
             let widget = DockerManagerWidget::new(manager).position(pos);
+            frame.render_widget(widget, area);
+        } else if let Some(ref dashboard) = self.git_dashboard {
+            // Use special widget for Git dashboard
+            let pos = self.config.window_position("git_dashboard");
+            let widget = GitDashboardWidget::new(dashboard).position(pos);
             frame.render_widget(widget, area);
         } else if self.popup.kind().is_keybinding_notification() {
             // Use special widget for Windows 11 keybinding notification

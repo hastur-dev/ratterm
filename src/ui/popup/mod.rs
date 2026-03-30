@@ -72,6 +72,8 @@ pub enum PopupKind {
     KeybindingChangeNotification,
     /// SSH Health Dashboard for monitoring SSH hosts.
     HealthDashboard,
+    /// Git Dashboard for git operations.
+    GitDashboard,
 }
 
 impl PopupKind {
@@ -100,6 +102,7 @@ impl PopupKind {
             Self::DockerManager => "Docker Manager",
             Self::KeybindingChangeNotification => "Windows 11 Keybinding Change",
             Self::HealthDashboard => "SSH Health Dashboard",
+            Self::GitDashboard => "Git Dashboard",
         }
     }
 
@@ -128,6 +131,7 @@ impl PopupKind {
             Self::DockerManager => "",
             Self::KeybindingChangeNotification => "",
             Self::HealthDashboard => "",
+            Self::GitDashboard => "",
         }
     }
 
@@ -232,6 +236,12 @@ impl PopupKind {
     #[must_use]
     pub fn is_health_dashboard(&self) -> bool {
         matches!(self, Self::HealthDashboard)
+    }
+
+    /// Returns true if this popup is the git dashboard.
+    #[must_use]
+    pub fn is_git_dashboard(&self) -> bool {
+        matches!(self, Self::GitDashboard)
     }
 }
 

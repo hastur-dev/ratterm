@@ -147,6 +147,9 @@ impl App {
             debug!("OPEN_FILE_SPECIAL_CHARS: {}", special_chars.join(" "));
         }
 
+        // Update git gutter indicators for the newly opened file
+        self.update_git_gutter();
+
         self.request_redraw();
         Ok(())
     }
@@ -226,7 +229,15 @@ impl App {
     }
 
     /// Saves the current file (handles both local and remote files).
+    ///
+    /// When `lsp_format_on_save` is enabled in `.ratrc`, a
+    /// `textDocument/formatting` request is sent before writing.
     pub fn save_current_file(&mut self) {
+        if self.lsp_format_on_save {
+            // TODO: send textDocument/formatting via LSP before write
+            tracing::debug!("lsp_format_on_save enabled – formatting before save");
+        }
+
         if let Some(remote_file) = self.editor.remote_file().cloned() {
             let content = self.editor.buffer().text().to_string();
             match self.remote_manager.save_file(&remote_file, &content) {

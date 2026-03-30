@@ -11,8 +11,11 @@ use ratatui::{
 use tracing::debug;
 use unicode_width::UnicodeWidthChar;
 
+use std::collections::HashMap;
+
 use super::ghost_text::GhostTextWidget;
 use crate::editor::{Editor, EditorMode};
+use crate::git::gutter::GutterMark;
 use crate::theme::EditorTheme;
 
 /// Editor widget for rendering.
@@ -25,6 +28,10 @@ pub struct EditorWidget<'a> {
     theme: Option<&'a EditorTheme>,
     /// Completion suggestion to display as ghost text.
     suggestion: Option<&'a str>,
+    /// Git gutter marks (line index -> mark).
+    git_gutter: Option<&'a HashMap<usize, GutterMark>>,
+    /// Breakpoint lines (0-based line indices).
+    breakpoint_lines: Option<&'a [usize]>,
 }
 
 impl<'a> EditorWidget<'a> {
@@ -36,6 +43,8 @@ impl<'a> EditorWidget<'a> {
             focused: false,
             theme: None,
             suggestion: None,
+            git_gutter: None,
+            breakpoint_lines: None,
         }
     }
 
@@ -50,6 +59,24 @@ impl<'a> EditorWidget<'a> {
     #[must_use]
     pub fn theme(mut self, theme: &'a EditorTheme) -> Self {
         self.theme = Some(theme);
+        self
+    }
+
+    /// Sets the git gutter marks.
+    #[must_use]
+    pub fn git_gutter(mut self, marks: &'a HashMap<usize, GutterMark>) -> Self {
+        if !marks.is_empty() {
+            self.git_gutter = Some(marks);
+        }
+        self
+    }
+
+    /// Sets breakpoint lines to display in the gutter.
+    #[must_use]
+    pub fn breakpoints(mut self, lines: &'a [usize]) -> Self {
+        if !lines.is_empty() {
+            self.breakpoint_lines = Some(lines);
+        }
         self
     }
 
@@ -98,12 +125,33 @@ impl<'a> EditorWidget<'a> {
                     cell.set_style(style);
                 }
             }
-            // Clear separator column (between gutter and text content)
+            // Separator column — also used for git gutter marks
             let sep_x = area.x + gutter_width as u16;
             let y = area.y + row;
+            let line_idx = view.scroll_top() + row as usize;
+            let git_mark = self
+                .git_gutter
+                .and_then(|marks| marks.get(&line_idx));
+
             if let Some(cell) = buf.cell_mut((sep_x, y)) {
-                cell.set_char('│');
-                cell.set_style(separator_style);
+                match git_mark {
+                    Some(GutterMark::Added) => {
+                        cell.set_char('▎');
+                        cell.set_style(Style::default().fg(Color::Green).bg(text_bg));
+                    }
+                    Some(GutterMark::Modified) => {
+                        cell.set_char('▎');
+                        cell.set_style(Style::default().fg(Color::Yellow).bg(text_bg));
+                    }
+                    Some(GutterMark::Deleted) => {
+                        cell.set_char('▁');
+                        cell.set_style(Style::default().fg(Color::Red).bg(text_bg));
+                    }
+                    None => {
+                        cell.set_char('│');
+                        cell.set_style(separator_style);
+                    }
+                }
             }
         }
 
@@ -123,6 +171,11 @@ impl<'a> EditorWidget<'a> {
                     cell.set_style(Style::default().fg(line_num_fg));
                 }
             } else {
+                // Check if this line has a breakpoint
+                let has_breakpoint = self
+                    .breakpoint_lines
+                    .map_or(false, |lines| lines.contains(&line_idx));
+
                 // Render line number
                 let line_num = format!("{:>width$} ", line_idx + 1, width = gutter_width - 1);
                 let line_style = if line_idx == cursor_line {
@@ -140,6 +193,16 @@ impl<'a> EditorWidget<'a> {
                     if let Some(cell) = buf.cell_mut((x, y)) {
                         cell.set_char(c);
                         cell.set_style(line_style);
+                    }
+                }
+
+                // Render breakpoint marker in first column of gutter
+                if has_breakpoint {
+                    let bp_x = area.x;
+                    let y = area.y + screen_row as u16;
+                    if let Some(cell) = buf.cell_mut((bp_x, y)) {
+                        cell.set_char('\u{25CF}'); // ●
+                        cell.set_style(Style::default().fg(Color::Red).bg(gutter_bg));
                     }
                 }
             }

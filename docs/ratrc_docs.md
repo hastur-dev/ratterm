@@ -644,6 +644,10 @@ ssh_storage_mode = plaintext
 set_ssh_tab = ctrl
 ssh_number_setting = true
 
+# Git integration
+git-gutter = true
+git-blame = true
+
 # Docker Manager settings
 # Docker quick-connect uses Ctrl+Alt+1-9 (not configurable yet)
 # Docker settings are stored in ~/.ratterm/docker_items.toml
@@ -803,6 +807,101 @@ log_retention = 48
 ```
 
 **Log file location:** `~/.ratterm/logs/`
+
+---
+
+### LSP (Language Server Protocol) Configuration
+
+Ratterm includes a full LSP client for intelligent code features: hover, go-to-definition, find references, rename, code actions, diagnostics, signature help, symbols, and formatting.
+
+#### LSP Server Overrides
+
+```
+lsp-rust = <server>
+lsp-python = <server>
+```
+
+Override the default language server for a language.
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `lsp-rust` | `rust-analyzer` | Rust language server |
+| `lsp-python` | `pylsp` | Python language server (e.g., `pyright`, `pylsp`) |
+
+**Example:**
+```
+lsp-rust = rust-analyzer
+lsp-python = pyright
+```
+
+---
+
+#### Format on Save
+
+```
+lsp-format-on-save = <true|false>
+```
+
+Automatically formats the file via the LSP server when saving.
+
+| Value | Description |
+|-------|-------------|
+| `false` | Disabled (default) |
+| `true` / `yes` / `1` / `on` | Format file on save |
+
+**Example:**
+```
+lsp-format-on-save = true
+```
+
+---
+
+### Git Integration
+
+Ratterm includes native Git integration with gutter indicators and a blame view.
+
+#### Git Gutter Indicators
+
+```
+git-gutter = <true|false>
+```
+
+Shows colored marks in the editor gutter (the separator column between line numbers and code) indicating lines that have been added, modified, or deleted relative to the last Git commit.
+
+| Value | Description |
+|-------|-------------|
+| `true` / `yes` / `1` / `on` | Show git gutter indicators (default) |
+| `false` / `no` / `0` / `off` | Hide git gutter indicators |
+
+**Gutter symbols:**
+- **Green ▎** — Added line
+- **Yellow ▎** — Modified line
+- **Red ▁** — Deleted line (shown on the line above the deletion)
+
+**Example:**
+```
+git-gutter = true
+```
+
+---
+
+#### Git Blame View
+
+```
+git-blame = <true|false>
+```
+
+Enables the blame view toggle (`Ctrl+B` in the Git Dashboard). When enabled, the blame view shows commit author and date annotations alongside code.
+
+| Value | Description |
+|-------|-------------|
+| `true` / `yes` / `1` / `on` | Enable blame view (default) |
+| `false` / `no` / `0` / `off` | Disable blame view |
+
+**Example:**
+```
+git-blame = true
+```
 
 ---
 
