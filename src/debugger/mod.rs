@@ -24,9 +24,10 @@ pub use session::DebugSession;
 pub use variables::Variable;
 
 /// Current state of the debug session.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum DebugState {
     /// No active debug session.
+    #[default]
     Idle,
     /// Debug session is running (not paused).
     Running,
@@ -39,11 +40,6 @@ pub enum DebugState {
     Stopped,
 }
 
-impl Default for DebugState {
-    fn default() -> Self {
-        Self::Idle
-    }
-}
 
 impl fmt::Display for DebugState {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
