@@ -40,7 +40,6 @@ pub enum DebugState {
     Stopped,
 }
 
-
 impl fmt::Display for DebugState {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
