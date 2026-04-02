@@ -14,6 +14,7 @@ These hotkeys work regardless of which pane is focused or what mode you're in.
 | `Ctrl+P` | Open Command Palette (non-Windows 11) |
 | `Ctrl+Shift+P` | Open Command Palette (non-Windows 11) |
 | `Ctrl+Shift+Tab` | Switch Editor Mode (cycles Vim/Emacs/Default) |
+| `Ctrl+G` | Open Git Dashboard |
 | `Ctrl+O` | Open File Browser |
 | `Ctrl+Shift+C` | Copy selection |
 | `Ctrl+V` | Paste from clipboard |
@@ -25,6 +26,40 @@ These hotkeys work regardless of which pane is focused or what mode you're in.
 | `Alt+]` | Expand split (move divider right) |
 | `Alt+Shift+Left` | Previous file tab |
 | `Alt+Shift+Right` | Next file tab |
+
+## Debugger Hotkeys
+
+These hotkeys control the integrated debugger (DAP).
+
+### Session Control
+
+| Hotkey | Action |
+|--------|--------|
+| `F5` | Continue execution / Start debug session |
+| `Shift+F5` | Stop debugging |
+| `Ctrl+Shift+F5` | Restart debugging |
+
+### Breakpoints
+
+| Hotkey | Action |
+|--------|--------|
+| `F9` | Toggle breakpoint on current line |
+
+### Stepping
+
+| Hotkey | Action |
+|--------|--------|
+| `F10` | Step over |
+| `F11` | Step into |
+| `Shift+F11` | Step out |
+
+### Debug Panel
+
+| Hotkey | Action |
+|--------|--------|
+| `Tab` | Switch panel tab (Call Stack / Variables / Console) |
+| `Up/Down` or `j/k` | Navigate items in current tab |
+| `Enter` | Expand variable / select frame |
 
 ---
 
@@ -105,6 +140,92 @@ These hotkeys work in the editor regardless of keybinding mode.
 | `Ctrl+N` | Create new file |
 | `Ctrl+Shift+N` | Create new folder |
 | `Ctrl+Space` | Accept autocomplete suggestion |
+
+### LSP Features
+
+Ratterm includes a full Language Server Protocol (LSP) client for intelligent code editing.
+
+| Hotkey | Action |
+|--------|--------|
+| `Ctrl+K` | Show hover information at cursor |
+| `F12` / `gd` (Vim) | Go to definition |
+| `Shift+F12` / `gr` (Vim) | Find all references |
+| `F2` | Rename symbol |
+| `Ctrl+.` | Show code actions (quick fixes) |
+| `Ctrl+Shift+O` | Document symbols (outline) |
+| `Ctrl+T` | Workspace symbols search |
+
+#### Hover Popup
+
+Shows type information and documentation for the symbol under the cursor.
+
+| Hotkey | Action |
+|--------|--------|
+| `Ctrl+K` | Show hover (or idle 500ms) |
+| Any key | Dismiss hover |
+
+#### References Panel
+
+Shows all references to the symbol under the cursor.
+
+| Hotkey | Action |
+|--------|--------|
+| `Up` / `k` | Previous reference |
+| `Down` / `j` | Next reference |
+| `Enter` | Jump to reference location |
+| `Esc` | Close panel |
+
+#### Code Actions
+
+Shows quick fixes and refactoring options.
+
+| Hotkey | Action |
+|--------|--------|
+| `Up` / `k` | Previous action |
+| `Down` / `j` | Next action |
+| `Enter` | Apply action |
+| `Esc` | Cancel |
+
+#### Rename
+
+Renames a symbol across all files.
+
+| Hotkey | Action |
+|--------|--------|
+| `F2` | Start rename |
+| Type text | Enter new name |
+| `Enter` | Confirm rename |
+| `Esc` | Cancel |
+
+#### Document Symbols (Outline)
+
+Shows functions, structs, enums, etc. in the current file.
+
+| Hotkey | Action |
+|--------|--------|
+| `Up` / `k` | Previous symbol |
+| `Down` / `j` | Next symbol |
+| `Enter` | Jump to symbol |
+| `Esc` | Close |
+
+#### Diagnostics
+
+Compiler errors and warnings appear as colored underlines and gutter icons.
+
+| Indicator | Meaning |
+|-----------|---------|
+| `E` (red) | Error |
+| `W` (yellow) | Warning |
+| `I` (blue) | Information |
+| `H` (green) | Hint |
+
+#### Signature Help
+
+Shows function parameter hints when typing `(` or `,`.
+
+The active parameter is highlighted in bold yellow.
+
+---
 
 ### Autocomplete
 
@@ -312,7 +433,7 @@ Opened via Command Palette > "Theme: Select Theme"
 
 ## Dashboard Navigation (Universal)
 
-All dashboards (SSH Manager, Docker Manager, Health Dashboard) share a consistent
+All dashboards (SSH Manager, Docker Manager, Health Dashboard, Git Dashboard) share a consistent
 navigation system. Press `?` in any dashboard to see the full shortcut list.
 
 | Hotkey | Action |
@@ -607,6 +728,58 @@ Open from the Docker Manager list with `l`. Provides live log streaming from con
 | `Enter` | Apply saved search |
 | `d` | Delete saved search |
 | `Esc` | Back |
+
+---
+
+## Git Dashboard
+
+The Git Dashboard provides an integrated Git interface for staging, committing, branching, and viewing diffs.
+
+### Opening Git Dashboard
+
+| Hotkey | Action |
+|--------|--------|
+| `Ctrl+G` | Open Git Dashboard |
+
+### Status View (Default)
+
+| Hotkey | Action |
+|--------|--------|
+| `Up` / `k` | Previous file |
+| `Down` / `j` | Next file |
+| `Home` | First file |
+| `End` | Last file |
+| `Tab` / `Shift+Tab` | Switch section (Staged / Unstaged / Untracked) |
+| `Enter` | View diff for selected file |
+| `Backspace` | Back to status view (from other views) |
+| `Esc` | Close dashboard |
+| `s` | Stage selected file |
+| `u` | Unstage selected file |
+| `c` | Start commit (opens commit message editor) |
+| `r` | Refresh status |
+| `p` | Stash pop |
+| `Shift+P` | Stash push |
+
+### View Switching
+
+| Hotkey | Action |
+|--------|--------|
+| `b` | Branch list view |
+| `l` | Commit log view |
+| `d` | Diff view |
+| `Ctrl+B` | Toggle blame view |
+
+### Commit Message Editor
+
+When composing a commit message (`c`):
+
+| Hotkey | Action |
+|--------|--------|
+| `Enter` | Execute commit |
+| `Esc` | Cancel commit |
+| `Ctrl+A` | Toggle amend mode |
+| Type text | Edit commit message |
+| `Backspace` | Delete character |
 
 ---
 

@@ -19,8 +19,7 @@ use std::time::Duration;
 
 /// Opens Docker Manager (F3) then presses 'l' to enter Docker Logs mode.
 fn open_docker_logs() -> TuiTestSession {
-    let mut session =
-        TuiTestSession::spawn_with_args(&["--test-keys"]).expect("Failed to spawn");
+    let mut session = TuiTestSession::spawn_with_args(&["--test-keys"]).expect("Failed to spawn");
     session.wait_startup();
 
     let _ = session.send_f3();
@@ -277,8 +276,7 @@ fn test_docker_logs_help_overlay_closes_on_second_press() {
 #[test]
 #[ignore]
 fn test_docker_manager_shows_logs_hint() {
-    let mut session =
-        TuiTestSession::spawn_with_args(&["--test-keys"]).expect("Failed to spawn");
+    let mut session = TuiTestSession::spawn_with_args(&["--test-keys"]).expect("Failed to spawn");
     session.wait_startup();
 
     let _ = session.send_f3();
@@ -300,8 +298,7 @@ fn test_docker_manager_shows_logs_hint() {
 #[test]
 #[ignore]
 fn test_docker_logs_full_roundtrip() {
-    let mut session =
-        TuiTestSession::spawn_with_args(&["--test-keys"]).expect("Failed to spawn");
+    let mut session = TuiTestSession::spawn_with_args(&["--test-keys"]).expect("Failed to spawn");
     session.wait_startup();
 
     // Open Docker Manager
@@ -328,10 +325,7 @@ fn test_docker_logs_full_roundtrip() {
 
     // Quit
     let _ = session.quit();
-    assert!(
-        !session.is_alive(),
-        "App should exit after quit"
-    );
+    assert!(!session.is_alive(), "App should exit after quit");
 }
 
 // ============================================================================
@@ -428,8 +422,7 @@ fn test_docker_logs_g_and_shift_g_no_crash() {
 #[test]
 #[ignore]
 fn test_docker_logs_multiple_open_close_cycles() {
-    let mut session =
-        TuiTestSession::spawn_with_args(&["--test-keys"]).expect("Failed to spawn");
+    let mut session = TuiTestSession::spawn_with_args(&["--test-keys"]).expect("Failed to spawn");
     session.wait_startup();
 
     for _ in 0..3 {
@@ -451,7 +444,10 @@ fn test_docker_logs_multiple_open_close_cycles() {
     }
 
     // App should still be alive and responsive
-    assert!(session.is_alive(), "App should still be alive after 3 open/close cycles");
+    assert!(
+        session.is_alive(),
+        "App should still be alive after 3 open/close cycles"
+    );
 
     let _ = session.quit();
 }

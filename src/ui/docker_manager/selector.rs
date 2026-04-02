@@ -183,9 +183,7 @@ impl DockerManagerSelector {
 
     /// Returns all containers as log info entries for the log viewer.
     #[must_use]
-    pub fn all_container_log_infos(
-        &self,
-    ) -> Vec<crate::docker_logs::types::ContainerLogInfo> {
+    pub fn all_container_log_infos(&self) -> Vec<crate::docker_logs::types::ContainerLogInfo> {
         let mut result = Vec::new();
         for c in &self.running_containers {
             result.push(crate::docker_logs::types::ContainerLogInfo {

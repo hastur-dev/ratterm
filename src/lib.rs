@@ -40,12 +40,15 @@ pub mod clipboard;
 pub mod completion;
 pub mod config;
 pub mod daemon;
+pub mod debugger;
 pub mod docker;
 pub mod docker_logs;
 pub mod editor;
 pub mod extension;
 pub mod filebrowser;
+pub mod git;
 pub mod logging;
+pub mod lsp;
 pub mod remote;
 pub mod session;
 pub mod ssh;
@@ -65,8 +68,8 @@ pub use extension::{ApprovalManager, ExtensionManager};
 pub use filebrowser::FileBrowser;
 pub use remote::{RemoteFile, RemoteFileManager};
 pub use ssh::{
-    NetworkScanner, SSHHost, SSHHostList, SSHStorage,
-    build_collection_info, HostCollectionInfo, MetricsCollector,
+    HostCollectionInfo, MetricsCollector, NetworkScanner, SSHHost, SSHHostList, SSHStorage,
+    build_collection_info,
 };
 pub use terminal::Terminal;
 pub use theme::{Theme, ThemeManager, ThemePreset};

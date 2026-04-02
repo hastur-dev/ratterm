@@ -81,10 +81,7 @@ impl DockerLogClient {
     ///
     /// # Errors
     /// Returns error if the Docker API call fails.
-    pub async fn check_access(
-        &self,
-        container_id: &str,
-    ) -> Result<AccessStatus, DockerLogsError> {
+    pub async fn check_access(&self, container_id: &str) -> Result<AccessStatus, DockerLogsError> {
         assert!(!container_id.is_empty(), "container_id must not be empty");
 
         use bollard::container::LogsOptions;
@@ -129,6 +126,7 @@ impl std::fmt::Debug for DockerLogClient {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
 

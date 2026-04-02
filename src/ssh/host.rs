@@ -1083,11 +1083,7 @@ mod tests {
     fn test_add_host_with_name_sets_display_name() {
         let mut list = SSHHostList::new();
         let id = list
-            .add_host_with_name(
-                "192.168.1.50".to_string(),
-                22,
-                "ubuntu-server".to_string(),
-            )
+            .add_host_with_name("192.168.1.50".to_string(), 22, "ubuntu-server".to_string())
             .unwrap();
 
         let host = list.get_by_id(id).unwrap();

@@ -34,10 +34,7 @@ impl LogStream {
         container_name: String,
         tail_lines: u64,
     ) -> Result<(Self, mpsc::Receiver<LogEntry>), DockerLogsError> {
-        assert!(
-            !container_id.is_empty(),
-            "container_id must not be empty"
-        );
+        assert!(!container_id.is_empty(), "container_id must not be empty");
 
         let stop_flag = Arc::new(AtomicBool::new(false));
         let (tx, rx) = mpsc::channel(1000);
@@ -51,8 +48,7 @@ impl LogStream {
         let flag = Arc::clone(&stop_flag);
 
         tokio::spawn(async move {
-            Self::stream_task(docker, container_id, container_name, tail_lines, tx, flag)
-                .await;
+            Self::stream_task(docker, container_id, container_name, tail_lines, tx, flag).await;
         });
 
         Ok((stream, rx))
@@ -88,8 +84,7 @@ impl LogStream {
 
             match result {
                 Ok(output) => {
-                    let entry =
-                        parse_log_output(&output, &container_id, &container_name);
+                    let entry = parse_log_output(&output, &container_id, &container_name);
                     if tx.send(entry).await.is_err() {
                         // Receiver dropped
                         break;
@@ -143,18 +138,22 @@ pub fn parse_log_output(
     container_name: &str,
 ) -> LogEntry {
     let (source, raw) = match output {
-        bollard::container::LogOutput::StdOut { message } => {
-            (LogSource::Stdout, String::from_utf8_lossy(message).to_string())
-        }
-        bollard::container::LogOutput::StdErr { message } => {
-            (LogSource::Stderr, String::from_utf8_lossy(message).to_string())
-        }
-        bollard::container::LogOutput::StdIn { message } => {
-            (LogSource::Stdout, String::from_utf8_lossy(message).to_string())
-        }
-        bollard::container::LogOutput::Console { message } => {
-            (LogSource::Stdout, String::from_utf8_lossy(message).to_string())
-        }
+        bollard::container::LogOutput::StdOut { message } => (
+            LogSource::Stdout,
+            String::from_utf8_lossy(message).to_string(),
+        ),
+        bollard::container::LogOutput::StdErr { message } => (
+            LogSource::Stderr,
+            String::from_utf8_lossy(message).to_string(),
+        ),
+        bollard::container::LogOutput::StdIn { message } => (
+            LogSource::Stdout,
+            String::from_utf8_lossy(message).to_string(),
+        ),
+        bollard::container::LogOutput::Console { message } => (
+            LogSource::Stdout,
+            String::from_utf8_lossy(message).to_string(),
+        ),
     };
 
     // Try to extract timestamp from the beginning of the line
@@ -197,6 +196,7 @@ fn extract_timestamp(line: &str) -> (String, String) {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
     fn make_stdout(msg: &str) -> bollard::container::LogOutput {
@@ -286,12 +286,8 @@ mod tests {
         let rt = tokio::runtime::Runtime::new().expect("runtime");
         rt.block_on(async {
             let docker = bollard::Docker::connect_with_local_defaults().expect("docker");
-            let result = LogStream::start(
-                docker,
-                "nonexistent".to_string(),
-                "test".to_string(),
-                10,
-            );
+            let result =
+                LogStream::start(docker, "nonexistent".to_string(), "test".to_string(), 10);
             assert!(result.is_ok());
         });
     }

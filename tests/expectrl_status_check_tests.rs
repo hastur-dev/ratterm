@@ -238,7 +238,10 @@ fn test_find_status_near_health_offline() {
 fn test_find_status_near_case_sensitive() {
     let screen = "10.0.0.18 Unknown";
     let health = find_status_near(screen, "10.0.0.18", HEALTH_STATUSES, 50);
-    assert!(health.is_none(), "title-case Unknown must not match UNKNOWN");
+    assert!(
+        health.is_none(),
+        "title-case Unknown must not match UNKNOWN"
+    );
 
     let ssh = find_status_near(screen, "10.0.0.18", SSH_STATUSES, 50);
     assert_eq!(ssh, Some("Unknown".to_string()));
@@ -345,11 +348,7 @@ fn test_ssh_reachability() {
     let errors = print_diag_results(&results);
     let reachable = results.iter().filter(|r| r.reachable).count();
 
-    println!(
-        "\n  Summary: {}/{} reachable",
-        reachable,
-        entries.len()
-    );
+    println!("\n  Summary: {}/{} reachable", reachable, entries.len());
 
     if !errors.is_empty() {
         println!("\n  Errors ({}):", errors.len());
@@ -402,7 +401,10 @@ fn test_health_metrics() {
     let mut collector = ratterm::MetricsCollector::new();
     collector.collect(&collection_info);
 
-    println!("  Collecting metrics ({}s timeout)...", COLLECTION_WAIT_SECS);
+    println!(
+        "  Collecting metrics ({}s timeout)...",
+        COLLECTION_WAIT_SECS
+    );
 
     // Poll until complete or timeout.
     let deadline = std::time::Instant::now() + Duration::from_secs(COLLECTION_WAIT_SECS);
@@ -452,11 +454,7 @@ fn test_health_metrics() {
         .filter(|r| r.health_status.as_deref() == Some("ONLINE"))
         .count();
 
-    println!(
-        "\n  Summary: {}/{} online",
-        online,
-        credentialed.len()
-    );
+    println!("\n  Summary: {}/{} online", online, credentialed.len());
 
     if !errors.is_empty() {
         println!("\n  Errors ({}):", errors.len());
@@ -508,8 +506,7 @@ fn test_full_status_diagnostic() {
 
     // Phase 1: TCP reachability for ALL hosts.
     println!("--- SSH Reachability (TCP port 22) ---");
-    let mut reachability: std::collections::HashMap<u32, bool> =
-        std::collections::HashMap::new();
+    let mut reachability: std::collections::HashMap<u32, bool> = std::collections::HashMap::new();
 
     for entry in &entries {
         let reachable = ratterm::NetworkScanner::check_host(&entry.hostname, entry.port);
@@ -529,11 +526,7 @@ fn test_full_status_diagnostic() {
     }
 
     let reachable_count = reachability.values().filter(|&&v| v).count();
-    println!(
-        "\n  Reachable: {}/{}\n",
-        reachable_count,
-        entries.len()
-    );
+    println!("\n  Reachable: {}/{}\n", reachable_count, entries.len());
 
     // Phase 2: Health metrics for credentialed hosts.
     let mut health_errors: Vec<String> = Vec::new();
@@ -548,10 +541,12 @@ fn test_full_status_diagnostic() {
         let mut collector = ratterm::MetricsCollector::new();
         collector.collect(&collection_info);
 
-        println!("  Collecting metrics ({}s timeout)...", COLLECTION_WAIT_SECS);
+        println!(
+            "  Collecting metrics ({}s timeout)...",
+            COLLECTION_WAIT_SECS
+        );
 
-        let deadline =
-            std::time::Instant::now() + Duration::from_secs(COLLECTION_WAIT_SECS);
+        let deadline = std::time::Instant::now() + Duration::from_secs(COLLECTION_WAIT_SECS);
         while !collector.is_collection_complete() && std::time::Instant::now() < deadline {
             std::thread::sleep(Duration::from_millis(250));
             collector.poll_results();
@@ -605,11 +600,7 @@ fn test_full_status_diagnostic() {
             })
             .count();
 
-        println!(
-            "\n  Online: {}/{}\n",
-            online,
-            credentialed.len()
-        );
+        println!("\n  Online: {}/{}\n", online, credentialed.len());
 
         collector.stop();
     }

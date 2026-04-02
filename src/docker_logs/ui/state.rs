@@ -292,8 +292,7 @@ impl DockerLogsState {
     /// Saves the current search input as a saved search.
     pub fn save_current_search(&mut self, name: String) {
         if !self.search_input.is_empty() {
-            self.search_manager
-                .add(name, self.search_input.clone());
+            self.search_manager.add(name, self.search_input.clone());
         }
     }
 
@@ -379,8 +378,7 @@ impl ListSelectable for DockerLogsState {
         match self.mode {
             LogViewMode::ContainerList => {
                 if !self.containers.is_empty() {
-                    self.selected_idx =
-                        (self.selected_idx + 1).min(self.containers.len() - 1);
+                    self.selected_idx = (self.selected_idx + 1).min(self.containers.len() - 1);
                 }
             }
             LogViewMode::Streaming | LogViewMode::Paused => {
@@ -428,8 +426,7 @@ impl ListSelectable for DockerLogsState {
                 }
             }
             LogViewMode::SavedSearches => {
-                self.saved_search_idx =
-                    self.search_manager.len().saturating_sub(1);
+                self.saved_search_idx = self.search_manager.len().saturating_sub(1);
             }
             LogViewMode::Searching => {}
         }
@@ -437,6 +434,7 @@ impl ListSelectable for DockerLogsState {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
     use crate::docker_logs::types::AccessStatus;

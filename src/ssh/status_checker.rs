@@ -6,9 +6,9 @@
 //! [`super::collector::MetricsCollector`].
 
 use std::net::{SocketAddr, TcpStream};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, TryRecvError};
-use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
@@ -91,11 +91,7 @@ impl StatusChecker {
                 }
 
                 let status = check_tcp_reachable(&target.hostname, target.port);
-                debug!(
-                    "StatusChecker: {} → {:?}",
-                    target.hostname,
-                    status.as_str()
-                );
+                debug!("StatusChecker: {} → {:?}", target.hostname, status.as_str());
 
                 let _ = tx.send((target.host_id, status));
             });

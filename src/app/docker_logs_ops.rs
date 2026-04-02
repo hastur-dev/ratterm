@@ -45,10 +45,7 @@ impl App {
         // Enter streaming mode in state
         if let Some(ref mut manager) = self.docker_manager {
             if let Some(ref mut state) = manager.docker_logs_state {
-                state.enter_streaming(
-                    container_id.to_string(),
-                    container_name.to_string(),
-                );
+                state.enter_streaming(container_id.to_string(), container_name.to_string());
                 state.set_status(format!("Connecting to {}...", container_name));
             }
         }

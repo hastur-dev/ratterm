@@ -78,12 +78,10 @@ impl LogDaemonManager {
     /// Sets the daemon status for a container.
     pub fn set_status(&mut self, container_id: &str, status: DaemonStatus) {
         assert!(!container_id.is_empty(), "container_id must not be empty");
-        if let Some(entry) = self.statuses.iter_mut().find(|(id, _)| id == container_id)
-        {
+        if let Some(entry) = self.statuses.iter_mut().find(|(id, _)| id == container_id) {
             entry.1 = status;
         } else {
-            self.statuses
-                .push((container_id.to_string(), status));
+            self.statuses.push((container_id.to_string(), status));
         }
     }
 

@@ -105,15 +105,17 @@ fn handle_streaming_key(key: &KeyEvent) -> LogAction {
         (KeyModifiers::NONE, KeyCode::Home) | (KeyModifiers::NONE, KeyCode::Char('g')) => {
             LogAction::NavigateFirst
         }
-        (KeyModifiers::NONE, KeyCode::End)
-        | (KeyModifiers::SHIFT, KeyCode::Char('G')) => LogAction::NavigateLast,
+        (KeyModifiers::NONE, KeyCode::End) | (KeyModifiers::SHIFT, KeyCode::Char('G')) => {
+            LogAction::NavigateLast
+        }
         (KeyModifiers::NONE, KeyCode::PageUp) => LogAction::PageUp,
         (KeyModifiers::NONE, KeyCode::PageDown) => LogAction::PageDown,
         // Pause
         (KeyModifiers::NONE, KeyCode::Char(' ')) => LogAction::TogglePause,
         // Search
-        (KeyModifiers::CONTROL, KeyCode::Char('f'))
-        | (KeyModifiers::NONE, KeyCode::Char('/')) => LogAction::StartSearch,
+        (KeyModifiers::CONTROL, KeyCode::Char('f')) | (KeyModifiers::NONE, KeyCode::Char('/')) => {
+            LogAction::StartSearch
+        }
         // Clear
         (KeyModifiers::NONE, KeyCode::Char('c')) => LogAction::ClearLogs,
         // Timestamps
@@ -148,9 +150,7 @@ fn handle_searching_key(key: &KeyEvent) -> LogAction {
         // Save current search
         (KeyModifiers::CONTROL, KeyCode::Char('s')) => LogAction::SaveSearch,
         // Character input
-        (KeyModifiers::NONE | KeyModifiers::SHIFT, KeyCode::Char(c)) => {
-            LogAction::InsertChar(c)
-        }
+        (KeyModifiers::NONE | KeyModifiers::SHIFT, KeyCode::Char(c)) => LogAction::InsertChar(c),
         _ => LogAction::None,
     }
 }
@@ -170,9 +170,7 @@ fn handle_saved_searches_key(key: &KeyEvent) -> LogAction {
         // Apply saved search
         (KeyModifiers::NONE, KeyCode::Enter) => LogAction::ApplySavedSearch,
         // Delete saved search
-        (KeyModifiers::NONE, KeyCode::Char('d') | KeyCode::Delete) => {
-            LogAction::DeleteSavedSearch
-        }
+        (KeyModifiers::NONE, KeyCode::Char('d') | KeyCode::Delete) => LogAction::DeleteSavedSearch,
         // Close
         (KeyModifiers::NONE, KeyCode::Esc) => LogAction::Close,
         // Help

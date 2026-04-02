@@ -5,24 +5,30 @@
 mod commands;
 pub mod dashboard_hotkeys;
 pub mod dashboard_nav;
+mod debugger_ops;
 mod docker_connect;
 mod docker_logs_ops;
 mod docker_ops;
 mod extension_ops;
 mod file_ops;
+mod git_ops;
 mod health_ops;
 mod input;
+mod input_debugger;
 mod input_docker;
 mod input_docker_create;
 mod input_docker_logs;
 mod input_editor;
+mod input_git;
 mod input_health;
+mod input_lsp;
 mod input_mouse;
 mod input_ssh;
 mod input_terminal;
 pub mod input_traits;
 mod keymap;
 mod layout_ops;
+mod lsp_ops;
 mod popup_ops;
 mod render;
 mod session_ops;
@@ -48,10 +54,15 @@ use crate::clipboard::Clipboard;
 use crate::completion::CompletionHandle;
 use crate::config::{Config, KeybindingMode};
 use crate::daemon::DaemonManager;
+use crate::debugger::breakpoints::BreakpointStore;
+use crate::debugger::session::DebugSession;
 use crate::docker::{DockerItemList, DockerStorage};
 use crate::editor::Editor;
 use crate::extension::ExtensionManager;
 use crate::filebrowser::FileBrowser;
+use crate::git::BlameLine;
+use crate::git::dashboard::GitDashboard;
+use crate::git::gutter::GutterMark;
 use crate::remote::{RemoteFileBrowser, RemoteFileManager};
 use crate::ssh::{NetworkScanner, SSHHostList, SSHStorage, StatusChecker};
 use crate::terminal::{BackgroundManager, TerminalMultiplexer, pty::PtyError};
@@ -222,7 +233,64 @@ pub struct App {
     /// Active Docker log stream handle.
     pub(crate) docker_log_stream: Option<crate::docker_logs::log_stream::LogStream>,
     /// Receiver for Docker log entries from the streaming task.
-    pub(crate) docker_log_rx: Option<tokio::sync::mpsc::Receiver<crate::docker_logs::types::LogEntry>>,
+    pub(crate) docker_log_rx:
+        Option<tokio::sync::mpsc::Receiver<crate::docker_logs::types::LogEntry>>,
+    /// Git dashboard state.
+    pub(crate) git_dashboard: Option<GitDashboard>,
+    /// Git gutter indicators for the current file (line -> mark).
+    pub(crate) git_gutter: HashMap<usize, GutterMark>,
+    /// Whether git blame is active for the current file.
+    pub(crate) git_blame_active: bool,
+    /// Git blame data for the current file.
+    pub(crate) git_blame_data: Vec<BlameLine>,
+    /// Active debug session.
+    pub(crate) debug_session: Option<DebugSession>,
+    /// Breakpoint store (persisted across sessions).
+    pub(crate) breakpoint_store: BreakpointStore,
+    /// Whether the debug panel is visible.
+    pub(crate) debug_panel_visible: bool,
+    /// LSP diagnostic store for error/warning tracking.
+    pub(crate) diagnostic_store: crate::lsp::DiagnosticStore,
+    /// Active LSP hover result for display.
+    pub(crate) lsp_hover: Option<crate::lsp::hover::HoverResult>,
+    /// LSP hover cursor position for popup positioning.
+    pub(crate) lsp_hover_cursor: (u16, u16),
+    /// Active LSP references result.
+    pub(crate) lsp_references: Option<Vec<crate::lsp::references::ReferenceGroup>>,
+    /// Selected index in references panel.
+    pub(crate) lsp_references_selected: usize,
+    /// LSP references scroll offset.
+    pub(crate) lsp_references_scroll: usize,
+    /// Active LSP code actions.
+    pub(crate) lsp_code_actions: Option<Vec<crate::lsp::actions::CodeActionResult>>,
+    /// Selected code action index.
+    pub(crate) lsp_code_action_selected: usize,
+    /// Active LSP signature help.
+    pub(crate) lsp_signature_help: Option<crate::lsp::signature::SignatureHelpResult>,
+    /// Active document symbols for outline.
+    pub(crate) lsp_document_symbols: Option<Vec<crate::lsp::symbols::DocumentSymbolResult>>,
+    /// Selected document symbol index.
+    pub(crate) lsp_symbols_selected: usize,
+    /// LSP symbols scroll offset.
+    pub(crate) lsp_symbols_scroll: usize,
+    /// Active workspace symbols search results.
+    pub(crate) lsp_workspace_symbols: Option<Vec<crate::lsp::symbols::SymbolInfoResult>>,
+    /// Workspace symbols search query.
+    pub(crate) lsp_workspace_query: String,
+    /// Selected workspace symbol index.
+    pub(crate) lsp_workspace_selected: usize,
+    /// Whether the diagnostics panel is visible.
+    pub(crate) lsp_diagnostics_panel_visible: bool,
+    /// Selected diagnostic index.
+    pub(crate) lsp_diagnostics_selected: usize,
+    /// LSP diagnostics scroll offset.
+    pub(crate) lsp_diagnostics_scroll: usize,
+    /// LSP rename input state (new name being typed).
+    pub(crate) lsp_rename_input: Option<String>,
+    /// LSP rename range information.
+    pub(crate) lsp_rename_range: Option<crate::lsp::rename::RenameRange>,
+    /// Whether to format on save via LSP.
+    pub(crate) lsp_format_on_save: bool,
 }
 
 impl App {
@@ -235,6 +303,7 @@ impl App {
         assert!(rows > 0, "Rows must be positive");
 
         let config = Config::load().unwrap_or_default();
+        let lsp_format_on_save = config.lsp_format_on_save;
         let shell_path = config.shell.get_shell_path();
 
         let terminals =
@@ -308,7 +377,7 @@ impl App {
             file_browser_context: FileBrowserContext::OpenFile,
             docker_background_rx: None,
             win11_notification_shown: false,
-            completion_handle: Some(CompletionHandle::new(cwd)),
+            completion_handle: Some(CompletionHandle::new(cwd.clone())),
             completion_suggestion: None,
             health_dashboard: None,
             daemon_manager: None,
@@ -317,6 +386,34 @@ impl App {
             hotkey_overlay: None,
             docker_log_stream: None,
             docker_log_rx: None,
+            git_dashboard: None,
+            git_gutter: HashMap::new(),
+            git_blame_active: false,
+            git_blame_data: Vec::new(),
+            debug_session: None,
+            breakpoint_store: BreakpointStore::with_project_root(cwd),
+            debug_panel_visible: false,
+            diagnostic_store: crate::lsp::DiagnosticStore::new(),
+            lsp_hover: None,
+            lsp_hover_cursor: (0, 0),
+            lsp_references: None,
+            lsp_references_selected: 0,
+            lsp_references_scroll: 0,
+            lsp_code_actions: None,
+            lsp_code_action_selected: 0,
+            lsp_signature_help: None,
+            lsp_document_symbols: None,
+            lsp_symbols_selected: 0,
+            lsp_symbols_scroll: 0,
+            lsp_workspace_symbols: None,
+            lsp_workspace_query: String::new(),
+            lsp_workspace_selected: 0,
+            lsp_diagnostics_panel_visible: false,
+            lsp_diagnostics_selected: 0,
+            lsp_diagnostics_scroll: 0,
+            lsp_rename_input: None,
+            lsp_rename_range: None,
+            lsp_format_on_save,
         })
     }
 

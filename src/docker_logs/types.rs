@@ -29,7 +29,10 @@ impl LogLevel {
     /// `"level":"error"`, and bare uppercase keywords.
     #[must_use]
     pub fn parse(line: &str) -> Self {
-        assert!(!line.is_empty() || line.is_empty(), "parse accepts any line");
+        assert!(
+            !line.is_empty() || line.is_empty(),
+            "parse accepts any line"
+        );
         let upper = line.to_uppercase();
 
         // Check bracketed patterns: [ERROR], [WARN], etc.
@@ -260,14 +263,8 @@ mod tests {
 
     #[test]
     fn test_parse_bracketed_warn() {
-        assert_eq!(
-            LogLevel::parse("[WARN] potential issue"),
-            LogLevel::Warn
-        );
-        assert_eq!(
-            LogLevel::parse("[WARNING] potential issue"),
-            LogLevel::Warn
-        );
+        assert_eq!(LogLevel::parse("[WARN] potential issue"), LogLevel::Warn);
+        assert_eq!(LogLevel::parse("[WARNING] potential issue"), LogLevel::Warn);
     }
 
     #[test]
@@ -283,7 +280,10 @@ mod tests {
 
     #[test]
     fn test_parse_bracketed_trace() {
-        assert_eq!(LogLevel::parse("[TRACE] entering function"), LogLevel::Trace);
+        assert_eq!(
+            LogLevel::parse("[TRACE] entering function"),
+            LogLevel::Trace
+        );
     }
 
     #[test]

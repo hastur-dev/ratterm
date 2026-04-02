@@ -52,6 +52,11 @@ impl App {
             self.popup.kind()
         );
 
+        // Handle LSP overlays (references, code actions, symbols, rename, etc.)
+        if self.has_lsp_overlay() && self.handle_lsp_overlay_key(key) {
+            return;
+        }
+
         match self.mode {
             AppMode::Normal => {
                 tracing::info!("KEY_ROUTE: -> handle_normal_key");
@@ -102,6 +107,11 @@ impl App {
             let name = addon.name.clone();
             let command = addon.command.clone();
             self.run_addon_command(&name, &command);
+            return true;
+        }
+
+        // Handle debugger keys (F5, F9, F10, F11)
+        if self.handle_debugger_key(key) {
             return true;
         }
 
@@ -237,6 +247,11 @@ impl App {
                 if m == KeyModifiers::CONTROL | KeyModifiers::SHIFT =>
             {
                 self.show_docker_manager();
+                true
+            }
+            // Git Dashboard (Ctrl+G)
+            (KeyModifiers::CONTROL, KeyCode::Char('g')) => {
+                self.show_git_dashboard();
                 true
             }
             // Docker quick connect (Ctrl+Alt+1-9)
@@ -554,6 +569,10 @@ impl App {
             self.handle_docker_manager_key(key);
             return;
         }
+        if self.popup.kind().is_git_dashboard() {
+            self.handle_git_dashboard_key(key);
+            return;
+        }
 
         match (key.modifiers, key.code) {
             (KeyModifiers::NONE, KeyCode::Esc) => self.hide_popup(),
@@ -734,11 +753,7 @@ mod tests {
 
     #[test]
     fn test_press_shifted_char_accepted() {
-        let key = make_key(
-            KeyCode::Char('A'),
-            KeyModifiers::SHIFT,
-            KeyEventKind::Press,
-        );
+        let key = make_key(KeyCode::Char('A'), KeyModifiers::SHIFT, KeyEventKind::Press);
         assert!(should_accept_key(&key));
     }
 
@@ -814,11 +829,7 @@ mod tests {
 
     #[test]
     fn test_release_alt_char_accepted() {
-        let key = make_key(
-            KeyCode::Char('x'),
-            KeyModifiers::ALT,
-            KeyEventKind::Release,
-        );
+        let key = make_key(KeyCode::Char('x'), KeyModifiers::ALT, KeyEventKind::Release);
         assert!(
             should_accept_key(&key),
             "Release of Alt+Char should be accepted (plink workaround)"
@@ -836,11 +847,7 @@ mod tests {
 
     #[test]
     fn test_release_shift_backtab_accepted() {
-        let key = make_key(
-            KeyCode::BackTab,
-            KeyModifiers::SHIFT,
-            KeyEventKind::Release,
-        );
+        let key = make_key(KeyCode::BackTab, KeyModifiers::SHIFT, KeyEventKind::Release);
         assert!(
             should_accept_key(&key),
             "Release of Shift+BackTab should be accepted"
