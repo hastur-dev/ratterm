@@ -1,9 +1,9 @@
 //! Document and workspace symbols.
 
-use std::path::PathBuf;
-use serde_json::Value as JsonValue;
 use super::definition::uri_to_path;
 use super::hover::TextRange;
+use serde_json::Value as JsonValue;
+use std::path::PathBuf;
 
 /// Symbol kind (matches LSP SymbolKind).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

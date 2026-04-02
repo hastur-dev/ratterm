@@ -1,10 +1,10 @@
 //! Symbol rename functionality.
 
-use std::collections::BTreeMap;
-use std::path::PathBuf;
-use serde_json::Value as JsonValue;
 use super::definition::uri_to_path;
 use super::hover::TextRange;
+use serde_json::Value as JsonValue;
+use std::collections::BTreeMap;
+use std::path::PathBuf;
 
 /// Range where rename is valid.
 #[derive(Debug, Clone)]

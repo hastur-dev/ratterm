@@ -35,12 +35,7 @@ impl<'a> LspActionsWidget<'a> {
 
     /// Calculate popup area based on actions and cursor position.
     #[must_use]
-    pub fn calculate_area(
-        &self,
-        cursor_x: u16,
-        cursor_y: u16,
-        screen: Rect,
-    ) -> Rect {
+    pub fn calculate_area(&self, cursor_x: u16, cursor_y: u16, screen: Rect) -> Rect {
         assert!(screen.width > 0, "screen width must be positive");
         assert!(screen.height > 0, "screen height must be positive");
 
@@ -51,9 +46,7 @@ impl<'a> LspActionsWidget<'a> {
             .max()
             .unwrap_or(20);
         // +6 for prefix, borders, and preferred marker
-        let width = (max_title_len as u16 + 6)
-            .min(screen.width)
-            .max(MIN_WIDTH);
+        let width = (max_title_len as u16 + 6).min(screen.width).max(MIN_WIDTH);
         // +2 for borders
         let height = (self.actions.len() as u16 + 2)
             .min(screen.height)

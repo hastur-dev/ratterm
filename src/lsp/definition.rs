@@ -1,7 +1,7 @@
 //! Go-to-definition, type definition, and implementation.
 
-use std::path::PathBuf;
 use serde_json::Value as JsonValue;
+use std::path::PathBuf;
 
 /// A location result from definition/references requests.
 #[derive(Debug, Clone)]

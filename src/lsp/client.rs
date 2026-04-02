@@ -17,19 +17,17 @@ use thiserror::Error;
 use tokio::sync::{Mutex, mpsc, oneshot};
 use tracing::debug;
 
-use super::config::LspConfig;
-use super::definition::{LocationResult, path_to_uri, parse_location_response};
-use super::hover::{HoverResult, parse_hover_response};
-use super::rename::{
-    RenameRange, WorkspaceEditResult, parse_prepare_rename, parse_workspace_edit,
-};
 use super::actions::{CodeActionResult, parse_code_actions};
+use super::config::LspConfig;
+use super::definition::{LocationResult, parse_location_response, path_to_uri};
+use super::diagnostics::DiagnosticInfo;
+use super::formatting::{TextEditResult, parse_formatting_response};
+use super::hover::{HoverResult, parse_hover_response};
+use super::rename::{RenameRange, WorkspaceEditResult, parse_prepare_rename, parse_workspace_edit};
 use super::signature::{SignatureHelpResult, parse_signature_help};
 use super::symbols::{
     DocumentSymbolResult, SymbolInfoResult, parse_document_symbols, parse_workspace_symbols,
 };
-use super::formatting::{TextEditResult, parse_formatting_response};
-use super::diagnostics::DiagnosticInfo;
 use crate::completion::provider::{CompletionItem, CompletionKind};
 
 /// LSP request timeout in milliseconds.
@@ -743,9 +741,7 @@ impl LspClient {
             "position": { "line": line, "character": character }
         });
 
-        let result = self
-            .request("textDocument/typeDefinition", params)
-            .await?;
+        let result = self.request("textDocument/typeDefinition", params).await?;
         Ok(parse_location_response(result))
     }
 
@@ -765,9 +761,7 @@ impl LspClient {
             "position": { "line": line, "character": character }
         });
 
-        let result = self
-            .request("textDocument/implementation", params)
-            .await?;
+        let result = self.request("textDocument/implementation", params).await?;
         Ok(parse_location_response(result))
     }
 
@@ -813,9 +807,7 @@ impl LspClient {
             "position": { "line": line, "character": character }
         });
 
-        let result = self
-            .request("textDocument/prepareRename", params)
-            .await?;
+        let result = self.request("textDocument/prepareRename", params).await?;
         Ok(parse_prepare_rename(result))
     }
 
@@ -910,9 +902,7 @@ impl LspClient {
             "position": { "line": line, "character": character }
         });
 
-        let result = self
-            .request("textDocument/signatureHelp", params)
-            .await?;
+        let result = self.request("textDocument/signatureHelp", params).await?;
         Ok(parse_signature_help(result))
     }
 
@@ -931,17 +921,12 @@ impl LspClient {
             "textDocument": { "uri": path_to_uri(path) }
         });
 
-        let result = self
-            .request("textDocument/documentSymbol", params)
-            .await?;
+        let result = self.request("textDocument/documentSymbol", params).await?;
         Ok(parse_document_symbols(result))
     }
 
     /// Workspace symbols.
-    pub async fn workspace_symbols(
-        &self,
-        query: &str,
-    ) -> Result<Vec<SymbolInfoResult>, LspError> {
+    pub async fn workspace_symbols(&self, query: &str) -> Result<Vec<SymbolInfoResult>, LspError> {
         if !self.initialized {
             return Ok(Vec::new());
         }
@@ -1005,9 +990,7 @@ impl LspClient {
             }
         });
 
-        let result = self
-            .request("textDocument/rangeFormatting", params)
-            .await?;
+        let result = self.request("textDocument/rangeFormatting", params).await?;
         Ok(parse_formatting_response(result))
     }
 

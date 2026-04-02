@@ -1,11 +1,11 @@
 //! Diagnostics from LSP (errors, warnings, info).
 
+use super::definition::uri_to_path;
+use super::hover::TextRange;
+use serde_json::Value as JsonValue;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
-use serde_json::Value as JsonValue;
-use super::definition::uri_to_path;
-use super::hover::TextRange;
 
 /// Diagnostic severity level.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -227,10 +227,7 @@ mod tests {
     #[test]
     fn test_diagnostic_severity() {
         assert_eq!(DiagnosticSeverity::from_lsp(1), DiagnosticSeverity::Error);
-        assert_eq!(
-            DiagnosticSeverity::from_lsp(2),
-            DiagnosticSeverity::Warning
-        );
+        assert_eq!(DiagnosticSeverity::from_lsp(2), DiagnosticSeverity::Warning);
         assert_eq!(DiagnosticSeverity::Error.gutter_char(), 'E');
         assert_eq!(DiagnosticSeverity::Warning.label(), "warning");
     }

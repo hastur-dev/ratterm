@@ -19,8 +19,7 @@ impl App {
                 | (KeyModifiers::NONE | KeyModifiers::SHIFT, KeyCode::Char('?')) => {
                     self.hotkey_overlay = None;
                 }
-                (KeyModifiers::NONE, KeyCode::Down)
-                | (KeyModifiers::NONE, KeyCode::Char('j')) => {
+                (KeyModifiers::NONE, KeyCode::Down) | (KeyModifiers::NONE, KeyCode::Char('j')) => {
                     if let Some(ref mut overlay) = self.hotkey_overlay {
                         overlay.scroll_down();
                     }

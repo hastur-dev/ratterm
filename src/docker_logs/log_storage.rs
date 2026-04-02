@@ -80,11 +80,7 @@ impl LogStorage {
     ///
     /// # Errors
     /// Returns error if writing fails.
-    pub fn append(
-        &self,
-        container_id: &str,
-        entry: &LogEntry,
-    ) -> Result<(), DockerLogsError> {
+    pub fn append(&self, container_id: &str, entry: &LogEntry) -> Result<(), DockerLogsError> {
         if !self.enabled {
             return Ok(());
         }
@@ -222,8 +218,7 @@ impl LogStorage {
             return Ok(0);
         }
 
-        let cutoff = chrono::Utc::now()
-            - chrono::Duration::hours(self.retention_hours as i64);
+        let cutoff = chrono::Utc::now() - chrono::Duration::hours(self.retention_hours as i64);
         let cutoff_date = cutoff.format("%Y-%m-%d").to_string();
 
         let mut removed = 0;
@@ -244,17 +239,12 @@ impl LogStorage {
 
             for file_entry in files.flatten() {
                 let file_path = file_entry.path();
-                let file_name = file_path
-                    .file_stem()
-                    .and_then(|s| s.to_str())
-                    .unwrap_or("");
+                let file_name = file_path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
 
                 // Extract date from filename (YYYY-MM-DD.jsonl)
                 let date_part = file_name.split('.').next().unwrap_or("");
 
-                if date_part < cutoff_date.as_str()
-                    && fs::remove_file(&file_path).is_ok()
-                {
+                if date_part < cutoff_date.as_str() && fs::remove_file(&file_path).is_ok() {
                     removed += 1;
                 }
             }
@@ -476,11 +466,7 @@ mod tests {
 
     #[test]
     fn test_cleanup_nonexistent_base_path() {
-        let storage = LogStorage::with_path(
-            PathBuf::from("/nonexistent/path/for/test"),
-            true,
-            168,
-        );
+        let storage = LogStorage::with_path(PathBuf::from("/nonexistent/path/for/test"), true, 168);
         let result = storage.cleanup();
         assert!(result.is_ok());
         assert_eq!(result.expect("ok"), 0);

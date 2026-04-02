@@ -22,8 +22,7 @@ fn create_test_repo() -> TempDir {
     run_git(path, &["config", "user.name", "Test User"]);
 
     // Create initial file and commit
-    std::fs::write(path.join("hello.txt"), "Hello, world!\nLine 2\nLine 3\n")
-        .expect("write file");
+    std::fs::write(path.join("hello.txt"), "Hello, world!\nLine 2\nLine 3\n").expect("write file");
     run_git(path, &["add", "hello.txt"]);
     run_git(path, &["commit", "-m", "Initial commit"]);
 
@@ -54,7 +53,10 @@ fn run_git(dir: &Path, args: &[&str]) {
 fn test_git_status_clean_repo() {
     let dir = create_test_repo();
     let entries = git_status(dir.path()).expect("git_status");
-    assert!(entries.is_empty(), "clean repo should have no status entries");
+    assert!(
+        entries.is_empty(),
+        "clean repo should have no status entries"
+    );
 }
 
 #[test]
@@ -108,15 +110,21 @@ fn test_git_status_staged_file() {
 #[test]
 fn test_git_diff_modified_file() {
     let dir = create_test_repo();
-    std::fs::write(dir.path().join("hello.txt"), "Changed content\nLine 2\nLine 3\n")
-        .expect("write");
+    std::fs::write(
+        dir.path().join("hello.txt"),
+        "Changed content\nLine 2\nLine 3\n",
+    )
+    .expect("write");
 
     let diff = git_diff(dir.path(), None).expect("git_diff");
     assert!(
         !diff.hunks.is_empty(),
         "modified file should produce diff hunks"
     );
-    assert!(diff.additions > 0 || diff.deletions > 0, "should have changes");
+    assert!(
+        diff.additions > 0 || diff.deletions > 0,
+        "should have changes"
+    );
 }
 
 #[test]
@@ -268,7 +276,8 @@ fn test_git_commit_creates_commit() {
 
 #[test]
 fn test_detect_conflict_markers_finds_markers() {
-    let content = "normal line\n<<<<<<< HEAD\nour change\n=======\ntheir change\n>>>>>>> branch\nafter\n";
+    let content =
+        "normal line\n<<<<<<< HEAD\nour change\n=======\ntheir change\n>>>>>>> branch\nafter\n";
     let markers = detect_conflict_markers(content);
     assert_eq!(markers.len(), 3);
     assert!(markers.contains(&1)); // <<<<<<<
@@ -313,8 +322,5 @@ fn test_git_current_branch() {
     let dir = create_test_repo();
     let branch = git_current_branch(dir.path()).expect("current branch");
     // Default branch could be 'main' or 'master' depending on git config
-    assert!(
-        !branch.is_empty(),
-        "should return a branch name"
-    );
+    assert!(!branch.is_empty(), "should return a branch name");
 }

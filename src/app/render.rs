@@ -7,10 +7,10 @@ use tracing::debug;
 use crate::ui::{
     debug_panel::DebugPanelWidget,
     docker_manager::DockerManagerWidget,
-    git_dashboard::GitDashboardWidget,
     editor_tabs::EditorTabBar,
     editor_widget::EditorWidget,
     file_picker::{FilePickerWidget, RemoteFilePickerWidget},
+    git_dashboard::GitDashboardWidget,
     health_dashboard::HealthDashboardWidget,
     key_hint_bar::{KeyHint, KeyHintBar, KeyHintStyle},
     layout::FocusedPane,
@@ -691,8 +691,7 @@ impl App {
             frame.render_widget(tab_bar, editor_chunks[0]);
 
             // Split editor area for debug panel if active
-            let show_debug_panel = self.debug_panel_visible
-                && self.debug_session.is_some();
+            let show_debug_panel = self.debug_panel_visible && self.debug_session.is_some();
             let bp_lines = self.current_file_breakpoints();
 
             if show_debug_panel {

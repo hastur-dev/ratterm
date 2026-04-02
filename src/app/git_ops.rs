@@ -208,7 +208,11 @@ impl App {
     pub(crate) fn git_toggle_amend(&mut self) {
         if let Some(ref mut dashboard) = self.git_dashboard {
             dashboard.amend = !dashboard.amend;
-            let msg = if dashboard.amend { "Amend ON" } else { "Amend OFF" };
+            let msg = if dashboard.amend {
+                "Amend ON"
+            } else {
+                "Amend OFF"
+            };
             self.set_status(msg);
         }
     }
@@ -277,18 +281,13 @@ impl App {
         let cwd = self.file_browser.path().to_path_buf();
         // Try to discover a git repo from the cwd
         match git2::Repository::discover(&cwd) {
-            Ok(repo) => repo
-                .workdir()
-                .map(|p| p.display().to_string()),
+            Ok(repo) => repo.workdir().map(|p| p.display().to_string()),
             Err(_) => None,
         }
     }
 
     /// Switches the git dashboard view.
-    pub(crate) fn git_switch_view(
-        &mut self,
-        view: crate::git::dashboard::GitDashboardView,
-    ) {
+    pub(crate) fn git_switch_view(&mut self, view: crate::git::dashboard::GitDashboardView) {
         if let Some(ref mut dashboard) = self.git_dashboard {
             dashboard.view = view;
             dashboard.selected_index = 0;
@@ -338,10 +337,7 @@ impl App {
             let Some(ref dashboard) = self.git_dashboard else {
                 return;
             };
-            let Some(branch) = dashboard
-                .branch_list
-                .get(dashboard.selected_index)
-            else {
+            let Some(branch) = dashboard.branch_list.get(dashboard.selected_index) else {
                 return;
             };
             if branch.is_current {

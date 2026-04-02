@@ -72,10 +72,7 @@ fn render_container_list(state: &DockerLogsState, area: Rect, buf: &mut Buffer) 
 
         let line = Line::from(vec![
             Span::styled(format!("{} ", prefix), style),
-            Span::styled(
-                format!("{:<20}", truncate(&container.name, 20)),
-                style,
-            ),
+            Span::styled(format!("{:<20}", truncate(&container.name, 20)), style),
             Span::styled(
                 format!(" {:<15}", truncate(&container.image, 15)),
                 if is_selected {
@@ -135,22 +132,28 @@ fn render_log_stream(state: &DockerLogsState, area: Rect, buf: &mut Buffer) {
     };
 
     let chunks = Layout::vertical([
-        Constraint::Length(1),              // Header/status
-        Constraint::Min(3),                 // Log lines
-        Constraint::Length(search_height),  // Search bar (if searching)
-        Constraint::Length(1),              // Footer
+        Constraint::Length(1),             // Header/status
+        Constraint::Min(3),                // Log lines
+        Constraint::Length(search_height), // Search bar (if searching)
+        Constraint::Length(1),             // Footer
     ])
     .split(area);
 
     // Header with status
-    let container_name = state
-        .active_container_name()
-        .unwrap_or("unknown");
+    let container_name = state.active_container_name().unwrap_or("unknown");
 
     let mode_label = match state.mode() {
-        LogViewMode::Streaming => Span::styled(" LIVE ", Style::default().fg(Color::Black).bg(Color::Green)),
-        LogViewMode::Paused => Span::styled(" PAUSED ", Style::default().fg(Color::Black).bg(Color::Yellow)),
-        LogViewMode::Searching => Span::styled(" SEARCH ", Style::default().fg(Color::Black).bg(Color::Cyan)),
+        LogViewMode::Streaming => {
+            Span::styled(" LIVE ", Style::default().fg(Color::Black).bg(Color::Green))
+        }
+        LogViewMode::Paused => Span::styled(
+            " PAUSED ",
+            Style::default().fg(Color::Black).bg(Color::Yellow),
+        ),
+        LogViewMode::Searching => Span::styled(
+            " SEARCH ",
+            Style::default().fg(Color::Black).bg(Color::Cyan),
+        ),
         _ => Span::raw(""),
     };
 
@@ -167,7 +170,12 @@ fn render_log_stream(state: &DockerLogsState, area: Rect, buf: &mut Buffer) {
     let header = Line::from(vec![
         mode_label,
         Span::raw(" "),
-        Span::styled(container_name, Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            container_name,
+            Style::default()
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::styled(buffer_info, Style::default().fg(Color::Gray)),
     ]);
     Paragraph::new(header).render(chunks[0], buf);
@@ -203,13 +211,16 @@ fn render_log_stream(state: &DockerLogsState, area: Rect, buf: &mut Buffer) {
         // Log level label
         spans.push(Span::styled(
             format!("{} ", entry.level.label()),
-            Style::default().fg(level_color).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(level_color)
+                .add_modifier(Modifier::BOLD),
         ));
 
         // Message
-        let remaining_width = area.width.saturating_sub(
-            spans.iter().map(|s| s.width() as u16).sum::<u16>(),
-        ) as usize;
+        let remaining_width = area
+            .width
+            .saturating_sub(spans.iter().map(|s| s.width() as u16).sum::<u16>())
+            as usize;
         let msg = truncate(&entry.message, remaining_width);
         spans.push(Span::styled(msg, Style::default().fg(level_color)));
 
@@ -224,7 +235,9 @@ fn render_log_stream(state: &DockerLogsState, area: Rect, buf: &mut Buffer) {
             Span::styled("Filter: ", Style::default().fg(Color::Cyan)),
             Span::styled(
                 state.search_input(),
-                Style::default().fg(Color::White).add_modifier(Modifier::UNDERLINED),
+                Style::default()
+                    .fg(Color::White)
+                    .add_modifier(Modifier::UNDERLINED),
             ),
             Span::styled("_", Style::default().fg(Color::White)),
         ]);
@@ -345,9 +358,7 @@ mod tests {
 
     #[test]
     fn test_render_no_panic_empty() {
-        let state = DockerLogsState::new(
-            crate::docker_logs::config::LogStreamConfig::default(),
-        );
+        let state = DockerLogsState::new(crate::docker_logs::config::LogStreamConfig::default());
         let area = Rect::new(0, 0, 80, 24);
         let mut buf = Buffer::empty(area);
         render_docker_logs(&state, area, &mut buf);
@@ -356,9 +367,7 @@ mod tests {
 
     #[test]
     fn test_render_no_panic_small_area() {
-        let state = DockerLogsState::new(
-            crate::docker_logs::config::LogStreamConfig::default(),
-        );
+        let state = DockerLogsState::new(crate::docker_logs::config::LogStreamConfig::default());
         let area = Rect::new(0, 0, 10, 2);
         let mut buf = Buffer::empty(area);
         render_docker_logs(&state, area, &mut buf);

@@ -51,7 +51,12 @@ impl fmt::Display for DebugState {
             Self::Idle => write!(f, "Idle"),
             Self::Running => write!(f, "Running"),
             Self::Paused { frame } => {
-                write!(f, "Paused at {}:{}", frame.source_path_display(), frame.line)
+                write!(
+                    f,
+                    "Paused at {}:{}",
+                    frame.source_path_display(),
+                    frame.line
+                )
             }
             Self::Stopped => write!(f, "Stopped"),
         }

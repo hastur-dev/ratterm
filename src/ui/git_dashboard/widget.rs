@@ -8,10 +8,8 @@ use ratatui::{
     widgets::{Block, BorderType, Borders, Clear, Paragraph, Widget},
 };
 
-use crate::git::dashboard::{
-    GitDashboard, GitDashboardMode, GitDashboardView, StatusSection,
-};
 use crate::git::api::StatusKind;
+use crate::git::dashboard::{GitDashboard, GitDashboardMode, GitDashboardView, StatusSection};
 
 /// Widget for rendering the Git Dashboard popup.
 pub struct GitDashboardWidget<'a> {
@@ -100,10 +98,7 @@ impl Widget for GitDashboardWidget<'_> {
 
         // Render error if any
         if let Some(ref error) = self.dashboard.error {
-            let err_line = Line::from(Span::styled(
-                error.clone(),
-                Style::default().fg(Color::Red),
-            ));
+            let err_line = Line::from(Span::styled(error.clone(), Style::default().fg(Color::Red)));
             let err_y = popup_area.y + popup_area.height.saturating_sub(2);
             if err_y < popup_area.y + popup_area.height {
                 buf.set_line(popup_area.x + 2, err_y, &err_line, popup_area.width - 4);
@@ -123,16 +118,33 @@ fn render_status_view(dashboard: &GitDashboard, area: Rect, buf: &mut Buffer) {
 
     // Section tabs at the top
     let tab_line = Line::from(vec![
-        section_tab("Staged", dashboard.staged_files.len(), dashboard.section == StatusSection::Staged),
+        section_tab(
+            "Staged",
+            dashboard.staged_files.len(),
+            dashboard.section == StatusSection::Staged,
+        ),
         Span::raw(" | "),
-        section_tab("Unstaged", dashboard.unstaged_files.len(), dashboard.section == StatusSection::Unstaged),
+        section_tab(
+            "Unstaged",
+            dashboard.unstaged_files.len(),
+            dashboard.section == StatusSection::Unstaged,
+        ),
         Span::raw(" | "),
-        section_tab("Untracked", dashboard.untracked_files.len(), dashboard.section == StatusSection::Untracked),
+        section_tab(
+            "Untracked",
+            dashboard.untracked_files.len(),
+            dashboard.section == StatusSection::Untracked,
+        ),
     ]);
     buf.set_line(area.x, area.y, &tab_line, area.width);
 
     // File list
-    let list_area = Rect::new(area.x, area.y + 1, area.width, area.height.saturating_sub(1));
+    let list_area = Rect::new(
+        area.x,
+        area.y + 1,
+        area.width,
+        area.height.saturating_sub(1),
+    );
     let files = match dashboard.section {
         StatusSection::Staged => &dashboard.staged_files,
         StatusSection::Unstaged => &dashboard.unstaged_files,
@@ -168,10 +180,7 @@ fn render_status_view(dashboard: &GitDashboard, area: Rect, buf: &mut Buffer) {
                 if is_selected { "> " } else { "  " },
                 Style::default().fg(Color::White),
             ),
-            Span::styled(
-                format!("{} ", icon),
-                Style::default().fg(icon_color),
-            ),
+            Span::styled(format!("{} ", icon), Style::default().fg(icon_color)),
             Span::styled(
                 file.path.clone(),
                 if is_selected {
@@ -200,7 +209,12 @@ fn render_status_view(dashboard: &GitDashboard, area: Rect, buf: &mut Buffer) {
 fn section_tab(name: &str, count: usize, active: bool) -> Span<'_> {
     let label = format!("{} ({})", name, count);
     if active {
-        Span::styled(label, Style::default().fg(Color::Green).add_modifier(Modifier::BOLD | Modifier::UNDERLINED))
+        Span::styled(
+            label,
+            Style::default()
+                .fg(Color::Green)
+                .add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
+        )
     } else {
         Span::styled(label, Style::default().fg(Color::DarkGray))
     }
@@ -284,10 +298,7 @@ fn render_branch_view(dashboard: &GitDashboard, area: Rect, buf: &mut Buffer) {
                 if is_selected { "> " } else { "  " },
                 Style::default().fg(Color::White),
             ),
-            Span::styled(
-                marker.to_string(),
-                Style::default().fg(Color::Green),
-            ),
+            Span::styled(marker.to_string(), Style::default().fg(Color::Green)),
             Span::styled(
                 branch.name.clone(),
                 if branch.is_current {
@@ -317,9 +328,16 @@ fn render_diff_placeholder(dashboard: &GitDashboard, area: Rect, buf: &mut Buffe
         return;
     }
 
-    let selected = dashboard.selected_file_path().unwrap_or("(no file selected)");
+    let selected = dashboard
+        .selected_file_path()
+        .unwrap_or("(no file selected)");
     let header = Line::from(vec![
-        Span::styled("Diff: ", Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "Diff: ",
+            Style::default()
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::styled(selected.to_string(), Style::default().fg(Color::Yellow)),
     ]);
     buf.set_line(area.x, area.y, &header, area.width);
@@ -342,7 +360,7 @@ fn render_commit_form(dashboard: &GitDashboard, area: Rect, buf: &mut Buffer) {
         .constraints([
             Constraint::Length(1), // Title
             Constraint::Length(1), // Amend toggle
-            Constraint::Min(3),   // Message input
+            Constraint::Min(3),    // Message input
             Constraint::Length(1), // Help
         ])
         .split(area);

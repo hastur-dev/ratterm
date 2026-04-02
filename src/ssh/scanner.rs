@@ -629,11 +629,8 @@ impl NetworkScanner {
                                 let ip_str = ip.to_string();
                                 authenticated_hosts.push(ip_str.clone());
                                 auth_success += 1;
-                                let _ = tx.send(ScanResult::AuthSuccess(
-                                    ip_str,
-                                    22,
-                                    remote_hostname,
-                                ));
+                                let _ =
+                                    tx.send(ScanResult::AuthSuccess(ip_str, 22, remote_hostname));
                             }
                             AuthResult::ReachableNotAuthenticated => {
                                 let ip_str = ip.to_string();
@@ -803,8 +800,7 @@ impl NetworkScanner {
             .map_err(|e| format!("Failed to open known_hosts: {e}"))?;
 
         for key in keys {
-            writeln!(file, "{key}")
-                .map_err(|e| format!("Failed to write to known_hosts: {e}"))?;
+            writeln!(file, "{key}").map_err(|e| format!("Failed to write to known_hosts: {e}"))?;
         }
 
         Ok(())

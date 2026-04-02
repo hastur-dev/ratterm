@@ -129,9 +129,7 @@ impl<'a> EditorWidget<'a> {
             let sep_x = area.x + gutter_width as u16;
             let y = area.y + row;
             let line_idx = view.scroll_top() + row as usize;
-            let git_mark = self
-                .git_gutter
-                .and_then(|marks| marks.get(&line_idx));
+            let git_mark = self.git_gutter.and_then(|marks| marks.get(&line_idx));
 
             if let Some(cell) = buf.cell_mut((sep_x, y)) {
                 match git_mark {

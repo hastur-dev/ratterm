@@ -15,13 +15,13 @@ mod git_ops;
 mod health_ops;
 mod input;
 mod input_debugger;
-mod input_lsp;
 mod input_docker;
 mod input_docker_create;
 mod input_docker_logs;
 mod input_editor;
 mod input_git;
 mod input_health;
+mod input_lsp;
 mod input_mouse;
 mod input_ssh;
 mod input_terminal;
@@ -54,18 +54,18 @@ use crate::clipboard::Clipboard;
 use crate::completion::CompletionHandle;
 use crate::config::{Config, KeybindingMode};
 use crate::daemon::DaemonManager;
+use crate::debugger::breakpoints::BreakpointStore;
+use crate::debugger::session::DebugSession;
 use crate::docker::{DockerItemList, DockerStorage};
 use crate::editor::Editor;
 use crate::extension::ExtensionManager;
 use crate::filebrowser::FileBrowser;
-use crate::remote::{RemoteFileBrowser, RemoteFileManager};
-use crate::ssh::{NetworkScanner, SSHHostList, SSHStorage, StatusChecker};
-use crate::terminal::{BackgroundManager, TerminalMultiplexer, pty::PtyError};
-use crate::debugger::breakpoints::BreakpointStore;
-use crate::debugger::session::DebugSession;
 use crate::git::BlameLine;
 use crate::git::dashboard::GitDashboard;
 use crate::git::gutter::GutterMark;
+use crate::remote::{RemoteFileBrowser, RemoteFileManager};
+use crate::ssh::{NetworkScanner, SSHHostList, SSHStorage, StatusChecker};
+use crate::terminal::{BackgroundManager, TerminalMultiplexer, pty::PtyError};
 use crate::ui::health_dashboard::HealthDashboard;
 use crate::ui::{
     docker_manager::DockerManagerSelector,
@@ -233,7 +233,8 @@ pub struct App {
     /// Active Docker log stream handle.
     pub(crate) docker_log_stream: Option<crate::docker_logs::log_stream::LogStream>,
     /// Receiver for Docker log entries from the streaming task.
-    pub(crate) docker_log_rx: Option<tokio::sync::mpsc::Receiver<crate::docker_logs::types::LogEntry>>,
+    pub(crate) docker_log_rx:
+        Option<tokio::sync::mpsc::Receiver<crate::docker_logs::types::LogEntry>>,
     /// Git dashboard state.
     pub(crate) git_dashboard: Option<GitDashboard>,
     /// Git gutter indicators for the current file (line -> mark).

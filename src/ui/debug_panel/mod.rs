@@ -38,7 +38,11 @@ impl<'a> DebugPanelWidget<'a> {
         let tabs = Tabs::new(titles)
             .select(selected)
             .style(Style::default().fg(Color::DarkGray))
-            .highlight_style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
+            .highlight_style(
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            )
             .divider("|");
 
         tabs.render(area, buf);
@@ -56,8 +60,7 @@ impl<'a> DebugPanelWidget<'a> {
                 DebugState::Paused { .. } => "No stack frames available",
                 DebugState::Stopped => "Program stopped",
             };
-            let para = Paragraph::new(msg)
-                .style(Style::default().fg(Color::DarkGray));
+            let para = Paragraph::new(msg).style(Style::default().fg(Color::DarkGray));
             para.render(area, buf);
             return;
         }
@@ -70,7 +73,9 @@ impl<'a> DebugPanelWidget<'a> {
             let y = area.y + i as u16;
             let display = frame.display_line();
             let style = if i == selected {
-                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD)
             } else {
                 Style::default().fg(Color::White)
             };
@@ -102,8 +107,7 @@ impl<'a> DebugPanelWidget<'a> {
             } else {
                 "Pause execution to inspect variables"
             };
-            let para = Paragraph::new(msg)
-                .style(Style::default().fg(Color::DarkGray));
+            let para = Paragraph::new(msg).style(Style::default().fg(Color::DarkGray));
             para.render(area, buf);
             return;
         }
@@ -116,7 +120,9 @@ impl<'a> DebugPanelWidget<'a> {
             let y = area.y + i as u16;
             let display = var.display_line();
             let style = if i == selected {
-                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD)
             } else {
                 Style::default().fg(Color::White)
             };
@@ -162,22 +168,10 @@ impl<'a> DebugPanelWidget<'a> {
 
             let y = entry_area.y + i as u16;
             let (prefix, style) = match entry.kind {
-                ConsoleEntryKind::Input => (
-                    "> ",
-                    Style::default().fg(Color::Cyan),
-                ),
-                ConsoleEntryKind::Output => (
-                    "  ",
-                    Style::default().fg(Color::White),
-                ),
-                ConsoleEntryKind::Error => (
-                    "! ",
-                    Style::default().fg(Color::Red),
-                ),
-                ConsoleEntryKind::Info => (
-                    "i ",
-                    Style::default().fg(Color::DarkGray),
-                ),
+                ConsoleEntryKind::Input => ("> ", Style::default().fg(Color::Cyan)),
+                ConsoleEntryKind::Output => ("  ", Style::default().fg(Color::White)),
+                ConsoleEntryKind::Error => ("! ", Style::default().fg(Color::Red)),
+                ConsoleEntryKind::Info => ("i ", Style::default().fg(Color::DarkGray)),
             };
 
             let line = format!("{}{}", prefix, entry.text);
@@ -281,8 +275,20 @@ mod tests {
     fn test_debug_panel_with_stack_frames() {
         let mut session = test_session();
         session.set_stack_frames(vec![
-            StackFrame { id: 0, name: "main".into(), source_path: Some("src/main.rs".into()), line: 42, column: 0 },
-            StackFrame { id: 1, name: "foo".into(), source_path: None, line: 10, column: 0 },
+            StackFrame {
+                id: 0,
+                name: "main".into(),
+                source_path: Some("src/main.rs".into()),
+                line: 42,
+                column: 0,
+            },
+            StackFrame {
+                id: 1,
+                name: "foo".into(),
+                source_path: None,
+                line: 10,
+                column: 0,
+            },
         ]);
 
         let widget = DebugPanelWidget::new(&session);

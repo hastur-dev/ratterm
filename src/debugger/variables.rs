@@ -70,7 +70,10 @@ impl Variable {
         };
 
         if let Some(ref type_name) = self.type_name {
-            format!("{}{}{}: {} = {}", indent, expand_marker, self.name, type_name, self.value)
+            format!(
+                "{}{}{}: {} = {}",
+                indent, expand_marker, self.name, type_name, self.value
+            )
         } else {
             format!("{}{}{} = {}", indent, expand_marker, self.name, self.value)
         }

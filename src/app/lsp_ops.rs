@@ -167,14 +167,13 @@ impl App {
             None => return,
         };
 
-        let (gi, li) =
-            match crate::ui::lsp_references::LspReferencesWidget::index_to_group_location(
-                &groups,
-                self.lsp_references_selected,
-            ) {
-                Some(pair) => pair,
-                None => return,
-            };
+        let (gi, li) = match crate::ui::lsp_references::LspReferencesWidget::index_to_group_location(
+            &groups,
+            self.lsp_references_selected,
+        ) {
+            Some(pair) => pair,
+            None => return,
+        };
 
         let group = &groups[gi];
         let loc = &group.locations[li];
@@ -254,7 +253,12 @@ impl App {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used, unused_assignments, clippy::implicit_saturating_sub)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    unused_assignments,
+    clippy::implicit_saturating_sub
+)]
 mod tests {
     use crate::lsp::diagnostics::DiagnosticStore;
 

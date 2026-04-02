@@ -359,7 +359,14 @@ impl LspManager {
         match self.get_client(&lang).await {
             Some(client) => {
                 client
-                    .code_action(path, start_line, start_char, end_line, end_char, diagnostics)
+                    .code_action(
+                        path,
+                        start_line,
+                        start_char,
+                        end_line,
+                        end_char,
+                        diagnostics,
+                    )
                     .await
             }
             None => Ok(Vec::new()),
@@ -457,7 +464,13 @@ impl LspManager {
             Some(client) => {
                 client
                     .range_formatting(
-                        path, start_line, start_char, end_line, end_char, tab_size, insert_spaces,
+                        path,
+                        start_line,
+                        start_char,
+                        end_line,
+                        end_char,
+                        tab_size,
+                        insert_spaces,
                     )
                     .await
             }

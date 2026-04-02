@@ -170,7 +170,10 @@ fn open_repo(repo_path: &Path) -> GitResult<Repository> {
 
 /// Returns the status of all files in the working tree and index.
 pub fn git_status(repo_path: &Path) -> GitResult<Vec<StatusEntry>> {
-    assert!(!repo_path.as_os_str().is_empty(), "repo_path must not be empty");
+    assert!(
+        !repo_path.as_os_str().is_empty(),
+        "repo_path must not be empty"
+    );
 
     let repo = open_repo(repo_path)?;
     let mut opts = StatusOptions::new();
@@ -247,7 +250,10 @@ pub fn git_status(repo_path: &Path) -> GitResult<Vec<StatusEntry>> {
         }
     }
 
-    assert!(entries.len() <= statuses.len() * 2, "entry count sanity check");
+    assert!(
+        entries.len() <= statuses.len() * 2,
+        "entry count sanity check"
+    );
     Ok(entries)
 }
 
@@ -306,7 +312,10 @@ fn collect_diff(diff: &git2::Diff, file_path: Option<String>) -> GitResult<DiffR
 
 /// Returns the diff for the working tree (or a specific file).
 pub fn git_diff(repo_path: &Path, file: Option<&Path>) -> GitResult<DiffResult> {
-    assert!(!repo_path.as_os_str().is_empty(), "repo_path must not be empty");
+    assert!(
+        !repo_path.as_os_str().is_empty(),
+        "repo_path must not be empty"
+    );
 
     let repo = open_repo(repo_path)?;
     let mut opts = DiffOptions::new();
@@ -324,13 +333,13 @@ pub fn git_diff(repo_path: &Path, file: Option<&Path>) -> GitResult<DiffResult> 
 
 /// Returns the staged diff (index vs HEAD).
 pub fn git_diff_staged(repo_path: &Path) -> GitResult<DiffResult> {
-    assert!(!repo_path.as_os_str().is_empty(), "repo_path must not be empty");
+    assert!(
+        !repo_path.as_os_str().is_empty(),
+        "repo_path must not be empty"
+    );
 
     let repo = open_repo(repo_path)?;
-    let head_tree = repo
-        .head()
-        .ok()
-        .and_then(|h| h.peel_to_tree().ok());
+    let head_tree = repo.head().ok().and_then(|h| h.peel_to_tree().ok());
 
     let diff = repo.diff_tree_to_index(head_tree.as_ref(), None, None)?;
     collect_diff(&diff, None)
@@ -338,7 +347,10 @@ pub fn git_diff_staged(repo_path: &Path) -> GitResult<DiffResult> {
 
 /// Returns the git log (most recent commits).
 pub fn git_log(repo_path: &Path, limit: usize) -> GitResult<Vec<CommitEntry>> {
-    assert!(!repo_path.as_os_str().is_empty(), "repo_path must not be empty");
+    assert!(
+        !repo_path.as_os_str().is_empty(),
+        "repo_path must not be empty"
+    );
     assert!(limit > 0, "limit must be positive");
     assert!(limit <= 10_000, "limit must be reasonable");
 
@@ -381,7 +393,10 @@ pub fn git_log(repo_path: &Path, limit: usize) -> GitResult<Vec<CommitEntry>> {
 
 /// Returns blame information for a file.
 pub fn git_blame(repo_path: &Path, file: &Path) -> GitResult<Vec<BlameLine>> {
-    assert!(!repo_path.as_os_str().is_empty(), "repo_path must not be empty");
+    assert!(
+        !repo_path.as_os_str().is_empty(),
+        "repo_path must not be empty"
+    );
 
     let repo = open_repo(repo_path)?;
     let workdir = repo.workdir().unwrap_or(repo_path);
@@ -421,7 +436,10 @@ pub fn git_blame(repo_path: &Path, file: &Path) -> GitResult<Vec<BlameLine>> {
 
 /// Returns the list of branches.
 pub fn git_branch_list(repo_path: &Path) -> GitResult<Vec<BranchEntry>> {
-    assert!(!repo_path.as_os_str().is_empty(), "repo_path must not be empty");
+    assert!(
+        !repo_path.as_os_str().is_empty(),
+        "repo_path must not be empty"
+    );
 
     let repo = open_repo(repo_path)?;
     let branches = repo.branches(None)?;
@@ -457,7 +475,10 @@ pub fn git_branch_list(repo_path: &Path) -> GitResult<Vec<BranchEntry>> {
 
 /// Returns the stash list.
 pub fn git_stash_list(repo_path: &Path) -> GitResult<Vec<StashEntry>> {
-    assert!(!repo_path.as_os_str().is_empty(), "repo_path must not be empty");
+    assert!(
+        !repo_path.as_os_str().is_empty(),
+        "repo_path must not be empty"
+    );
 
     let repo = open_repo(repo_path)?;
     let mut entries = Vec::new();
@@ -477,7 +498,10 @@ pub fn git_stash_list(repo_path: &Path) -> GitResult<Vec<StashEntry>> {
 
 /// Creates a commit with the given message.
 pub fn git_commit(repo_path: &Path, message: &str, amend: bool) -> GitResult<()> {
-    assert!(!repo_path.as_os_str().is_empty(), "repo_path must not be empty");
+    assert!(
+        !repo_path.as_os_str().is_empty(),
+        "repo_path must not be empty"
+    );
     assert!(!message.is_empty(), "commit message must not be empty");
 
     let repo = open_repo(repo_path)?;
@@ -520,7 +544,10 @@ fn make_relative(workdir: &Path, file: &Path) -> std::path::PathBuf {
 
 /// Stages a file (adds to index).
 pub fn git_stage_file(repo_path: &Path, file: &Path) -> GitResult<()> {
-    assert!(!repo_path.as_os_str().is_empty(), "repo_path must not be empty");
+    assert!(
+        !repo_path.as_os_str().is_empty(),
+        "repo_path must not be empty"
+    );
 
     let repo = open_repo(repo_path)?;
     let workdir = repo.workdir().unwrap_or(repo_path);
@@ -535,7 +562,10 @@ pub fn git_stage_file(repo_path: &Path, file: &Path) -> GitResult<()> {
 
 /// Unstages a file (removes from index, keeping working tree).
 pub fn git_unstage_file(repo_path: &Path, file: &Path) -> GitResult<()> {
-    assert!(!repo_path.as_os_str().is_empty(), "repo_path must not be empty");
+    assert!(
+        !repo_path.as_os_str().is_empty(),
+        "repo_path must not be empty"
+    );
 
     let repo = open_repo(repo_path)?;
     let workdir = repo.workdir().unwrap_or(repo_path);
@@ -558,7 +588,10 @@ pub fn git_unstage_file(repo_path: &Path, file: &Path) -> GitResult<()> {
 
 /// Checks out a branch.
 pub fn git_checkout_branch(repo_path: &Path, branch: &str) -> GitResult<()> {
-    assert!(!repo_path.as_os_str().is_empty(), "repo_path must not be empty");
+    assert!(
+        !repo_path.as_os_str().is_empty(),
+        "repo_path must not be empty"
+    );
     assert!(!branch.is_empty(), "branch name must not be empty");
 
     let repo = open_repo(repo_path)?;
@@ -578,7 +611,10 @@ pub fn git_checkout_branch(repo_path: &Path, branch: &str) -> GitResult<()> {
 
 /// Performs a stash operation.
 pub fn git_stash_op(repo_path: &Path, op: StashOp) -> GitResult<()> {
-    assert!(!repo_path.as_os_str().is_empty(), "repo_path must not be empty");
+    assert!(
+        !repo_path.as_os_str().is_empty(),
+        "repo_path must not be empty"
+    );
 
     let mut repo = open_repo(repo_path)?;
 
@@ -603,7 +639,10 @@ pub fn git_stash_op(repo_path: &Path, op: StashOp) -> GitResult<()> {
 /// Returns line numbers (0-based) that contain conflict markers
 /// (`<<<<<<<`, `=======`, `>>>>>>>`).
 pub fn detect_conflict_markers(content: &str) -> Vec<usize> {
-    assert!(!content.is_empty() || content.is_empty(), "content validation");
+    assert!(
+        !content.is_empty() || content.is_empty(),
+        "content validation"
+    );
 
     let mut markers = Vec::new();
     for (i, line) in content.lines().enumerate() {
@@ -620,7 +659,10 @@ pub fn detect_conflict_markers(content: &str) -> Vec<usize> {
 
 /// Returns the current branch name (or HEAD hash if detached).
 pub fn git_current_branch(repo_path: &Path) -> GitResult<String> {
-    assert!(!repo_path.as_os_str().is_empty(), "repo_path must not be empty");
+    assert!(
+        !repo_path.as_os_str().is_empty(),
+        "repo_path must not be empty"
+    );
 
     let repo = open_repo(repo_path)?;
     let head = repo.head()?;

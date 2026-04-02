@@ -66,8 +66,7 @@ impl App {
                 if let Some(ref mut manager) = self.docker_manager {
                     if let Some(ref mut state) = manager.docker_logs_state {
                         state.log_buffer_mut().scroll_down(20);
-                        if state.log_buffer().is_at_bottom()
-                            && state.mode() == LogViewMode::Paused
+                        if state.log_buffer().is_at_bottom() && state.mode() == LogViewMode::Paused
                         {
                             state.resume();
                         }
@@ -184,11 +183,9 @@ impl App {
             };
 
             match state.mode() {
-                LogViewMode::ContainerList => {
-                    state.selected_container().map(|c| {
-                        (c.id.clone(), c.name.clone())
-                    })
-                }
+                LogViewMode::ContainerList => state
+                    .selected_container()
+                    .map(|c| (c.id.clone(), c.name.clone())),
                 _ => None,
             }
         };

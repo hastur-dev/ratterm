@@ -114,10 +114,7 @@ impl App {
     /// Restarts the current debug session.
     pub fn debug_restart(&mut self) {
         info!("Restarting debug session");
-        let config = self
-            .debug_session
-            .as_ref()
-            .map(|s| s.config().clone());
+        let config = self.debug_session.as_ref().map(|s| s.config().clone());
         let cwd = self
             .debug_session
             .as_ref()
@@ -192,9 +189,7 @@ impl App {
     /// Returns whether a debug session is active.
     #[must_use]
     pub fn is_debugging(&self) -> bool {
-        self.debug_session
-            .as_ref()
-            .is_some_and(|s| s.is_active())
+        self.debug_session.as_ref().is_some_and(|s| s.is_active())
     }
 
     /// Returns the current debug state as a display string (for status bar).

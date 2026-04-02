@@ -31,11 +31,7 @@ pub struct LspSignatureWidget<'a> {
 impl<'a> LspSignatureWidget<'a> {
     /// Creates a new signature help widget positioned near the cursor.
     #[must_use]
-    pub fn new(
-        sig_help: &'a SignatureHelpResult,
-        cursor_x: u16,
-        cursor_y: u16,
-    ) -> Self {
+    pub fn new(sig_help: &'a SignatureHelpResult, cursor_x: u16, cursor_y: u16) -> Self {
         Self {
             sig_help,
             cursor_x,
@@ -49,10 +45,7 @@ impl<'a> LspSignatureWidget<'a> {
         assert!(screen.width > 0, "screen width must be positive");
         assert!(screen.height > 0, "screen height must be positive");
 
-        let sig = self
-            .sig_help
-            .signatures
-            .get(self.sig_help.active_signature);
+        let sig = self.sig_help.signatures.get(self.sig_help.active_signature);
         let width = sig
             .map(|s| s.label.len() as u16 + 4)
             .unwrap_or(30)
@@ -76,11 +69,7 @@ impl<'a> LspSignatureWidget<'a> {
 
         Clear.render(area, buf);
 
-        let sig = match self
-            .sig_help
-            .signatures
-            .get(self.sig_help.active_signature)
-        {
+        let sig = match self.sig_help.signatures.get(self.sig_help.active_signature) {
             Some(s) => s,
             None => return,
         };

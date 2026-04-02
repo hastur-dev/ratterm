@@ -10,9 +10,9 @@ use std::sync::mpsc;
 
 use serde_json::{Value, json};
 
-use super::launch::{AdapterKind, LaunchConfig};
 use super::DebugEvent;
 use super::callstack::StackFrame;
+use super::launch::{AdapterKind, LaunchConfig};
 use super::variables::Variable;
 
 /// Error type for DAP client operations.
@@ -113,10 +113,7 @@ impl DapClient {
 
     /// Sets breakpoints for a file.
     pub fn set_breakpoints(&mut self, file: &str, lines: &[u32]) -> Result<i64, DapError> {
-        let breakpoints: Vec<Value> = lines
-            .iter()
-            .map(|&line| json!({"line": line}))
-            .collect();
+        let breakpoints: Vec<Value> = lines.iter().map(|&line| json!({"line": line})).collect();
 
         let args = json!({
             "source": {"path": file},
@@ -208,8 +205,8 @@ impl DapClient {
         let child = self.child.as_mut().ok_or(DapError::NotConnected)?;
         let stdin = child.stdin.as_mut().ok_or(DapError::NotConnected)?;
 
-        let body = serde_json::to_string(message)
-            .map_err(|e| DapError::SendFailed(e.to_string()))?;
+        let body =
+            serde_json::to_string(message).map_err(|e| DapError::SendFailed(e.to_string()))?;
 
         let header = format!("Content-Length: {}\r\n\r\n", body.len());
 
@@ -296,10 +293,7 @@ pub fn parse_variables(body: &Value) -> Vec<Variable> {
         .filter_map(|v| {
             let name = v.get("name")?.as_str()?.to_string();
             let value = v.get("value")?.as_str()?.to_string();
-            let type_name = v
-                .get("type")
-                .and_then(|t| t.as_str())
-                .map(String::from);
+            let type_name = v.get("type").and_then(|t| t.as_str()).map(String::from);
             let variables_reference = v
                 .get("variablesReference")
                 .and_then(|r| r.as_i64())
@@ -339,23 +333,20 @@ pub fn read_dap_message(reader: &mut impl BufRead) -> Result<Option<Value>, DapE
         }
 
         if let Some(len_str) = trimmed.strip_prefix("Content-Length: ") {
-            content_length = len_str
-                .parse()
-                .ok();
+            content_length = len_str.parse().ok();
         }
     }
 
-    let len = content_length.ok_or_else(|| {
-        DapError::ProtocolError("Missing Content-Length header".to_string())
-    })?;
+    let len = content_length
+        .ok_or_else(|| DapError::ProtocolError("Missing Content-Length header".to_string()))?;
 
     let mut body = vec![0u8; len];
     reader
         .read_exact(&mut body)
         .map_err(|e| DapError::ReadFailed(e.to_string()))?;
 
-    let value: Value = serde_json::from_slice(&body)
-        .map_err(|e| DapError::ProtocolError(e.to_string()))?;
+    let value: Value =
+        serde_json::from_slice(&body).map_err(|e| DapError::ProtocolError(e.to_string()))?;
 
     Ok(Some(value))
 }

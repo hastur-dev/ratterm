@@ -53,9 +53,11 @@ pub fn parse_signature_help(result: JsonValue) -> Option<SignatureHelpResult> {
         .filter_map(|sig| {
             let label = sig.get("label")?.as_str()?.to_string();
             let documentation = sig.get("documentation").and_then(|d| {
-                d.as_str()
-                    .map(|s| s.to_string())
-                    .or_else(|| d.get("value").and_then(|v| v.as_str()).map(|s| s.to_string()))
+                d.as_str().map(|s| s.to_string()).or_else(|| {
+                    d.get("value")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string())
+                })
             });
 
             let parameters = sig

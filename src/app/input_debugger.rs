@@ -134,8 +134,7 @@ mod tests {
         let Some(mut app) = create_test_app() else {
             return;
         };
-        let handled =
-            app.handle_debugger_key(key_event_mod(KeyCode::F(11), KeyModifiers::SHIFT));
+        let handled = app.handle_debugger_key(key_event_mod(KeyCode::F(11), KeyModifiers::SHIFT));
         assert!(handled, "Shift+F11 should be handled");
     }
 

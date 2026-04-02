@@ -1,9 +1,9 @@
 //! Find references functionality.
 
+use super::definition::LocationResult;
+use serde_json::Value as JsonValue;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
-use serde_json::Value as JsonValue;
-use super::definition::LocationResult;
 
 /// References grouped by file.
 #[derive(Debug, Clone)]

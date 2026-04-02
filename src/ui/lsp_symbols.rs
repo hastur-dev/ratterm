@@ -10,9 +10,7 @@ use ratatui::{
     widgets::{Block, Borders, Clear, Paragraph, Widget},
 };
 
-use crate::lsp::symbols::{
-    flatten_symbols, DocumentSymbolResult, SymbolInfoResult, SymbolKind,
-};
+use crate::lsp::symbols::{DocumentSymbolResult, SymbolInfoResult, SymbolKind, flatten_symbols};
 
 /// Widget for displaying document symbols (outline).
 pub struct LspDocumentSymbolsWidget<'a> {
@@ -29,11 +27,7 @@ pub struct LspDocumentSymbolsWidget<'a> {
 impl<'a> LspDocumentSymbolsWidget<'a> {
     /// Creates a new document symbols widget.
     #[must_use]
-    pub fn new(
-        symbols: &'a [DocumentSymbolResult],
-        selected: usize,
-        scroll: usize,
-    ) -> Self {
+    pub fn new(symbols: &'a [DocumentSymbolResult], selected: usize, scroll: usize) -> Self {
         Self {
             symbols,
             selected,
@@ -54,13 +48,9 @@ impl<'a> LspDocumentSymbolsWidget<'a> {
     pub fn kind_color(kind: SymbolKind) -> Color {
         match kind {
             SymbolKind::Function | SymbolKind::Method => Color::Yellow,
-            SymbolKind::Class | SymbolKind::Struct | SymbolKind::Interface => {
-                Color::Cyan
-            }
+            SymbolKind::Class | SymbolKind::Struct | SymbolKind::Interface => Color::Cyan,
             SymbolKind::Enum | SymbolKind::EnumMember => Color::Green,
-            SymbolKind::Variable | SymbolKind::Field | SymbolKind::Property => {
-                Color::White
-            }
+            SymbolKind::Variable | SymbolKind::Field | SymbolKind::Property => Color::White,
             SymbolKind::Constant => Color::Magenta,
             SymbolKind::Module | SymbolKind::Namespace => Color::Blue,
             _ => Color::Gray,
@@ -102,10 +92,7 @@ impl<'a> Widget for LspDocumentSymbolsWidget<'a> {
                 };
 
                 let prefix = if is_selected { ">" } else { " " };
-                let text = format!(
-                    "{prefix}{indent}[{icon}] {}{detail_str}",
-                    symbol.name
-                );
+                let text = format!("{prefix}{indent}[{icon}] {}{detail_str}", symbol.name);
 
                 let style = if is_selected {
                     Style::default().fg(Color::Black).bg(color)

@@ -6,7 +6,7 @@
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 
 mod lsp_hover_tests {
-    use ratterm::lsp::hover::{parse_hover_response, hover_to_styled_lines, HoverContent};
+    use ratterm::lsp::hover::{HoverContent, hover_to_styled_lines, parse_hover_response};
     use serde_json::json;
 
     #[test]
@@ -199,7 +199,7 @@ mod lsp_rename_tests {
 }
 
 mod lsp_diagnostics_tests {
-    use ratterm::lsp::diagnostics::{DiagnosticStore, DiagnosticSeverity, parse_diagnostics};
+    use ratterm::lsp::diagnostics::{DiagnosticSeverity, DiagnosticStore, parse_diagnostics};
     use serde_json::json;
 
     #[test]
@@ -217,7 +217,7 @@ mod lsp_diagnostics_tests {
                 "severity": 2,
                 "message": "unused variable `x`",
                 "source": "rustc"
-            })
+            }),
         ];
         let diagnostics = parse_diagnostics(&arr);
         assert_eq!(diagnostics.len(), 2);
@@ -325,7 +325,9 @@ mod lsp_code_actions_tests {
 }
 
 mod lsp_symbols_tests {
-    use ratterm::lsp::symbols::{parse_document_symbols, parse_workspace_symbols, flatten_symbols, SymbolKind};
+    use ratterm::lsp::symbols::{
+        SymbolKind, flatten_symbols, parse_document_symbols, parse_workspace_symbols,
+    };
     use serde_json::json;
 
     #[test]
@@ -456,7 +458,9 @@ mod lsp_signature_tests {
 }
 
 mod lsp_formatting_tests {
-    use ratterm::lsp::formatting::{parse_formatting_response, sort_edits_reverse, apply_edits_to_string};
+    use ratterm::lsp::formatting::{
+        apply_edits_to_string, parse_formatting_response, sort_edits_reverse,
+    };
     use serde_json::json;
 
     #[test]
@@ -480,17 +484,35 @@ mod lsp_formatting_tests {
 }
 
 mod lsp_config_tests {
-    use ratterm::lsp::config::{detect_language, LspConfigRegistry};
+    use ratterm::lsp::config::{LspConfigRegistry, detect_language};
     use std::path::Path;
 
     #[test]
     fn test_multi_language_detection() {
-        assert_eq!(detect_language(Path::new("main.rs")), Some("rust".to_string()));
-        assert_eq!(detect_language(Path::new("app.py")), Some("python".to_string()));
-        assert_eq!(detect_language(Path::new("index.tsx")), Some("typescript".to_string()));
-        assert_eq!(detect_language(Path::new("styles.css")), Some("css".to_string()));
-        assert_eq!(detect_language(Path::new("data.json")), Some("json".to_string()));
-        assert_eq!(detect_language(Path::new("main.go")), Some("go".to_string()));
+        assert_eq!(
+            detect_language(Path::new("main.rs")),
+            Some("rust".to_string())
+        );
+        assert_eq!(
+            detect_language(Path::new("app.py")),
+            Some("python".to_string())
+        );
+        assert_eq!(
+            detect_language(Path::new("index.tsx")),
+            Some("typescript".to_string())
+        );
+        assert_eq!(
+            detect_language(Path::new("styles.css")),
+            Some("css".to_string())
+        );
+        assert_eq!(
+            detect_language(Path::new("data.json")),
+            Some("json".to_string())
+        );
+        assert_eq!(
+            detect_language(Path::new("main.go")),
+            Some("go".to_string())
+        );
         assert_eq!(detect_language(Path::new("noext")), None);
     }
 

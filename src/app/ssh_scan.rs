@@ -176,7 +176,8 @@ impl App {
             };
 
             let id = if let Some(ref name) = remote_hostname {
-                self.ssh_hosts.add_host_with_name(ip.clone(), 22, name.clone())
+                self.ssh_hosts
+                    .add_host_with_name(ip.clone(), 22, name.clone())
             } else {
                 self.ssh_hosts.add_host(ip.clone(), 22)
             };

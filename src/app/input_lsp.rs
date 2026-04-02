@@ -138,10 +138,7 @@ impl App {
             if action.edit.is_some() {
                 self.set_status(format!("Applied: {}", action.title));
             } else {
-                self.set_status(format!(
-                    "Action '{}' has no edit to apply",
-                    action.title
-                ));
+                self.set_status(format!("Action '{}' has no edit to apply", action.title));
             }
         }
     }
@@ -209,10 +206,7 @@ mod tests {
     fn test_rename_non_empty_accepted() {
         let input: Option<String> = Some("new_name".to_string());
         let should_dismiss = !matches!(&input, Some(n) if !n.is_empty());
-        assert!(
-            !should_dismiss,
-            "Non-empty rename input should be accepted"
-        );
+        assert!(!should_dismiss, "Non-empty rename input should be accepted");
     }
 
     #[test]

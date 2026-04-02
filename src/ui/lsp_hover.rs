@@ -10,7 +10,7 @@ use ratatui::{
     widgets::{Block, Borders, Clear, Paragraph, Widget, Wrap},
 };
 
-use crate::lsp::hover::{hover_to_styled_lines, HoverResult};
+use crate::lsp::hover::{HoverResult, hover_to_styled_lines};
 
 /// Maximum width for the hover popup.
 const MAX_WIDTH: u16 = 60;
@@ -89,10 +89,7 @@ impl<'a> LspHoverWidget<'a> {
             .iter()
             .map(|(text, is_code)| {
                 if *is_code {
-                    Line::from(Span::styled(
-                        text.clone(),
-                        Style::default().fg(Color::Cyan),
-                    ))
+                    Line::from(Span::styled(text.clone(), Style::default().fg(Color::Cyan)))
                 } else {
                     Line::from(Span::styled(
                         text.clone(),

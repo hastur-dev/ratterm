@@ -297,10 +297,7 @@ fn collect_host_metrics(host: &HostCollectionInfo) -> DeviceMetrics {
     );
 
     let strategy = choose_auth_strategy(host.password.is_some(), host.key_path.is_some());
-    info!(
-        "Auth strategy for {}: {:?}",
-        host.hostname, strategy
-    );
+    info!("Auth strategy for {}: {:?}", host.hostname, strategy);
 
     match strategy {
         AuthStrategy::PasswordOnly => {
@@ -1321,7 +1318,11 @@ mod tests {
         assert_eq!(result.status, MetricStatus::Error);
         assert!(result.error.is_some());
         assert!(
-            result.error.as_deref().unwrap().contains("Failed to execute"),
+            result
+                .error
+                .as_deref()
+                .unwrap()
+                .contains("Failed to execute"),
             "Error was: {:?}",
             result.error
         );

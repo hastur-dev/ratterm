@@ -68,8 +68,8 @@ pub use extension::{ApprovalManager, ExtensionManager};
 pub use filebrowser::FileBrowser;
 pub use remote::{RemoteFile, RemoteFileManager};
 pub use ssh::{
-    NetworkScanner, SSHHost, SSHHostList, SSHStorage,
-    build_collection_info, HostCollectionInfo, MetricsCollector,
+    HostCollectionInfo, MetricsCollector, NetworkScanner, SSHHost, SSHHostList, SSHStorage,
+    build_collection_info,
 };
 pub use terminal::Terminal;
 pub use theme::{Theme, ThemeManager, ThemePreset};

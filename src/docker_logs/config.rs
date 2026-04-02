@@ -89,10 +89,7 @@ impl LogStreamConfig {
 
 /// Parses a boolean value from a config string.
 fn parse_bool(value: &str) -> bool {
-    matches!(
-        value.to_lowercase().as_str(),
-        "true" | "yes" | "1" | "on"
-    )
+    matches!(value.to_lowercase().as_str(), "true" | "yes" | "1" | "on")
 }
 
 #[cfg(test)]

@@ -21,10 +21,7 @@ pub enum GutterMark {
 ///
 /// Returns a map of 0-based line number -> `GutterMark`.
 pub fn compute_gutter_indicators(diff: &DiffResult) -> HashMap<usize, GutterMark> {
-    assert!(
-        diff.hunks.len() < 100_000,
-        "unreasonable number of hunks"
-    );
+    assert!(diff.hunks.len() < 100_000, "unreasonable number of hunks");
 
     let mut marks: HashMap<usize, GutterMark> = HashMap::new();
 

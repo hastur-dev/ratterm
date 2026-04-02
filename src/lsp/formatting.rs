@@ -1,7 +1,7 @@
 //! Document formatting.
 
-use serde_json::Value as JsonValue;
 use super::hover::TextRange;
+use serde_json::Value as JsonValue;
 
 /// A text edit from formatting.
 #[derive(Debug, Clone)]

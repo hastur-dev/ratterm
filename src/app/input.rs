@@ -753,11 +753,7 @@ mod tests {
 
     #[test]
     fn test_press_shifted_char_accepted() {
-        let key = make_key(
-            KeyCode::Char('A'),
-            KeyModifiers::SHIFT,
-            KeyEventKind::Press,
-        );
+        let key = make_key(KeyCode::Char('A'), KeyModifiers::SHIFT, KeyEventKind::Press);
         assert!(should_accept_key(&key));
     }
 
@@ -833,11 +829,7 @@ mod tests {
 
     #[test]
     fn test_release_alt_char_accepted() {
-        let key = make_key(
-            KeyCode::Char('x'),
-            KeyModifiers::ALT,
-            KeyEventKind::Release,
-        );
+        let key = make_key(KeyCode::Char('x'), KeyModifiers::ALT, KeyEventKind::Release);
         assert!(
             should_accept_key(&key),
             "Release of Alt+Char should be accepted (plink workaround)"
@@ -855,11 +847,7 @@ mod tests {
 
     #[test]
     fn test_release_shift_backtab_accepted() {
-        let key = make_key(
-            KeyCode::BackTab,
-            KeyModifiers::SHIFT,
-            KeyEventKind::Release,
-        );
+        let key = make_key(KeyCode::BackTab, KeyModifiers::SHIFT, KeyEventKind::Release);
         assert!(
             should_accept_key(&key),
             "Release of Shift+BackTab should be accepted"

@@ -5,11 +5,11 @@
 
 use std::path::PathBuf;
 
+use super::DebugState;
 use super::callstack::StackFrame;
 use super::console::DebugConsole;
 use super::launch::LaunchConfig;
 use super::variables::Variable;
-use super::DebugState;
 
 /// An active debug session.
 #[derive(Debug)]
@@ -188,8 +188,7 @@ impl DebugSession {
     /// Selects the next variable.
     pub fn select_next_variable(&mut self) {
         if !self.variables.is_empty() {
-            self.selected_variable =
-                (self.selected_variable + 1).min(self.variables.len() - 1);
+            self.selected_variable = (self.selected_variable + 1).min(self.variables.len() - 1);
         }
     }
 
@@ -312,9 +311,27 @@ mod tests {
     fn test_stack_frame_navigation() {
         let mut session = test_session();
         session.set_stack_frames(vec![
-            StackFrame { id: 0, name: "main".into(), source_path: None, line: 1, column: 0 },
-            StackFrame { id: 1, name: "foo".into(), source_path: None, line: 10, column: 0 },
-            StackFrame { id: 2, name: "bar".into(), source_path: None, line: 20, column: 0 },
+            StackFrame {
+                id: 0,
+                name: "main".into(),
+                source_path: None,
+                line: 1,
+                column: 0,
+            },
+            StackFrame {
+                id: 1,
+                name: "foo".into(),
+                source_path: None,
+                line: 10,
+                column: 0,
+            },
+            StackFrame {
+                id: 2,
+                name: "bar".into(),
+                source_path: None,
+                line: 20,
+                column: 0,
+            },
         ]);
 
         assert_eq!(session.selected_frame(), 0);
@@ -336,10 +353,7 @@ mod tests {
     #[test]
     fn test_variable_navigation() {
         let mut session = test_session();
-        session.set_variables(vec![
-            Variable::new("a", "1"),
-            Variable::new("b", "2"),
-        ]);
+        session.set_variables(vec![Variable::new("a", "1"), Variable::new("b", "2")]);
 
         assert_eq!(session.selected_variable(), 0);
         session.select_next_variable();
@@ -399,16 +413,32 @@ mod tests {
     fn test_set_stack_frames_resets_selection() {
         let mut session = test_session();
         session.set_stack_frames(vec![
-            StackFrame { id: 0, name: "a".into(), source_path: None, line: 1, column: 0 },
-            StackFrame { id: 1, name: "b".into(), source_path: None, line: 2, column: 0 },
+            StackFrame {
+                id: 0,
+                name: "a".into(),
+                source_path: None,
+                line: 1,
+                column: 0,
+            },
+            StackFrame {
+                id: 1,
+                name: "b".into(),
+                source_path: None,
+                line: 2,
+                column: 0,
+            },
         ]);
         session.select_next_frame();
         assert_eq!(session.selected_frame(), 1);
 
         // Setting fewer frames should reset selection
-        session.set_stack_frames(vec![
-            StackFrame { id: 0, name: "c".into(), source_path: None, line: 1, column: 0 },
-        ]);
+        session.set_stack_frames(vec![StackFrame {
+            id: 0,
+            name: "c".into(),
+            source_path: None,
+            line: 1,
+            column: 0,
+        }]);
         assert_eq!(session.selected_frame(), 0);
     }
 }
