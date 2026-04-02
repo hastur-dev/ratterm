@@ -32,8 +32,14 @@
 pub mod cache;
 pub mod debounce;
 pub mod keyword;
-pub mod lsp;
 pub mod provider;
+
+/// Re-export from the top-level `lsp` module for backward compatibility.
+pub mod lsp {
+    pub use crate::lsp::client::{LspClient, LspError};
+    pub use crate::lsp::config::{LspConfig, LspConfigRegistry, detect_language};
+    pub use crate::lsp::manager::{LspManager, LspProvider};
+}
 
 use std::path::PathBuf;
 use std::sync::Arc;

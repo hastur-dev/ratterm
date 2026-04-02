@@ -139,6 +139,15 @@ mode = vim
 # docker_manager_position = middle-center
 # health_dashboard_position = middle-center
 
+# LSP (Language Server Protocol)
+# ------------------------------
+# Override default language servers:
+# lsp-rust = rust-analyzer
+# lsp-python = pyright
+#
+# Format file on save via LSP:
+# lsp-format-on-save = false
+
 # Logging Configuration
 # ---------------------
 # Logs are stored in ~/.ratterm/logs/ with automatic cleanup.
@@ -188,6 +197,16 @@ pub struct Config {
     pub docker_log_config: LogStreamConfig,
     /// Window position overrides for specific popups/overlays.
     pub window_positions: HashMap<String, crate::ui::window_position::WindowPosition>,
+    /// Enable git gutter indicators in the editor.
+    pub git_gutter: bool,
+    /// Enable git blame view.
+    pub git_blame: bool,
+    /// LSP server override for Rust (e.g., "rust-analyzer").
+    pub lsp_rust: Option<String>,
+    /// LSP server override for Python (e.g., "pyright", "pylsp").
+    pub lsp_python: Option<String>,
+    /// Format file on save via LSP.
+    pub lsp_format_on_save: bool,
 }
 
 impl Default for Config {
@@ -207,6 +226,11 @@ impl Default for Config {
             log_config: LogConfig::default(),
             docker_log_config: LogStreamConfig::default(),
             window_positions: HashMap::new(),
+            git_gutter: true,
+            git_blame: true,
+            lsp_rust: None,
+            lsp_python: None,
+            lsp_format_on_save: false,
         }
     }
 }
@@ -345,6 +369,24 @@ impl Config {
             }
             "ide_always" | "ide-always" => {
                 self.ide_always =
+                    matches!(value.to_lowercase().as_str(), "true" | "yes" | "1" | "on");
+            }
+            "git_gutter" | "git-gutter" => {
+                self.git_gutter =
+                    matches!(value.to_lowercase().as_str(), "true" | "yes" | "1" | "on");
+            }
+            "git_blame" | "git-blame" => {
+                self.git_blame =
+                    matches!(value.to_lowercase().as_str(), "true" | "yes" | "1" | "on");
+            }
+            "lsp-rust" | "lsp_rust" => {
+                self.lsp_rust = Some(value.to_string());
+            }
+            "lsp-python" | "lsp_python" => {
+                self.lsp_python = Some(value.to_string());
+            }
+            "lsp-format-on-save" | "lsp_format_on_save" => {
+                self.lsp_format_on_save =
                     matches!(value.to_lowercase().as_str(), "true" | "yes" | "1" | "on");
             }
             "ssh_storage_mode" => {

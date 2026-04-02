@@ -244,6 +244,168 @@ pub fn ssh_manager_list_hotkeys() -> Vec<HotkeyEntry> {
     ]
 }
 
+/// Returns hotkey entries for the Git Dashboard.
+#[must_use]
+pub fn git_dashboard_hotkeys() -> Vec<HotkeyEntry> {
+    vec![
+        // Navigation
+        HotkeyEntry {
+            key: "Up/Down or j/k",
+            description: "Navigate file list",
+            category: "Navigation",
+        },
+        HotkeyEntry {
+            key: "Home/End",
+            description: "Jump to first/last",
+            category: "Navigation",
+        },
+        HotkeyEntry {
+            key: "Tab/Shift+Tab",
+            description: "Switch section (staged/unstaged/untracked)",
+            category: "Navigation",
+        },
+        HotkeyEntry {
+            key: "Enter",
+            description: "View diff for selected file",
+            category: "Navigation",
+        },
+        HotkeyEntry {
+            key: "Backspace",
+            description: "Back to status view",
+            category: "Navigation",
+        },
+        HotkeyEntry {
+            key: "Esc",
+            description: "Close dashboard",
+            category: "Navigation",
+        },
+        // Actions
+        HotkeyEntry {
+            key: "s",
+            description: "Stage selected file",
+            category: "Actions",
+        },
+        HotkeyEntry {
+            key: "u",
+            description: "Unstage selected file",
+            category: "Actions",
+        },
+        HotkeyEntry {
+            key: "c",
+            description: "Commit staged changes",
+            category: "Actions",
+        },
+        HotkeyEntry {
+            key: "r",
+            description: "Refresh status",
+            category: "Actions",
+        },
+        HotkeyEntry {
+            key: "p",
+            description: "Stash pop",
+            category: "Actions",
+        },
+        HotkeyEntry {
+            key: "Shift+P",
+            description: "Stash push",
+            category: "Actions",
+        },
+        // Views
+        HotkeyEntry {
+            key: "b",
+            description: "Branch list view",
+            category: "Views",
+        },
+        HotkeyEntry {
+            key: "l",
+            description: "Commit log view",
+            category: "Views",
+        },
+        HotkeyEntry {
+            key: "d",
+            description: "Diff view",
+            category: "Views",
+        },
+        HotkeyEntry {
+            key: "Ctrl+B",
+            description: "Toggle blame view",
+            category: "Views",
+        },
+        // Help
+        HotkeyEntry {
+            key: "?",
+            description: "Toggle this help",
+            category: "Help",
+        },
+    ]
+}
+
+/// Returns hotkey entries for the Debugger.
+#[must_use]
+pub fn debugger_hotkeys() -> Vec<HotkeyEntry> {
+    vec![
+        // Session control
+        HotkeyEntry {
+            key: "F5",
+            description: "Continue / Start debugging",
+            category: "Session",
+        },
+        HotkeyEntry {
+            key: "Shift+F5",
+            description: "Stop debugging",
+            category: "Session",
+        },
+        HotkeyEntry {
+            key: "Ctrl+Shift+F5",
+            description: "Restart debugging",
+            category: "Session",
+        },
+        // Stepping
+        HotkeyEntry {
+            key: "F9",
+            description: "Toggle breakpoint",
+            category: "Breakpoints",
+        },
+        HotkeyEntry {
+            key: "F10",
+            description: "Step over",
+            category: "Stepping",
+        },
+        HotkeyEntry {
+            key: "F11",
+            description: "Step into",
+            category: "Stepping",
+        },
+        HotkeyEntry {
+            key: "Shift+F11",
+            description: "Step out",
+            category: "Stepping",
+        },
+        // Panel
+        HotkeyEntry {
+            key: "Tab",
+            description: "Switch debug panel tab",
+            category: "Panel",
+        },
+        HotkeyEntry {
+            key: "Up/Down or j/k",
+            description: "Navigate list",
+            category: "Navigation",
+        },
+        HotkeyEntry {
+            key: "Enter",
+            description: "Expand/select",
+            category: "Navigation",
+        },
+        // Help
+        HotkeyEntry {
+            key: "?",
+            description: "Toggle this help",
+            category: "Help",
+        },
+    ]
+}
+
 /// Returns hotkey entries for the Docker Logs viewer.
 #[must_use]
 pub fn docker_logs_hotkeys() -> Vec<HotkeyEntry> {
@@ -366,6 +528,35 @@ mod tests {
         assert!(!health_dashboard_detail_hotkeys().is_empty());
         assert!(!docker_manager_list_hotkeys().is_empty());
         assert!(!ssh_manager_list_hotkeys().is_empty());
+        assert!(!git_dashboard_hotkeys().is_empty());
+    }
+
+    #[test]
+    fn test_git_hotkeys_include_navigation() {
+        let hotkeys = git_dashboard_hotkeys();
+        assert!(
+            hotkeys
+                .iter()
+                .any(|h| h.key.contains("Up") || h.key.contains("Down")),
+            "Should include Up/Down navigation"
+        );
+        assert!(
+            hotkeys.iter().any(|h| h.key == "?"),
+            "Should include help key"
+        );
+    }
+
+    #[test]
+    fn test_git_hotkeys_include_stage_unstage() {
+        let hotkeys = git_dashboard_hotkeys();
+        assert!(
+            hotkeys.iter().any(|h| h.key == "s"),
+            "Should include stage key"
+        );
+        assert!(
+            hotkeys.iter().any(|h| h.key == "u"),
+            "Should include unstage key"
+        );
     }
 
     #[test]

@@ -2,15 +2,23 @@
 //!
 //! Provides widgets and layout for the TUI.
 
+pub mod debug_panel;
 pub mod docker_manager;
 pub mod editor_tabs;
 pub mod editor_widget;
 pub mod file_picker;
 pub mod ghost_text;
+pub mod git_dashboard;
 pub mod health_dashboard;
 pub mod hotkey_overlay;
 pub mod key_hint_bar;
 pub mod layout;
+pub mod lsp_actions;
+pub mod lsp_diagnostics;
+pub mod lsp_hover;
+pub mod lsp_references;
+pub mod lsp_signature;
+pub mod lsp_symbols;
 pub mod manager_footer;
 pub mod popup;
 pub mod ssh_manager;
