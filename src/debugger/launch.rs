@@ -156,6 +156,7 @@ pub fn load_launch_configs(project_root: &Path) -> Vec<LaunchConfig> {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
 

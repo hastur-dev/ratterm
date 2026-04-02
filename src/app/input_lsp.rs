@@ -165,7 +165,7 @@ impl App {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used)]
+#[allow(clippy::unwrap_used, clippy::expect_used, unused_assignments)]
 mod tests {
     use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers};
 
@@ -201,20 +201,14 @@ mod tests {
     #[test]
     fn test_rename_empty_dismissed() {
         let input: Option<String> = Some(String::new());
-        let should_dismiss = match &input {
-            Some(n) if !n.is_empty() => false,
-            _ => true,
-        };
+        let should_dismiss = !matches!(&input, Some(n) if !n.is_empty());
         assert!(should_dismiss, "Empty rename input should be dismissed");
     }
 
     #[test]
     fn test_rename_non_empty_accepted() {
         let input: Option<String> = Some("new_name".to_string());
-        let should_dismiss = match &input {
-            Some(n) if !n.is_empty() => false,
-            _ => true,
-        };
+        let should_dismiss = !matches!(&input, Some(n) if !n.is_empty());
         assert!(
             !should_dismiss,
             "Non-empty rename input should be accepted"

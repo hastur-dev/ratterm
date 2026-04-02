@@ -161,7 +161,7 @@ fn parse_document_symbol(val: &JsonValue) -> Option<DocumentSymbolResult> {
     let range = super::hover::parse_range(val.get("range")?)?;
     let selection_range = val
         .get("selectionRange")
-        .and_then(|r| super::hover::parse_range(r))
+        .and_then(super::hover::parse_range)
         .unwrap_or(range);
 
     let children = val

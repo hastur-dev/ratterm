@@ -53,10 +53,8 @@ impl App {
         );
 
         // Handle LSP overlays (references, code actions, symbols, rename, etc.)
-        if self.has_lsp_overlay() {
-            if self.handle_lsp_overlay_key(key) {
-                return;
-            }
+        if self.has_lsp_overlay() && self.handle_lsp_overlay_key(key) {
+            return;
         }
 
         match self.mode {

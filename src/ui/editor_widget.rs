@@ -174,7 +174,7 @@ impl<'a> EditorWidget<'a> {
                 // Check if this line has a breakpoint
                 let has_breakpoint = self
                     .breakpoint_lines
-                    .map_or(false, |lines| lines.contains(&line_idx));
+                    .is_some_and(|lines| lines.contains(&line_idx));
 
                 // Render line number
                 let line_num = format!("{:>width$} ", line_idx + 1, width = gutter_width - 1);

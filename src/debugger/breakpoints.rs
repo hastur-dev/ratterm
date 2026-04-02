@@ -111,7 +111,7 @@ impl BreakpointStore {
     pub fn has_breakpoint(&self, file: &str, line: u32) -> bool {
         self.breakpoints
             .get(file)
-            .map_or(false, |lines| lines.contains(&line))
+            .is_some_and(|lines| lines.contains(&line))
     }
 
     /// Returns all breakpoints as (file, lines) pairs.
@@ -190,6 +190,7 @@ impl BreakpointStore {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
     use tempfile::TempDir;

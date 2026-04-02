@@ -978,6 +978,7 @@ impl LspClient {
     }
 
     /// Format range.
+    #[allow(clippy::too_many_arguments)]
     pub async fn range_formatting(
         &self,
         path: &Path,

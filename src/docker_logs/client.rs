@@ -129,6 +129,7 @@ impl std::fmt::Debug for DockerLogClient {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
 

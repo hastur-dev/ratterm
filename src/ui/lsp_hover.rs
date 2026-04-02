@@ -65,7 +65,7 @@ impl<'a> LspHoverWidget<'a> {
         let height = content_height.min(screen.height);
 
         // Position above cursor if possible, below if not enough space
-        let y = if self.cursor_y >= height + 1 {
+        let y = if self.cursor_y > height {
             self.cursor_y - height - 1
         } else {
             (self.cursor_y + 1).min(screen.height.saturating_sub(height))

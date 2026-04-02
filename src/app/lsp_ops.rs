@@ -254,9 +254,8 @@ impl App {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used)]
+#[allow(clippy::unwrap_used, clippy::expect_used, unused_assignments, clippy::implicit_saturating_sub)]
 mod tests {
-    use super::*;
     use crate::lsp::diagnostics::DiagnosticStore;
 
     #[test]

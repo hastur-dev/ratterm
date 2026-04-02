@@ -294,6 +294,7 @@ impl LogStorage {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
     use crate::docker_logs::types::LogSource;

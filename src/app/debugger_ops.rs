@@ -194,7 +194,7 @@ impl App {
     pub fn is_debugging(&self) -> bool {
         self.debug_session
             .as_ref()
-            .map_or(false, |s| s.is_active())
+            .is_some_and(|s| s.is_active())
     }
 
     /// Returns the current debug state as a display string (for status bar).

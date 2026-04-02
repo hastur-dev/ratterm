@@ -3,7 +3,7 @@
 //! Tests LSP response parsing, state management, and feature integration
 //! using mock LSP JSON responses.
 
-#[allow(clippy::expect_used, clippy::unwrap_used)]
+#![allow(clippy::expect_used, clippy::unwrap_used)]
 
 mod lsp_hover_tests {
     use ratterm::lsp::hover::{parse_hover_response, hover_to_styled_lines, HoverContent};

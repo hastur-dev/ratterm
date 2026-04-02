@@ -59,7 +59,7 @@ impl<'a> LspSignatureWidget<'a> {
             .min(screen.width)
             .max(MIN_WIDTH);
 
-        let y = if self.cursor_y >= POPUP_HEIGHT + 1 {
+        let y = if self.cursor_y > POPUP_HEIGHT {
             self.cursor_y - POPUP_HEIGHT - 1
         } else {
             (self.cursor_y + 1).min(screen.height.saturating_sub(POPUP_HEIGHT))

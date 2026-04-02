@@ -437,6 +437,7 @@ impl LspManager {
     }
 
     /// Format range.
+    #[allow(clippy::too_many_arguments)]
     pub async fn range_formatting(
         &mut self,
         path: &Path,

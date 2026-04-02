@@ -361,6 +361,7 @@ pub fn read_dap_message(reader: &mut impl BufRead) -> Result<Option<Value>, DapE
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
     use std::io::Cursor;

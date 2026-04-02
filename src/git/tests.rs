@@ -2,6 +2,8 @@
 //!
 //! Uses tempfile to create real git repositories for testing.
 
+#![allow(clippy::expect_used, clippy::unwrap_used)]
+
 use std::path::Path;
 use std::process::Command;
 
