@@ -160,21 +160,17 @@ impl ParserPerformer<'_> {
 
         let mode = self.csi_params[*index + 1];
         match mode {
-            5 => {
-                if *index + 2 < self.csi_params.len() {
-                    let color_index = self.csi_params[*index + 2] as u8;
-                    *index += 2;
-                    return Some(Color::Indexed(color_index));
-                }
+            5 if *index + 2 < self.csi_params.len() => {
+                let color_index = self.csi_params[*index + 2] as u8;
+                *index += 2;
+                return Some(Color::Indexed(color_index));
             }
-            2 => {
-                if *index + 4 < self.csi_params.len() {
-                    let r = self.csi_params[*index + 2] as u8;
-                    let g = self.csi_params[*index + 3] as u8;
-                    let b = self.csi_params[*index + 4] as u8;
-                    *index += 4;
-                    return Some(Color::Rgb(r, g, b));
-                }
+            2 if *index + 4 < self.csi_params.len() => {
+                let r = self.csi_params[*index + 2] as u8;
+                let g = self.csi_params[*index + 3] as u8;
+                let b = self.csi_params[*index + 4] as u8;
+                *index += 4;
+                return Some(Color::Rgb(r, g, b));
             }
             _ => {}
         }

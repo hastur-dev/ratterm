@@ -405,8 +405,8 @@ impl CompletionEngine {
             }
         }
 
-        // Sort by priority
-        all_items.sort_by(|a, b| b.priority.cmp(&a.priority));
+        // Sort by priority, highest first
+        all_items.sort_by_key(|a| std::cmp::Reverse(a.priority));
         all_items.truncate(provider::MAX_COMPLETION_ITEMS);
 
         // Cache results

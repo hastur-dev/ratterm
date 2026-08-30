@@ -312,6 +312,40 @@ fn test_true_color_mode() {
     }
 }
 
+/// Test extended color sequences that are cut short.
+///
+/// `parse_extended_color` must emit no color when the parameter list ends
+/// before the color operands, rather than indexing past the end.
+#[test]
+fn test_extended_color_truncated_params() {
+    let mut parser = AnsiParser::new();
+
+    // ESC[38;5m — 256-color mode with no index following.
+    let actions = parser.parse(b"\x1b[38;5m");
+    assert!(
+        !actions
+            .iter()
+            .any(|a| matches!(a, ParsedAction::SetFg(_) | ParsedAction::SetBg(_))),
+        "Truncated 256-color sequence must not set a color, got {actions:?}"
+    );
+
+    // ESC[38;2;255m — RGB mode with only one of three operands.
+    let actions = parser.parse(b"\x1b[38;2;255m");
+    assert!(
+        !actions
+            .iter()
+            .any(|a| matches!(a, ParsedAction::SetFg(_) | ParsedAction::SetBg(_))),
+        "Truncated RGB sequence must not set a color, got {actions:?}"
+    );
+
+    // The parser stays usable afterwards.
+    let actions = parser.parse(b"\x1b[38;2;1;2;3m");
+    match &actions[0] {
+        ParsedAction::SetFg(Color::Rgb(1, 2, 3)) => {}
+        other => panic!("Expected SetFg(Rgb(1,2,3)) after truncated input, got {other:?}"),
+    }
+}
+
 /// Test combined SGR parameters.
 #[test]
 fn test_combined_sgr() {

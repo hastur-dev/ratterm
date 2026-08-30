@@ -34,21 +34,21 @@ impl App {
             MouseEventKind::Up(MouseButton::Left) => {
                 self.finalize_terminal_selection();
             }
-            MouseEventKind::ScrollUp => {
-                if self.is_point_in_area(event.column, event.row, terminal_area) {
-                    if let Some(ref mut terminals) = self.terminals {
-                        if let Some(terminal) = terminals.active_terminal_mut() {
-                            terminal.scroll_view_up(3);
-                        }
+            MouseEventKind::ScrollUp
+                if self.is_point_in_area(event.column, event.row, terminal_area) =>
+            {
+                if let Some(ref mut terminals) = self.terminals {
+                    if let Some(terminal) = terminals.active_terminal_mut() {
+                        terminal.scroll_view_up(3);
                     }
                 }
             }
-            MouseEventKind::ScrollDown => {
-                if self.is_point_in_area(event.column, event.row, terminal_area) {
-                    if let Some(ref mut terminals) = self.terminals {
-                        if let Some(terminal) = terminals.active_terminal_mut() {
-                            terminal.scroll_view_down(3);
-                        }
+            MouseEventKind::ScrollDown
+                if self.is_point_in_area(event.column, event.row, terminal_area) =>
+            {
+                if let Some(ref mut terminals) = self.terminals {
+                    if let Some(terminal) = terminals.active_terminal_mut() {
+                        terminal.scroll_view_down(3);
                     }
                 }
             }
