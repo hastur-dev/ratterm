@@ -158,33 +158,31 @@ impl DockerLogsState {
         }
     }
 
-    /// Enters search mode.
+    /// Enters search mode, freezing the stream.
     pub fn enter_search(&mut self) {
         self.search_input.clear();
         self.search_cursor = 0;
+        self.log_buffer.pause();
         self.mode = LogViewMode::Searching;
     }
 
-    /// Exits search mode, applying the filter.
+    /// Exits search mode, applying the filter and resuming stream.
     pub fn exit_search(&mut self) {
+        // Apply the current filter
         self.log_buffer.set_filter(self.search_input.clone());
-        self.mode = if self.log_buffer.is_paused() {
-            LogViewMode::Paused
-        } else {
-            LogViewMode::Streaming
-        };
+        self.search_input.clear();
+        self.search_cursor = 0;
+        self.log_buffer.resume();
+        self.mode = LogViewMode::Streaming;
     }
 
-    /// Cancels search mode, clearing the filter.
+    /// Cancels search mode, clearing the filter and resuming stream.
     pub fn cancel_search(&mut self) {
         self.search_input.clear();
         self.search_cursor = 0;
         self.log_buffer.set_filter(String::new());
-        self.mode = if self.log_buffer.is_paused() {
-            LogViewMode::Paused
-        } else {
-            LogViewMode::Streaming
-        };
+        self.log_buffer.resume();
+        self.mode = LogViewMode::Streaming;
     }
 
     /// Goes back to the container list.
@@ -294,6 +292,16 @@ impl DockerLogsState {
         if !self.search_input.is_empty() {
             self.search_manager.add(name, self.search_input.clone());
         }
+    }
+
+    /// Moves to the next matching line in search mode.
+    pub fn search_next_match(&mut self) {
+        self.log_buffer.scroll_up(1);
+    }
+
+    /// Moves to the previous matching line in search mode.
+    pub fn search_prev_match(&mut self) {
+        self.log_buffer.scroll_down(1);
     }
 
     // ========================================================================
@@ -685,5 +693,73 @@ mod tests {
         state.select_first();
         state.select_last();
         assert_eq!(state.selected_idx(), 0);
+    }
+
+    #[test]
+    fn test_enter_search_pauses_stream() {
+        let mut state = default_state();
+        state.enter_streaming("c1".to_string(), "test".to_string());
+        assert_eq!(state.mode(), LogViewMode::Streaming);
+        assert!(!state.log_buffer().is_paused());
+
+        state.enter_search();
+        assert_eq!(state.mode(), LogViewMode::Searching);
+        assert!(state.log_buffer().is_paused());
+    }
+
+    #[test]
+    fn test_search_navigate_matches() {
+        let mut state = default_state();
+        state.enter_streaming("c1".to_string(), "test".to_string());
+
+        use crate::docker_logs::types::{LogEntry, LogSource};
+        for i in 0..10 {
+            state.log_buffer_mut().push(LogEntry::new(
+                "ts".to_string(),
+                LogSource::Stdout,
+                format!("line {} error", i),
+                "c1".to_string(),
+                "test".to_string(),
+            ));
+        }
+
+        state.enter_search();
+        state.search_insert_char('e');
+        state.search_insert_char('r');
+        state.search_insert_char('r');
+
+        let initial_offset = state.log_buffer().scroll_offset();
+        state.search_next_match();
+        assert!(state.log_buffer().scroll_offset() > initial_offset);
+
+        state.search_prev_match();
+        assert_eq!(state.log_buffer().scroll_offset(), initial_offset);
+    }
+
+    #[test]
+    fn test_search_arrow_navigation() {
+        let mut state = default_state();
+        state.enter_streaming("c1".to_string(), "test".to_string());
+
+        use crate::docker_logs::types::{LogEntry, LogSource};
+        for i in 0..5 {
+            state.log_buffer_mut().push(LogEntry::new(
+                "ts".to_string(),
+                LogSource::Stdout,
+                format!("match line {}", i),
+                "c1".to_string(),
+                "test".to_string(),
+            ));
+        }
+
+        state.enter_search();
+        state.search_insert_char('m');
+        state.search_insert_char('a');
+        state.search_insert_char('t');
+        state.search_insert_char('c');
+        state.search_insert_char('h');
+
+        assert_eq!(state.mode(), LogViewMode::Searching);
+        assert!(!state.search_input().is_empty());
     }
 }

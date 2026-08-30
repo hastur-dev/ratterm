@@ -12,7 +12,7 @@ use std::io::{self, Write};
 use std::path::PathBuf;
 
 pub use keybindings::{KeyAction, KeyBinding, KeybindingMode, Keybindings};
-pub use platform::{command_palette_hotkey, is_windows_11};
+pub use platform::{PlatformKeys, command_palette_hotkey, is_windows_11};
 pub use shell::{ShellDetector, ShellInfo, ShellInstallInfo, ShellInstaller, ShellType};
 
 use crate::docker_logs::config::LogStreamConfig;

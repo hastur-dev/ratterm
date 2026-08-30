@@ -216,13 +216,19 @@ fn render_log_stream(state: &DockerLogsState, area: Rect, buf: &mut Buffer) {
                 .add_modifier(Modifier::BOLD),
         ));
 
-        // Message
+        // Message with optional match highlighting
         let remaining_width = area
             .width
             .saturating_sub(spans.iter().map(|s| s.width() as u16).sum::<u16>())
             as usize;
         let msg = truncate(&entry.message, remaining_width);
-        spans.push(Span::styled(msg, Style::default().fg(level_color)));
+
+        if state.mode() == LogViewMode::Searching && !state.search_input().is_empty() {
+            let msg_spans = highlight_matches(&msg, state.search_input(), level_color);
+            spans.extend(msg_spans);
+        } else {
+            spans.push(Span::styled(msg, Style::default().fg(level_color)));
+        }
 
         let line = Line::from(spans);
         let line_area = Rect::new(chunks[1].x, y, chunks[1].width, 1);
@@ -328,6 +334,47 @@ fn render_saved_searches(state: &DockerLogsState, area: Rect, buf: &mut Buffer) 
     Paragraph::new(footer).render(chunks[2], buf);
 }
 
+/// Highlights all occurrences of a search pattern in text with yellow background.
+fn highlight_matches<'a>(text: &'a str, pattern: &str, base_color: Color) -> Vec<Span<'a>> {
+    assert!(!pattern.is_empty(), "pattern must not be empty");
+
+    let lower_text = text.to_lowercase();
+    let lower_pattern = pattern.to_lowercase();
+    let mut result = Vec::new();
+    let mut last_end = 0;
+
+    while let Some(pos) = lower_text[last_end..].find(&lower_pattern) {
+        let start = last_end + pos;
+        let end = start + pattern.len();
+
+        if start > last_end {
+            result.push(Span::styled(
+                text[last_end..start].to_string(),
+                Style::default().fg(base_color),
+            ));
+        }
+
+        result.push(Span::styled(
+            text[start..end].to_string(),
+            Style::default()
+                .fg(Color::Black)
+                .bg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        ));
+
+        last_end = end;
+    }
+
+    if last_end < text.len() {
+        result.push(Span::styled(
+            text[last_end..].to_string(),
+            Style::default().fg(base_color),
+        ));
+    }
+
+    result
+}
+
 /// Truncates a string to the given maximum width.
 fn truncate(s: &str, max: usize) -> String {
     if s.len() <= max {
@@ -372,5 +419,32 @@ mod tests {
         let mut buf = Buffer::empty(area);
         render_docker_logs(&state, area, &mut buf);
         // Should not panic even with tiny area
+    }
+
+    #[test]
+    fn test_highlight_matches_single() {
+        let spans = highlight_matches("hello world", "world", Color::White);
+        assert_eq!(spans.len(), 2);
+        assert_eq!(spans[0].content, "hello ");
+        assert_eq!(spans[1].content, "world");
+    }
+
+    #[test]
+    fn test_highlight_matches_multiple() {
+        let spans = highlight_matches("foo bar foo baz", "foo", Color::White);
+        assert!(spans.len() > 2);
+    }
+
+    #[test]
+    fn test_highlight_matches_case_insensitive() {
+        let spans = highlight_matches("Hello WORLD", "hello", Color::White);
+        assert!(spans.len() > 1);
+    }
+
+    #[test]
+    fn test_highlight_matches_no_match() {
+        let spans = highlight_matches("hello world", "xyz", Color::White);
+        assert_eq!(spans.len(), 1);
+        assert_eq!(spans[0].content, "hello world");
     }
 }

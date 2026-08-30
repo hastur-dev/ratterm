@@ -194,11 +194,7 @@ pub fn render_credential_entry(selector: &SSHManagerSelector, area: Rect, buf: &
 /// Renders the scanning mode.
 pub fn render_scanning(selector: &SSHManagerSelector, area: Rect, buf: &mut Buffer) {
     let (scanned, total) = selector.scan_progress().unwrap_or((0, 0));
-    let percentage = if total > 0 {
-        (scanned * 100) / total
-    } else {
-        0
-    };
+    let percentage = (scanned * 100).checked_div(total).unwrap_or(0);
 
     let subnet_info = selector
         .scanning_subnet()
@@ -211,11 +207,7 @@ pub fn render_scanning(selector: &SSHManagerSelector, area: Rect, buf: &mut Buff
     );
 
     let bar_width = area.width.saturating_sub(4) as usize;
-    let filled = if total > 0 {
-        (bar_width * scanned) / total
-    } else {
-        0
-    };
+    let filled = (bar_width * scanned).checked_div(total).unwrap_or(0);
     let empty = bar_width.saturating_sub(filled);
     let progress_bar = format!("[{}{}]", "█".repeat(filled), "░".repeat(empty));
 
@@ -266,11 +258,7 @@ pub fn status_to_style(status: ConnectionStatus) -> Style {
 /// Renders the authenticated scanning mode.
 pub fn render_authenticated_scanning(selector: &SSHManagerSelector, area: Rect, buf: &mut Buffer) {
     let (scanned, total) = selector.scan_progress().unwrap_or((0, 0));
-    let percentage = if total > 0 {
-        (scanned * 100) / total
-    } else {
-        0
-    };
+    let percentage = (scanned * 100).checked_div(total).unwrap_or(0);
 
     let subnet_info = selector
         .scanning_subnet()
@@ -289,11 +277,7 @@ pub fn render_authenticated_scanning(selector: &SSHManagerSelector, area: Rect, 
     );
 
     let bar_width = area.width.saturating_sub(4) as usize;
-    let filled = if total > 0 {
-        (bar_width * scanned) / total
-    } else {
-        0
-    };
+    let filled = (bar_width * scanned).checked_div(total).unwrap_or(0);
     let empty = bar_width.saturating_sub(filled);
     let progress_bar = format!("[{}{}]", "█".repeat(filled), "░".repeat(empty));
 

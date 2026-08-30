@@ -10,6 +10,9 @@ use ratatui::{
     widgets::Widget,
 };
 
+use crate::config::PlatformKeys;
+use crate::ui::layout::FocusedPane;
+
 /// Style variant for a key hint badge.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum KeyHintStyle {
@@ -100,6 +103,34 @@ impl<'a> KeyHintBar<'a> {
     #[must_use]
     pub fn new(hints: Vec<KeyHint<'a>>) -> Self {
         Self { hints }
+    }
+}
+
+/// Returns the hints shown at the bottom of the screen for the focused pane.
+///
+/// Labels that differ between operating systems are taken from `keys` rather
+/// than hard-coded, so a Windows user is shown the hotkeys that actually reach
+/// the application.
+#[must_use]
+pub fn hints_for(pane: FocusedPane, keys: PlatformKeys) -> Vec<KeyHint<'static>> {
+    match pane {
+        FocusedPane::Terminal => vec![
+            KeyHint::styled(keys.command_palette(), "Palette", KeyHintStyle::Highlighted),
+            KeyHint::new("Ctrl+Shift+U", "SSH"),
+            KeyHint::new("Ctrl+Shift+D", "Docker"),
+            KeyHint::new("Ctrl+T", "New Tab"),
+            KeyHint::new("Ctrl+S", "Split"),
+            KeyHint::new(keys.switch_pane(), "Switch Pane"),
+            KeyHint::styled("Ctrl+Q", "Quit", KeyHintStyle::Danger),
+        ],
+        FocusedPane::Editor => vec![
+            KeyHint::styled(keys.command_palette(), "Palette", KeyHintStyle::Highlighted),
+            KeyHint::new("Ctrl+O", "Open"),
+            KeyHint::new("Ctrl+S", "Save"),
+            KeyHint::new("Ctrl+F", "Find"),
+            KeyHint::new(keys.switch_pane(), "Switch Pane"),
+            KeyHint::styled("Ctrl+Q", "Quit", KeyHintStyle::Danger),
+        ],
     }
 }
 
@@ -337,6 +368,172 @@ mod tests {
             content.contains('\u{2026}'),
             "Should show truncation indicator: '{}'",
             content
+        );
+    }
+
+    /// Non-Windows host facts.
+    const UNIX: PlatformKeys = PlatformKeys {
+        windows: false,
+        windows_11: false,
+    };
+    /// Windows 10 host facts.
+    const WIN10: PlatformKeys = PlatformKeys {
+        windows: true,
+        windows_11: false,
+    };
+    /// Windows 11 host facts.
+    const WIN11: PlatformKeys = PlatformKeys {
+        windows: true,
+        windows_11: true,
+    };
+
+    /// Helper: the key labels of a hint set.
+    fn keys_of<'a>(hints: &'a [KeyHint<'a>]) -> Vec<&'a str> {
+        hints.iter().map(|h| h.key).collect()
+    }
+
+    /// Helper: the label paired with a description.
+    fn key_for<'a>(hints: &'a [KeyHint<'a>], description: &str) -> &'a str {
+        hints
+            .iter()
+            .find(|h| h.description == description)
+            .unwrap_or_else(|| panic!("no hint described as '{description}'"))
+            .key
+    }
+
+    #[test]
+    fn test_hints_palette_label_follows_platform() {
+        for pane in [FocusedPane::Terminal, FocusedPane::Editor] {
+            assert_eq!(key_for(&hints_for(pane, UNIX), "Palette"), "Ctrl+Shift+P");
+            assert_eq!(key_for(&hints_for(pane, WIN10), "Palette"), "Ctrl+Shift+P");
+            assert_eq!(
+                key_for(&hints_for(pane, WIN11), "Palette"),
+                "F1",
+                "Windows 11 rebinds the palette to F1, so the bar must say F1"
+            );
+        }
+    }
+
+    #[test]
+    fn test_hints_switch_pane_label_follows_platform() {
+        for pane in [FocusedPane::Terminal, FocusedPane::Editor] {
+            assert_eq!(key_for(&hints_for(pane, UNIX), "Switch Pane"), "Alt+Tab");
+            assert_eq!(
+                key_for(&hints_for(pane, WIN10), "Switch Pane"),
+                "Alt+Arrows"
+            );
+            assert_eq!(
+                key_for(&hints_for(pane, WIN11), "Switch Pane"),
+                "Alt+Arrows"
+            );
+        }
+    }
+
+    #[test]
+    fn test_hints_never_advertise_alt_tab_on_windows() {
+        for pane in [FocusedPane::Terminal, FocusedPane::Editor] {
+            for keys in [WIN10, WIN11] {
+                let hints = hints_for(pane, keys);
+                assert!(
+                    !keys_of(&hints).contains(&"Alt+Tab"),
+                    "Windows intercepts Alt+Tab; it must not be shown as a hotkey"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_hints_never_advertise_ctrl_shift_p_on_windows_11() {
+        for pane in [FocusedPane::Terminal, FocusedPane::Editor] {
+            let hints = hints_for(pane, WIN11);
+            assert!(
+                !keys_of(&hints).contains(&"Ctrl+Shift+P"),
+                "Ctrl+Shift+P is not bound on Windows 11"
+            );
+        }
+    }
+
+    #[test]
+    fn test_hints_terminal_and_editor_contents() {
+        let terminal = hints_for(FocusedPane::Terminal, UNIX);
+        assert_eq!(
+            keys_of(&terminal),
+            vec![
+                "Ctrl+Shift+P",
+                "Ctrl+Shift+U",
+                "Ctrl+Shift+D",
+                "Ctrl+T",
+                "Ctrl+S",
+                "Alt+Tab",
+                "Ctrl+Q",
+            ]
+        );
+
+        let editor = hints_for(FocusedPane::Editor, UNIX);
+        assert_eq!(
+            keys_of(&editor),
+            vec![
+                "Ctrl+Shift+P",
+                "Ctrl+O",
+                "Ctrl+S",
+                "Ctrl+F",
+                "Alt+Tab",
+                "Ctrl+Q"
+            ]
+        );
+    }
+
+    #[test]
+    fn test_hints_render_for_host_platform() {
+        // Exercises the labels this machine actually renders, not a fixture.
+        let keys = PlatformKeys::detect();
+        for pane in [FocusedPane::Terminal, FocusedPane::Editor] {
+            let content = render_to_string(hints_for(pane, keys), 160);
+            assert!(
+                content.contains(keys.command_palette()),
+                "Host palette label '{}' missing: '{content}'",
+                keys.command_palette()
+            );
+            assert!(
+                content.contains(keys.switch_pane()),
+                "Host switch-pane label '{}' missing: '{content}'",
+                keys.switch_pane()
+            );
+            if keys.windows {
+                assert!(
+                    !content.contains("Alt+Tab"),
+                    "Windows host must not be told to press Alt+Tab: '{content}'"
+                );
+            }
+            if keys.windows_11 {
+                assert!(
+                    !content.contains("Ctrl+Shift+P"),
+                    "Windows 11 host must not be told to press Ctrl+Shift+P: '{content}'"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_hints_styles_are_preserved() {
+        let hints = hints_for(FocusedPane::Terminal, WIN11);
+        assert!(!hints.is_empty());
+        let last = hints.len() - 1;
+        assert_eq!(hints[0].style, KeyHintStyle::Highlighted, "Palette badge");
+        assert_eq!(hints[last].style, KeyHintStyle::Danger, "Quit badge");
+    }
+
+    #[test]
+    fn test_hints_render_platform_label() {
+        let hints = hints_for(FocusedPane::Terminal, WIN11);
+        let content = render_to_string(hints, 120);
+        assert!(
+            content.contains(" F1 "),
+            "Should render F1 badge: '{content}'"
+        );
+        assert!(
+            !content.contains("Ctrl+Shift+P"),
+            "Should not render the unbound palette key: '{content}'"
         );
     }
 

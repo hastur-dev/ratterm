@@ -26,6 +26,7 @@ mod input_mouse;
 mod input_ssh;
 mod input_terminal;
 pub mod input_traits;
+mod key_filter;
 mod keymap;
 mod layout_ops;
 mod lsp_ops;
@@ -213,6 +214,8 @@ pub struct App {
     pub(crate) docker_background_rx: Option<Receiver<DockerBackgroundResult>>,
     /// Whether the Windows 11 keybinding notification has been shown.
     pub(crate) win11_notification_shown: bool,
+    /// Pairs key releases with their presses so hotkeys fire once per keystroke.
+    pub(crate) key_filter: key_filter::KeyEventFilter,
     /// Completion handle for autocomplete functionality.
     pub(crate) completion_handle: Option<CompletionHandle>,
     /// Current completion suggestion text for rendering.
@@ -377,6 +380,7 @@ impl App {
             file_browser_context: FileBrowserContext::OpenFile,
             docker_background_rx: None,
             win11_notification_shown: false,
+            key_filter: key_filter::KeyEventFilter::new(),
             completion_handle: Some(CompletionHandle::new(cwd.clone())),
             completion_suggestion: None,
             health_dashboard: None,

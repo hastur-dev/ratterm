@@ -20,12 +20,28 @@ These hotkeys work regardless of which pane is focused or what mode you're in.
 | `Ctrl+V` | Paste from clipboard |
 | `Alt+Left` | Focus Terminal pane |
 | `Alt+Right` | Focus Editor pane (when IDE visible) |
-| `Alt+Tab` | Toggle focus between panes (when IDE visible) |
+| `Alt+Tab` | Toggle focus between panes (when IDE visible) — **not available on Windows** |
 | `Alt+Up` / `Alt+Down` | Navigate between terminal grid panes |
 | `Alt+[` | Shrink split (move divider left) |
 | `Alt+]` | Expand split (move divider right) |
 | `Alt+Shift+Left` | Previous file tab |
 | `Alt+Shift+Right` | Next file tab |
+
+### Windows differences
+
+The key hint bar at the bottom of the screen adapts to the host operating
+system, so it always shows hotkeys that actually reach Ratterm.
+
+| Action | Non-Windows | Windows 10 | Windows 11 | Why |
+|--------|-------------|------------|------------|-----|
+| Command Palette | `Ctrl+Shift+P` | `Ctrl+Shift+P` | `F1` | Windows 11 reserves `Ctrl+Shift+P` for its own terminal command palette |
+| Switch Pane | `Alt+Tab` | `Alt+Left` / `Alt+Right` (shown as `Alt+Arrows`) | `Alt+Left` / `Alt+Right` (shown as `Alt+Arrows`) | Windows reserves `Alt+Tab` for the system window switcher, so the application never receives it |
+
+Windows consoles report every keystroke twice — once as a key-press event and
+once as a key-release event. Ratterm pairs the two so each hotkey fires once.
+Release events that arrive with no matching press are still honoured, because a
+spawned child process (`plink.exe`) can corrupt the console input mode so that
+`Esc` and modified keys produce only a release.
 
 ## Debugger Hotkeys
 
