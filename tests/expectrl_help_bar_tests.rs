@@ -11,6 +11,7 @@
 mod helpers;
 
 use helpers::tui_harness::TuiTestSession;
+use ratterm::config::PlatformKeys;
 use std::time::Duration;
 
 // ============================================================================
@@ -34,15 +35,19 @@ fn test_help_bar_shows_palette_hint() {
 
 #[test]
 #[ignore]
-fn test_help_bar_shows_ctrl_shift_p_key() {
+fn test_help_bar_shows_palette_key_for_this_platform() {
+    // Windows 11 rebinds the palette to F1, so the label is platform-dependent.
+    let expected = PlatformKeys::detect().command_palette();
+
     let mut session = TuiTestSession::spawn().expect("Failed to spawn");
     session.wait_startup();
 
-    let result = session.expect_text("Ctrl+Shift+P", Duration::from_secs(5));
+    let result = session.expect_text(expected, Duration::from_secs(5));
     let _ = session.quit();
     assert!(
         result.is_ok(),
-        "Help bar should show 'Ctrl+Shift+P': {:?}",
+        "Help bar should show '{}': {:?}",
+        expected,
         result
     );
 }
@@ -161,15 +166,20 @@ fn test_help_bar_shows_switch_pane_hint() {
 
 #[test]
 #[ignore]
-fn test_help_bar_shows_alt_tab_key() {
+fn test_help_bar_shows_switch_pane_key_for_this_platform() {
+    // Windows keeps Alt+Tab for its own window switcher, so the bar advertises
+    // Alt+Arrows there instead.
+    let expected = PlatformKeys::detect().switch_pane();
+
     let mut session = TuiTestSession::spawn().expect("Failed to spawn");
     session.wait_startup();
 
-    let result = session.expect_text("Alt+Tab", Duration::from_secs(5));
+    let result = session.expect_text(expected, Duration::from_secs(5));
     let _ = session.quit();
     assert!(
         result.is_ok(),
-        "Help bar should show 'Alt+Tab': {:?}",
+        "Help bar should show '{}': {:?}",
+        expected,
         result
     );
 }

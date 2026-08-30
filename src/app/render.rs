@@ -4,6 +4,7 @@ use ratatui::layout::{Constraint, Direction, Layout};
 use ratatui::style::{Color, Style};
 use tracing::debug;
 
+use crate::config::PlatformKeys;
 use crate::ui::{
     debug_panel::DebugPanelWidget,
     docker_manager::DockerManagerWidget,
@@ -12,7 +13,7 @@ use crate::ui::{
     file_picker::{FilePickerWidget, RemoteFilePickerWidget},
     git_dashboard::GitDashboardWidget,
     health_dashboard::HealthDashboardWidget,
-    key_hint_bar::{KeyHint, KeyHintBar, KeyHintStyle},
+    key_hint_bar::{KeyHintBar, hints_for},
     layout::FocusedPane,
     popup::{
         KeybindingNotificationWidget, ModeSwitcherWidget, PopupWidget, ShellInstallPromptWidget,
@@ -797,26 +798,7 @@ impl App {
 
     /// Renders the context-aware key hint bar.
     fn render_help_bar(&self, frame: &mut ratatui::Frame, areas: &crate::ui::layout::LayoutAreas) {
-        let hints = match self.layout.focused() {
-            FocusedPane::Terminal => vec![
-                KeyHint::styled("Ctrl+Shift+P", "Palette", KeyHintStyle::Highlighted),
-                KeyHint::new("Ctrl+Shift+U", "SSH"),
-                KeyHint::new("Ctrl+Shift+D", "Docker"),
-                KeyHint::new("Ctrl+T", "New Tab"),
-                KeyHint::new("Ctrl+S", "Split"),
-                KeyHint::new("Alt+Tab", "Switch Pane"),
-                KeyHint::styled("Ctrl+Q", "Quit", KeyHintStyle::Danger),
-            ],
-            FocusedPane::Editor => vec![
-                KeyHint::styled("Ctrl+Shift+P", "Palette", KeyHintStyle::Highlighted),
-                KeyHint::new("Ctrl+O", "Open"),
-                KeyHint::new("Ctrl+S", "Save"),
-                KeyHint::new("Ctrl+F", "Find"),
-                KeyHint::new("Alt+Tab", "Switch Pane"),
-                KeyHint::styled("Ctrl+Q", "Quit", KeyHintStyle::Danger),
-            ],
-        };
-
+        let hints = hints_for(self.layout.focused(), PlatformKeys::detect());
         let bar = KeyHintBar::new(hints);
         frame.render_widget(bar, areas.help_bar);
     }
