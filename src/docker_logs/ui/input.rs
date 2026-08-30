@@ -141,6 +141,13 @@ fn handle_paused_key(key: &KeyEvent) -> LogAction {
 /// Handles keys in search/filter mode.
 fn handle_searching_key(key: &KeyEvent) -> LogAction {
     match (key.modifiers, key.code) {
+        // Navigate through matches
+        (KeyModifiers::NONE, KeyCode::Up) | (KeyModifiers::NONE, KeyCode::Char('k')) => {
+            LogAction::NavigateUp
+        }
+        (KeyModifiers::NONE, KeyCode::Down) | (KeyModifiers::NONE, KeyCode::Char('j')) => {
+            LogAction::NavigateDown
+        }
         // Apply search
         (KeyModifiers::NONE, KeyCode::Enter) => LogAction::ApplySearch,
         // Cancel
@@ -503,6 +510,30 @@ mod tests {
                 &key_mod(KeyCode::Char('x'), KeyModifiers::ALT)
             ),
             LogAction::None
+        );
+    }
+
+    #[test]
+    fn test_search_mode_navigate_up_down() {
+        assert_eq!(
+            handle_log_input(LogViewMode::Searching, &key(KeyCode::Up)),
+            LogAction::NavigateUp
+        );
+        assert_eq!(
+            handle_log_input(LogViewMode::Searching, &key(KeyCode::Down)),
+            LogAction::NavigateDown
+        );
+    }
+
+    #[test]
+    fn test_search_mode_vim_navigation() {
+        assert_eq!(
+            handle_log_input(LogViewMode::Searching, &key(KeyCode::Char('k'))),
+            LogAction::NavigateUp
+        );
+        assert_eq!(
+            handle_log_input(LogViewMode::Searching, &key(KeyCode::Char('j'))),
+            LogAction::NavigateDown
         );
     }
 }
