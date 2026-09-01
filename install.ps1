@@ -89,6 +89,13 @@ if ($IsVerbose) {
 }
 
 function Get-LatestVersion {
+    # An explicit RATTERM_VERSION pins the install and skips the API entirely.
+    if ($env:RATTERM_VERSION) {
+        $pinned = $env:RATTERM_VERSION -replace '^v', ''
+        Write-Info "Using pinned version: v$pinned"
+        return $pinned
+    }
+
     Write-Debug "Fetching latest version from GitHub API..."
     $ApiUrl = "https://api.github.com/repos/$Repo/releases/latest"
     Write-Debug "API URL: $ApiUrl"

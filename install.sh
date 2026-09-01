@@ -5,6 +5,8 @@
 
 set -e
 
+# Fallback only; used when the GitHub API is unreachable. Bumped by the
+# release workflow, which anchors its sed on the start of this line.
 VERSION="0.2.2"
 REPO="hastur-dev/ratterm"
 BINARY_NAME="rat"
@@ -104,6 +106,13 @@ detect_platform() {
 
 # Get latest version from GitHub
 get_latest_version() {
+    # An explicit RATTERM_VERSION pins the install and skips the API entirely.
+    if [ -n "${RATTERM_VERSION:-}" ]; then
+        VERSION="${RATTERM_VERSION#v}"
+        info "Using pinned version: v$VERSION"
+        return
+    fi
+
     debug "Fetching latest version from GitHub API..."
 
     local api_url="https://api.github.com/repos/${REPO}/releases/latest"
@@ -162,8 +171,8 @@ get_latest_version() {
 
     debug "Parsed version: '$LATEST'"
 
-    if [ -n "$LATEST" ] && [ "$LATEST" != "" ]; then
-        VERSION="0.2.2"
+    if [ -n "$LATEST" ]; then
+        VERSION="$LATEST"
         info "Latest version: v$VERSION"
     else
         warn "Could not parse latest version, using default: v$VERSION"

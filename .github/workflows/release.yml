@@ -110,9 +110,9 @@ jobs:
       - name: Update version in install scripts and Cargo.toml
         run: |
           VERSION=${{ github.event.inputs.version }}
-          # Update install scripts
-          sed -i "s/VERSION=\".*\"/VERSION=\"$VERSION\"/" install.sh
-          sed -i "s/\$Version = \".*\"/\$Version = \"$VERSION\"/" install.ps1
+          # Update install scripts (anchored: only the top-level fallback constant)
+          sed -i "s/^VERSION=\".*\"/VERSION=\"$VERSION\"/" install.sh
+          sed -i "s/^\$Version = \".*\"/\$Version = \"$VERSION\"/" install.ps1
           # Update Cargo.toml so future builds have correct version
           sed -i "s/^version = \".*\"/version = \"$VERSION\"/" Cargo.toml
 
@@ -178,12 +178,19 @@ jobs:
   verify-install-linux-x86:
     needs: release
     runs-on: ubuntu-latest
+    env:
+      # Pin the install to the version just released; without this the script
+      # resolves whatever GitHub currently calls "latest".
+      RATTERM_VERSION: ${{ github.event.inputs.version }}
     steps:
+      # The bump commit from update-install-scripts lands after this run's SHA,
+      # so check out the branch head rather than the trigger commit.
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
 
       - name: Test install script
         env:
-          RATTERM_VERSION: ${{ github.event.inputs.version }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           echo "=== Testing install.sh on Linux (x86_64) ==="
@@ -236,8 +243,12 @@ jobs:
   verify-install-linux-arm:
     needs: release
     runs-on: ubuntu-24.04-arm
+    env:
+      RATTERM_VERSION: ${{ github.event.inputs.version }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
 
       - name: Test install script
         run: |
@@ -291,8 +302,12 @@ jobs:
   verify-install-windows:
     needs: release
     runs-on: windows-latest
+    env:
+      RATTERM_VERSION: ${{ github.event.inputs.version }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
 
       - name: Test install script
         shell: pwsh
