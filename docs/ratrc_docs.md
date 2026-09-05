@@ -436,18 +436,41 @@ Ratterm includes an SSH Manager for managing SSH connections.
 ssh_storage_mode = <mode>
 ```
 
-Sets how SSH credentials are stored.
+Sets where SSH passwords and key passphrases are kept.
+
+The host file itself (`~/.ratterm/ssh_hosts.toml`) never holds a secret unless
+`plaintext` is chosen: it holds a reference such as `secret:ssh/5/password`,
+and the secret lives in the backend named here.
 
 | Value | Description |
 |-------|-------------|
-| `plaintext` | Store credentials in plain text (default) |
-| `masterpass` | Encrypt credentials with a master password |
-| `external` | Use external password manager (future) |
+| `keychain` | Operating system credential store: Windows Credential Manager, the macOS Keychain, or the Secret Service on Linux. **Default.** |
+| `encrypted` | `~/.ratterm/secrets.vault`, Argon2id key derivation plus XChaCha20-Poly1305, passphrase entered once per session |
+| `plaintext` | No protection; secrets sit in the host file in the clear. Not recommended. |
+
+`masterpass` and `masterpassword` are accepted as older names for `encrypted`,
+and `external` for `keychain`, so an existing `.ratrc` keeps working.
 
 **Example:**
 ```
-ssh_storage_mode = masterpass
+ssh_storage_mode = keychain
 ```
+
+### Migrating an existing installation
+
+Nothing needs to be done by hand. On the first load after upgrading:
+
+- a password stored in the clear is moved into the chosen backend and the host
+  file is rewritten with a reference;
+- a value written by the retired `enc:` scheme is read once, using the master
+  password entered at startup, and rewritten the same way;
+- a secret that cannot be read is left exactly as it is rather than destroyed.
+
+The retired scheme derived its key with a hand-written mixing loop and then
+XORed the password against it. A test in `src/ssh/storage.rs` demonstrates that
+after its 100,000 rounds the output depended on neither the salt nor the
+password, so every installation shared one key. Nothing is ever written in that
+form again.
 
 ---
 

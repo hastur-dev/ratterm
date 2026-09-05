@@ -16,6 +16,7 @@ These hotkeys work regardless of which pane is focused or what mode you're in.
 | `Ctrl+Shift+Tab` | Switch Editor Mode (cycles Vim/Emacs/Default) |
 | `Ctrl+G` | Open Git Dashboard |
 | `Ctrl+O` | Open File Browser |
+| `Ctrl+T` | New editor tab (works whether or not the IDE pane is showing) |
 | `Ctrl+Shift+C` | Copy selection |
 | `Ctrl+V` | Paste from clipboard |
 | `Alt+Left` | Focus Terminal pane |
@@ -901,3 +902,19 @@ When running an image with options (`Ctrl+O`):
 - `Enter` - Run image with default settings (shows confirm dialog)
 - `Ctrl+O` - Run image with custom options
 - `d` - Remove image
+
+## Deterministic keys for scripted runs
+
+`--test-keys`, and every scenario unless it sets `test_keys: false`, enable four
+extra keys:
+
+| Hotkey | Action |
+|--------|--------|
+| `F1` | Command palette |
+| `F2` | SSH manager |
+| `F3` | Docker manager |
+| `F4` | SSH health dashboard |
+
+They exist because the real shortcut for the command palette differs between
+Windows 11 and every other platform, so a scenario written against it would not
+be the same test everywhere. See `docs/automation.md`.

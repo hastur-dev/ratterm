@@ -1,0 +1,10 @@
+# A file opens and its contents appear in the editor pane.
+#
+# The file it opens is itself, so the scenario needs no other fixture and the
+# expected text is visible right here.
+name: editor opens a file
+steps:
+  - open_file: tests/scenarios/07-editor-file.yaml
+  - expect_status: "Opened"
+  - expect_text: "editor opens a file"
+  - snapshot: open

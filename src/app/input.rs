@@ -147,6 +147,14 @@ impl App {
                 self.show_file_browser();
                 true
             }
+            // The hint bar advertises Ctrl+T globally, so it has to work
+            // globally. It used to live behind the editor-focused handler,
+            // which the user cannot reach while the IDE pane is hidden:
+            // focus is refused to a hidden pane, so the key did nothing.
+            (KeyModifiers::CONTROL, KeyCode::Char('t')) => {
+                self.new_editor_tab();
+                true
+            }
             // Test-keys mode: F1=Palette, F2=SSH, F3=Docker, F4=Health Dashboard
             (KeyModifiers::NONE, KeyCode::F(1)) if self.test_keys => {
                 self.show_popup(PopupKind::CommandPalette);
@@ -294,10 +302,6 @@ impl App {
     /// Handles editor-specific global keybindings. Returns true if handled.
     fn handle_editor_global_key(&mut self, key: KeyEvent) -> bool {
         match (key.modifiers, key.code) {
-            (KeyModifiers::CONTROL, KeyCode::Char('t')) => {
-                self.new_editor_tab();
-                true
-            }
             (KeyModifiers::CONTROL, KeyCode::Char('w')) => {
                 self.close_editor_tab();
                 true

@@ -2,15 +2,21 @@
 //!
 //! Provides text editing with syntax highlighting and LSP support.
 
+pub mod brackets;
 pub mod buffer;
 pub mod cursor;
 pub mod edit;
 mod editing;
+pub mod emacs;
 pub mod find;
+pub mod fold;
+pub mod highlight;
+pub mod indent;
 mod movement;
 mod selection;
 pub mod state;
 pub mod view;
+pub mod vim;
 
 use std::path::PathBuf;
 

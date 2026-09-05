@@ -45,7 +45,7 @@ const JOIN_TIMEOUT_MS: u64 = 2000;
 pub const ERROR_UNAUTHENTICATED: i32 = -32_001;
 
 /// Where the control API listens.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub enum ApiEndpoint {
     /// Platform default: named pipe on Windows, Unix socket elsewhere.
     #[default]

@@ -44,7 +44,8 @@ use crossterm::{
 };
 use ratatui::{Terminal, backend::CrosstermBackend};
 
-use ratterm::app::App;
+use ratterm::api::ApiServerConfig;
+use ratterm::app::{App, AppOptions};
 use ratterm::config::Config;
 use ratterm::extension::{ExtensionManager, installer::Installer};
 use ratterm::logging::{self, LogConfig};
@@ -62,6 +63,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Handle --version flag
     if args.iter().any(|a| a == "--version" || a == "-v") {
         println!("ratterm v{VERSION}");
+        return Ok(());
+    }
+
+    // Handle --help flag
+    if args.iter().any(|a| a == "--help" || a == "-h") {
+        println!("ratterm v{VERSION}");
+        println!();
+        println!("Usage: rat [OPTIONS] [FILE]");
+        println!();
+        println!("Options:");
+        println!("  --version, -v    Show version");
+        println!("  --help, -h       Show this help");
+        println!("  --verify         Verify the binary is valid (used by the updater)");
+        println!("  --update         Check and install updates");
+        println!("  --no-update      Skip the update check");
+        println!();
+        print!("{}", ratterm::cli::help_text());
+        println!("Subcommands:");
+        println!("  uninstall        Uninstall ratterm from the system");
+        println!("  ext              Extension manager");
         return Ok(());
     }
 
@@ -129,8 +150,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         return run_test_mode();
     }
 
+    // Automation flags: headless runs and scenarios never touch the terminal,
+    // so they are handled before it is put into raw mode.
+    let cli = match ratterm::cli::parse(&args[1..]) {
+        Ok(cli) => cli,
+        Err(message) => {
+            eprintln!("{message}");
+            eprintln!();
+            eprint!("{}", ratterm::cli::help_text());
+            std::process::exit(2);
+        }
+    };
+
+    if cli.is_scenario_run() || cli.is_headless() {
+        setup_logging(&Config::load().unwrap_or_default().log_config);
+        return if cli.is_scenario_run() {
+            run_scenarios(&cli)
+        } else {
+            run_headless(&cli)
+        };
+    }
+
     // Check for updates on startup (unless --no-update)
-    let update_result = if args.iter().any(|a| a == "--no-update") {
+    let update_result = if cli.no_update {
         StartupUpdateResult::None
     } else {
         updater::check_for_updates()
@@ -152,8 +194,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    // Get file path (skip flags)
-    let file_path = args.iter().skip(1).find(|a| !a.starts_with('-')).cloned();
+    let file_path = cli.file.clone();
 
     // Set up panic hook to restore terminal on panic
     let original_hook = panic::take_hook();
@@ -179,10 +220,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let size = terminal.size()?;
 
     // Create application
-    let mut app = App::new(size.width, size.height)?;
+    let options = match app_options_from(&cli) {
+        Ok(options) => options,
+        Err(message) => {
+            let _ = restore_terminal();
+            eprintln!("{message}");
+            std::process::exit(2);
+        }
+    };
+    let mut app = App::with_options(size.width, size.height, options)?;
 
     // Enable test-keys mode if requested (F1/F2/F3 open palette/SSH/Docker)
-    if args.iter().any(|a| a == "--test-keys") {
+    if cli.test_keys {
         app.enable_test_keys();
     }
 
@@ -660,5 +709,158 @@ del "%~f0"
         println!("Please manually remove ratterm from your PATH environment variable.");
     }
 
+    Ok(())
+}
+
+/// Builds the application options implied by the command line.
+fn app_options_from(cli: &ratterm::cli::CliOptions) -> Result<AppOptions, String> {
+    let mut options = AppOptions::interactive();
+
+    if let Some(dir) = cli.fixtures.as_ref() {
+        options = options.with_fixtures(dir.clone());
+    }
+
+    if cli.no_api {
+        options.without_api = true;
+    } else if let Some(endpoint) = cli.api_endpoint.clone() {
+        let mut config = if cli.api_no_auth {
+            ApiServerConfig::default()
+        } else {
+            ApiServerConfig::secure_default().map_err(|e| e.to_string())?
+        };
+        config.endpoint = endpoint;
+        options = options.with_api(config);
+    } else if cli.api_no_auth {
+        options = options.with_api(ApiServerConfig::default());
+    }
+
+    Ok(options)
+}
+
+/// Runs the scenarios named on the command line.
+///
+/// Exits non-zero if any scenario fails, so CI can use it directly.
+fn run_scenarios(cli: &ratterm::cli::CliOptions) -> Result<(), Box<dyn std::error::Error>> {
+    use ratterm::scenario::{ScenarioRunner, load, load_dir};
+
+    let mut scenarios = Vec::new();
+    if let Some(path) = cli.scenario.as_ref() {
+        scenarios.push(load(path)?);
+    }
+    if let Some(dir) = cli.scenario_dir.as_ref() {
+        scenarios.extend(load_dir(dir)?);
+    }
+
+    if scenarios.is_empty() {
+        eprintln!("no scenarios to run");
+        std::process::exit(2);
+    }
+
+    let mut runner = ScenarioRunner::new();
+    if let Some(dir) = cli.results_dir.as_ref() {
+        runner = runner.with_results_dir(dir.clone());
+    }
+
+    let (width, height) = cli.headless_size();
+    // A scenario run must not compete for the single IPC endpoint, and must
+    // not spawn a shell it never uses.
+    let mut options =
+        app_options_from(cli).map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
+    options.without_terminals = true;
+    options.without_api = cli.api_endpoint.is_none();
+
+    let mut failures = 0;
+    let mut summaries = Vec::new();
+
+    for scenario in &scenarios {
+        let mut app = App::with_options(width, height, options.clone())?;
+        let outcome = runner.run(scenario, &mut app);
+        print!("{}", outcome.report());
+        if !outcome.passed {
+            failures += 1;
+        }
+        summaries.push(serde_json::json!({
+            "name": outcome.name,
+            "passed": outcome.passed,
+            "steps": outcome.steps.len(),
+            "passed_steps": outcome.passed_count(),
+            "duration_ms": outcome.duration.as_millis() as u64,
+            "snapshots": outcome.snapshots
+                .iter()
+                .map(|p| p.display().to_string())
+                .collect::<Vec<_>>(),
+            "failure": outcome.first_failure().map(|f| serde_json::json!({
+                "step": f.index,
+                "description": f.description,
+                "message": f.message,
+            })),
+        }));
+        app.shutdown();
+    }
+
+    // A machine-readable summary next to the snapshots, for CI to upload.
+    let results_dir = runner.results_dir().to_path_buf();
+    if std::fs::create_dir_all(&results_dir).is_ok() {
+        let report = serde_json::json!({
+            "platform": std::env::consts::OS,
+            "arch": std::env::consts::ARCH,
+            "total": scenarios.len(),
+            "failed": failures,
+            "scenarios": summaries,
+        });
+        let path = results_dir.join("scenarios.json");
+        if let Ok(text) = serde_json::to_string_pretty(&report) {
+            let _ = std::fs::write(&path, text);
+            println!("summary written to {}", path.display());
+        }
+    }
+
+    println!("{} scenario(s), {} failed", scenarios.len(), failures);
+
+    if failures > 0 {
+        std::process::exit(1);
+    }
+    Ok(())
+}
+
+/// Runs the application with no terminal attached.
+///
+/// The interface is still rendered on demand through `app.snapshot`, so a
+/// client on the control API sees exactly what a terminal would show. Useful
+/// under systemd, in a container, or over SSH where there is no PTY.
+fn run_headless(cli: &ratterm::cli::CliOptions) -> Result<(), Box<dyn std::error::Error>> {
+    let (width, height) = cli.headless_size();
+    let options = app_options_from(cli).map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
+
+    let mut app = App::with_options(width, height, options)?;
+    app.resize(width, height);
+
+    if cli.test_keys {
+        app.enable_test_keys();
+    }
+
+    if let Some(path) = cli.file.as_ref()
+        && let Err(e) = app.open_file(path)
+    {
+        eprintln!("could not open {path}: {e}");
+    }
+
+    eprintln!("ratterm running headless at {width}x{height}");
+    if let Some(endpoint) = app.api_endpoint() {
+        eprintln!("control API on {endpoint}");
+    }
+
+    // The loop only advances state; rendering happens when something asks for
+    // a snapshot. Sleeping keeps an idle instance off the CPU.
+    let mut iterations: u64 = 0;
+    const MAX_HEADLESS_ITERATIONS: u64 = 10_000_000_000;
+
+    while app.is_running() && iterations < MAX_HEADLESS_ITERATIONS {
+        app.tick();
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        iterations += 1;
+    }
+
+    app.shutdown();
     Ok(())
 }

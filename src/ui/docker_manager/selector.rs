@@ -586,10 +586,10 @@ impl DockerManagerSelector {
         for (id, hostname, port, display_name, has_creds) in ssh_hosts {
             // We need username from credentials - use hostname as placeholder if not available
             let username = "user".to_string(); // Will be filled in from SSH credentials
+            let _ = port;
             self.available_hosts.push(DockerHostDisplay::remote(
                 *id,
                 hostname.clone(),
-                *port,
                 username,
                 display_name.clone(),
                 *has_creds,
@@ -1163,7 +1163,6 @@ mod tests {
         let remote = DockerHostDisplay::remote(
             1,
             "example.com".to_string(),
-            22,
             "user".to_string(),
             None,
             false,
@@ -1178,14 +1177,15 @@ mod tests {
     fn test_credential_prompt_decision_logic() {
         // Scenario 1: Remote host with has_credentials=false
         // Expected: Should prompt for credentials
-        let host1 = DockerHostDisplay::remote(1, "h1.com".into(), 22, "u".into(), None, false);
+        let host1 =
+            DockerHostDisplay::remote(1, "h1.com".to_string(), "u".to_string(), None, false);
         assert!(!host1.is_local());
         assert!(!host1.has_credentials);
         // In this case, code enters `else` branch and calls start_host_credentials
 
         // Scenario 2: Remote host with has_credentials=true but password is None
         // Expected: Should prompt for credentials (after looking up and finding no password)
-        let host2 = DockerHostDisplay::remote(2, "h2.com".into(), 22, "u".into(), None, true);
+        let host2 = DockerHostDisplay::remote(2, "h2.com".to_string(), "u".to_string(), None, true);
         assert!(!host2.is_local());
         assert!(host2.has_credentials);
         // In this case, code enters `if has_creds` branch, looks up creds,

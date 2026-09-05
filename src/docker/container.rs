@@ -14,107 +14,105 @@ const MAX_DOCKER_ITEMS: usize = 100;
 pub const MAX_QUICK_CONNECT: usize = 9;
 
 /// Represents where Docker commands should be executed.
+///
+/// A remote host is identified by its SSH host id and nothing else. The
+/// previous shape copied `hostname`, `port`, `username` and the password in
+/// beside the id, so editing a host in the SSH manager left stale copies in
+/// `docker_items.toml` and the two could disagree about where to connect.
+/// Connection details are resolved from the host registry at call time.
+///
+/// Files written by earlier versions still load: serde ignores the fields that
+/// are gone, and the old `display_name` is read into [`DockerHost::cached_label`].
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum DockerHost {
     /// Local Docker daemon on this machine.
     #[default]
     Local,
-    /// Remote Docker daemon accessible via SSH.
+    /// Remote Docker daemon reached through an SSH host.
     Remote {
-        /// SSH host ID from the SSH manager.
+        /// SSH host id from the host registry.
         host_id: u32,
-        /// Hostname or IP address.
-        hostname: String,
-        /// SSH port.
-        port: u16,
-        /// Username for SSH connection.
-        username: String,
-        /// Optional display name.
-        display_name: Option<String>,
-        /// Optional password for SSH (not serialized for security).
-        #[serde(skip)]
-        password: Option<String>,
+        /// Label captured when the entry was written.
+        ///
+        /// Shown before the registry has resolved the real name, and never
+        /// used to connect.
+        #[serde(
+            default,
+            alias = "display_name",
+            skip_serializing_if = "Option::is_none"
+        )]
+        cached_label: Option<String>,
     },
 }
 
 impl DockerHost {
-    /// Creates a new remote Docker host without password.
+    /// Creates a remote host from its SSH host id.
     #[must_use]
-    pub fn remote(
-        host_id: u32,
-        hostname: String,
-        port: u16,
-        username: String,
-        display_name: Option<String>,
-    ) -> Self {
-        Self::remote_with_password(host_id, hostname, port, username, display_name, None)
-    }
-
-    /// Creates a new remote Docker host with optional password.
-    #[must_use]
-    pub fn remote_with_password(
-        host_id: u32,
-        hostname: String,
-        port: u16,
-        username: String,
-        display_name: Option<String>,
-        password: Option<String>,
-    ) -> Self {
-        assert!(!hostname.is_empty(), "hostname must not be empty");
-        assert!(!username.is_empty(), "username must not be empty");
-        assert!(port > 0, "port must be greater than 0");
-
+    pub const fn remote(host_id: u32) -> Self {
         Self::Remote {
             host_id,
-            hostname,
-            port,
-            username,
-            display_name,
-            password,
+            cached_label: None,
         }
     }
 
-    /// Returns the password for remote hosts, None for local.
+    /// Creates a remote host with a label to show until the registry answers.
     #[must_use]
-    pub fn password(&self) -> Option<&str> {
-        match self {
-            Self::Local => None,
-            Self::Remote { password, .. } => password.as_deref(),
+    pub fn remote_labelled(host_id: u32, label: impl Into<String>) -> Self {
+        Self::Remote {
+            host_id,
+            cached_label: Some(label.into()),
         }
     }
 
     /// Returns true if this is the local host.
     #[must_use]
-    pub fn is_local(&self) -> bool {
+    pub const fn is_local(&self) -> bool {
         matches!(self, Self::Local)
     }
 
     /// Returns true if this is a remote host.
     #[must_use]
-    pub fn is_remote(&self) -> bool {
+    pub const fn is_remote(&self) -> bool {
         matches!(self, Self::Remote { .. })
     }
 
     /// Returns the host ID for remote hosts, None for local.
     #[must_use]
-    pub fn host_id(&self) -> Option<u32> {
+    pub const fn host_id(&self) -> Option<u32> {
         match self {
             Self::Local => None,
             Self::Remote { host_id, .. } => Some(*host_id),
         }
     }
 
-    /// Returns a display name for the host.
+    /// Returns a name for display without consulting the registry.
     #[must_use]
     pub fn display_name(&self) -> String {
         match self {
             Self::Local => "Local".to_string(),
             Self::Remote {
-                display_name: Some(name),
+                cached_label: Some(label),
                 ..
-            } => name.clone(),
-            Self::Remote { hostname, .. } => hostname.clone(),
+            } => label.clone(),
+            Self::Remote { host_id, .. } => format!("host {host_id}"),
+        }
+    }
+
+    /// Returns the name the registry knows this host by, falling back to
+    /// [`DockerHost::display_name`].
+    #[must_use]
+    pub fn display_name_in(&self, registry: &crate::hosts::HostRegistry) -> String {
+        match self.host_id() {
+            None => "Local".to_string(),
+            Some(id) => registry.label(id).unwrap_or_else(|| self.display_name()),
+        }
+    }
+
+    /// Records a label for display.
+    pub fn set_cached_label(&mut self, label: impl Into<String>) {
+        if let Self::Remote { cached_label, .. } = self {
+            *cached_label = Some(label.into());
         }
     }
 
@@ -124,29 +122,6 @@ impl DockerHost {
         match self {
             Self::Local => "local".to_string(),
             Self::Remote { host_id, .. } => format!("remote:{}", host_id),
-        }
-    }
-
-    /// Builds SSH command arguments for remote execution.
-    /// Returns None for local host.
-    #[must_use]
-    pub fn ssh_args(&self) -> Option<Vec<String>> {
-        match self {
-            Self::Local => None,
-            Self::Remote {
-                hostname,
-                port,
-                username,
-                ..
-            } => {
-                let mut args = Vec::with_capacity(4);
-                if *port != 22 {
-                    args.push("-p".to_string());
-                    args.push(port.to_string());
-                }
-                args.push(format!("{}@{}", username, hostname));
-                Some(args)
-            }
         }
     }
 }
@@ -1003,7 +978,7 @@ impl DockerItemList {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
 
@@ -1111,47 +1086,80 @@ mod tests {
         assert_eq!(host.host_id(), None);
         assert_eq!(host.display_name(), "Local");
         assert_eq!(host.storage_key(), "local");
-        assert!(host.ssh_args().is_none());
     }
 
     #[test]
     fn test_docker_host_remote() {
-        let host = DockerHost::remote(
-            1,
-            "server.example.com".to_string(),
-            22,
-            "admin".to_string(),
-            Some("My Server".to_string()),
-        );
+        let host = DockerHost::remote_labelled(1, "My Server");
 
         assert!(!host.is_local());
         assert!(host.is_remote());
         assert_eq!(host.host_id(), Some(1));
         assert_eq!(host.display_name(), "My Server");
         assert_eq!(host.storage_key(), "remote:1");
-
-        let args = host.ssh_args().unwrap();
-        assert_eq!(args.len(), 1);
-        assert_eq!(args[0], "admin@server.example.com");
     }
 
     #[test]
-    fn test_docker_host_remote_custom_port() {
-        let host = DockerHost::remote(
-            2,
-            "192.168.1.100".to_string(),
-            2222,
-            "user".to_string(),
-            None,
+    fn an_unlabelled_remote_host_names_itself_by_id() {
+        let host = DockerHost::remote(2);
+        assert_eq!(host.display_name(), "host 2");
+        assert_eq!(host.storage_key(), "remote:2");
+    }
+
+    #[test]
+    fn a_label_can_be_attached_after_construction() {
+        let mut host = DockerHost::remote(3);
+        host.set_cached_label("Desk Rock5c");
+        assert_eq!(host.display_name(), "Desk Rock5c");
+
+        let mut local = DockerHost::Local;
+        local.set_cached_label("ignored");
+        assert_eq!(local.display_name(), "Local");
+    }
+
+    #[test]
+    fn a_remote_host_holds_only_its_id() {
+        // The point of the change: no address, user or password is copied in,
+        // so nothing here can go stale when the SSH host is edited.
+        let host = DockerHost::remote_labelled(7, "label");
+        let encoded = serde_json::to_string(&host).expect("serialise");
+        assert!(encoded.contains("\"host_id\":7"), "{encoded}");
+        assert!(!encoded.contains("hostname"), "{encoded}");
+        assert!(!encoded.contains("username"), "{encoded}");
+        assert!(!encoded.contains("password"), "{encoded}");
+    }
+
+    #[test]
+    fn an_entry_written_by_an_older_version_still_loads() {
+        let legacy = r#"{
+            "type": "remote",
+            "host_id": 5,
+            "hostname": "10.0.0.18",
+            "port": 22,
+            "username": "hastur",
+            "display_name": "Desk Rock5c"
+        }"#;
+
+        let host: DockerHost = serde_json::from_str(legacy).expect("parse legacy entry");
+        assert_eq!(host.host_id(), Some(5));
+        assert_eq!(
+            host.display_name(),
+            "Desk Rock5c",
+            "the old display name is kept as a label"
         );
+    }
 
-        assert_eq!(host.display_name(), "192.168.1.100");
-
-        let args = host.ssh_args().unwrap();
-        assert_eq!(args.len(), 3);
-        assert_eq!(args[0], "-p");
-        assert_eq!(args[1], "2222");
-        assert_eq!(args[2], "user@192.168.1.100");
+    #[test]
+    fn a_host_round_trips_through_serde() {
+        for host in [
+            DockerHost::Local,
+            DockerHost::remote(1),
+            DockerHost::remote_labelled(2, "named"),
+        ] {
+            let encoded = serde_json::to_string(&host).expect("serialise");
+            let decoded: DockerHost = serde_json::from_str(&encoded).expect("deserialise");
+            assert_eq!(decoded, host);
+        }
     }
 
     #[test]
@@ -1180,8 +1188,7 @@ mod tests {
         assert_eq!(list.get_quick_connect(0).unwrap().id, "local123");
 
         // Switch to remote host
-        let remote_host =
-            DockerHost::remote(1, "server.com".to_string(), 22, "user".to_string(), None);
+        let remote_host = DockerHost::remote(1);
         list.set_selected_host(remote_host.clone());
 
         // Remote should have no quick-connect yet

@@ -474,7 +474,16 @@ impl App {
             .push(OpenFile::active(PathBuf::from(&name), name.clone()));
         self.current_file_idx = self.open_files.len() - 1;
 
+        // Show and focus the editor: a tab that is not on screen cannot be
+        // typed into, because focus is refused while the IDE pane is hidden.
+        if !self.layout.ide_visible() {
+            self.layout.show_ide();
+        }
+        self.layout.set_focused(FocusedPane::Editor);
+        self.resize_for_current_layout();
+
         self.set_status(format!("Created {}", name));
+        self.request_redraw();
     }
 
     /// Closes the current editor tab.

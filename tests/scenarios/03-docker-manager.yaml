@@ -1,0 +1,11 @@
+# The Docker manager opens and closes.
+#
+# Asserts only on the window itself: what it finds depends on whether the
+# machine running the scenario has a Docker daemon, and a scenario that
+# depended on that would fail for the wrong reason.
+name: docker manager opens
+steps:
+  - key: F3
+  - expect_text: "Docker"
+  - snapshot: open
+  - key: esc

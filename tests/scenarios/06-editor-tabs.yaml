@@ -1,0 +1,24 @@
+# Two tabs, an unsaved edit in each, and a round trip between them.
+#
+# This is the regression the per-tab editor state exists for: switching tabs
+# used to call `Editor::open`, which replaced the buffer with a fresh read from
+# disk and silently discarded unsaved work and the undo history.
+name: editor keeps unsaved work across tabs
+steps:
+  - key: ctrl+t
+  - expect_text: "Untitled"
+  - key: i
+  - type: first buffer
+  - expect_text: "first buffer"
+  - key: ctrl+t
+  - key: i
+  - type: second buffer
+  - expect_text: "second buffer"
+  - expect_not_text: "first buffer"
+  - snapshot: second-tab
+  - key: alt+shift+left
+  - expect_text: "first buffer"
+  - expect_not_text: "second buffer"
+  - key: alt+shift+right
+  - expect_text: "second buffer"
+  - snapshot: back-on-second

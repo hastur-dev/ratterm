@@ -1,0 +1,11 @@
+# The status bar and the key hint bar are both present and readable.
+#
+# The cheapest scenario that would catch a layout change accidentally pushing
+# either bar off the bottom of the frame.
+name: status and hint bars render
+steps:
+  - expect_text: "Palette"
+  - expect_text: "SSH"
+  - expect_text: "Docker"
+  - expect_text: "TERM"
+  - snapshot: bars

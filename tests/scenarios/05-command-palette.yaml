@@ -1,0 +1,18 @@
+# The command palette opens, filters as you type, and closes.
+#
+# This one also guards a rendering defect found while writing these scenarios:
+# the popup renderer used to dispatch on which manager object existed rather
+# than on which popup was open, so after visiting the Docker manager once the
+# palette drew as an empty Docker window.
+name: command palette filters
+steps:
+  - key: F1
+  - expect_text: "Command Palette"
+  - expect_text: "File: New File"
+  - snapshot: open
+  - type: theme
+  - expect_text: "Theme"
+  - expect_not_text: "File: New File"
+  - snapshot: filtered
+  - key: esc
+  - expect_not_text: "Command Palette"

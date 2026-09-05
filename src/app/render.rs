@@ -481,7 +481,43 @@ impl App {
                     }
                 }
             }
+        } else {
+            // No shell: a headless run, a scenario, or a machine where the PTY
+            // could not be created. Saying so beats an empty rectangle the
+            // reader has to interpret.
+            self.render_no_terminal_notice(frame, areas.terminal);
         }
+    }
+
+    /// Draws a placeholder where the terminal would be.
+    fn render_no_terminal_notice(&self, frame: &mut ratatui::Frame, area: ratatui::layout::Rect) {
+        use ratatui::text::{Line, Span};
+        use ratatui::widgets::{Block, Borders, Paragraph};
+
+        if area.width < 4 || area.height < 3 {
+            return;
+        }
+
+        self.last_terminal_area.set(area);
+
+        let theme = &self.config.theme_manager.current().terminal;
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .title(" No terminal ")
+            .style(Style::default().bg(theme.background));
+
+        let body = vec![
+            Line::from(Span::styled(
+                "No shell is attached to this instance.",
+                Style::default().fg(theme.foreground),
+            )),
+            Line::from(Span::styled(
+                "The editor, dashboards and the control API all work.",
+                Style::default().fg(Color::DarkGray),
+            )),
+        ];
+
+        frame.render_widget(Paragraph::new(body).block(block), area);
     }
 
     /// Renders the health dashboard in the terminal pane area.
@@ -805,44 +841,72 @@ impl App {
 
     /// Renders the popup overlay.
     fn render_popup(&self, frame: &mut ratatui::Frame, area: ratatui::layout::Rect) {
-        // Use special widget for mode switcher
-        if let Some(ref switcher) = self.mode_switcher {
-            let widget = ModeSwitcherWidget::new(switcher);
-            frame.render_widget(widget, area);
-        } else if let Some(ref selector) = self.shell_selector {
-            // Use special widget for shell selector
-            let widget = ShellSelectorWidget::new(selector);
-            frame.render_widget(widget, area);
-        } else if let Some(ref prompt) = self.shell_install_prompt {
-            // Use special widget for shell install prompt
-            let widget = ShellInstallPromptWidget::new(prompt);
-            frame.render_widget(widget, area);
-        } else if let Some(ref selector) = self.theme_selector {
-            // Use special widget for theme selector
-            let widget = ThemeSelectorWidget::new(selector);
-            frame.render_widget(widget, area);
-        } else if let Some(ref manager) = self.ssh_manager {
-            // Use special widget for SSH manager
-            let pos = self.config.window_position("ssh_manager");
-            let widget = SSHManagerWidget::new(manager).position(pos);
-            frame.render_widget(widget, area);
-        } else if let Some(ref manager) = self.docker_manager {
-            // Use special widget for Docker manager
-            let pos = self.config.window_position("docker_manager");
-            let widget = DockerManagerWidget::new(manager).position(pos);
-            frame.render_widget(widget, area);
-        } else if let Some(ref dashboard) = self.git_dashboard {
-            // Use special widget for Git dashboard
-            let pos = self.config.window_position("git_dashboard");
-            let widget = GitDashboardWidget::new(dashboard).position(pos);
-            frame.render_widget(widget, area);
-        } else if self.popup.kind().is_keybinding_notification() {
-            // Use special widget for Windows 11 keybinding notification
-            let widget = KeybindingNotificationWidget::new();
-            frame.render_widget(widget, area);
-        } else {
-            let popup_widget = PopupWidget::new(&self.popup);
-            frame.render_widget(popup_widget, area);
+        use crate::ui::popup::PopupKind;
+
+        // Dispatch on which popup is open, not on which manager object happens
+        // to exist. The previous order tried each manager in turn, so a manager
+        // left over from an earlier popup drew itself instead of the popup the
+        // user had just opened: after visiting the Docker manager once, the
+        // command palette rendered as an empty Docker window.
+        match self.popup.kind() {
+            PopupKind::ModeSwitcher => {
+                if let Some(ref switcher) = self.mode_switcher {
+                    frame.render_widget(ModeSwitcherWidget::new(switcher), area);
+                    return;
+                }
+            }
+            PopupKind::ShellSelector => {
+                if let Some(ref selector) = self.shell_selector {
+                    frame.render_widget(ShellSelectorWidget::new(selector), area);
+                    return;
+                }
+            }
+            PopupKind::ShellInstallPrompt => {
+                if let Some(ref prompt) = self.shell_install_prompt {
+                    frame.render_widget(ShellInstallPromptWidget::new(prompt), area);
+                    return;
+                }
+            }
+            PopupKind::ThemeSelector => {
+                if let Some(ref selector) = self.theme_selector {
+                    frame.render_widget(ThemeSelectorWidget::new(selector), area);
+                    return;
+                }
+            }
+            PopupKind::SSHManager
+            | PopupKind::SSHCredentialPrompt
+            | PopupKind::SSHStorageSetup
+            | PopupKind::SSHMasterPassword
+            | PopupKind::SSHSubnetEntry => {
+                if let Some(ref manager) = self.ssh_manager {
+                    let pos = self.config.window_position("ssh_manager");
+                    frame.render_widget(SSHManagerWidget::new(manager).position(pos), area);
+                    return;
+                }
+            }
+            PopupKind::DockerManager => {
+                if let Some(ref manager) = self.docker_manager {
+                    let pos = self.config.window_position("docker_manager");
+                    frame.render_widget(DockerManagerWidget::new(manager).position(pos), area);
+                    return;
+                }
+            }
+            PopupKind::GitDashboard => {
+                if let Some(ref dashboard) = self.git_dashboard {
+                    let pos = self.config.window_position("git_dashboard");
+                    frame.render_widget(GitDashboardWidget::new(dashboard).position(pos), area);
+                    return;
+                }
+            }
+            PopupKind::KeybindingChangeNotification => {
+                frame.render_widget(KeybindingNotificationWidget::new(), area);
+                return;
+            }
+            _ => {}
         }
+
+        // Everything else, including the command palette and the search and
+        // confirmation dialogs, is drawn by the general popup widget.
+        frame.render_widget(PopupWidget::new(&self.popup), area);
     }
 }

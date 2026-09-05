@@ -4,9 +4,20 @@
 //! including fetching, caching, and saving remote files.
 
 pub mod browser;
+pub mod executor;
+pub mod forward;
+pub mod pool;
+pub mod session;
 pub mod sftp;
 
 pub use browser::{RemoteFileBrowser, RemoteFileEntry};
+pub use executor::{ExecError, RemoteExecutor, exec_on_host, publish_targets, with_shared};
+pub use forward::{ForwardError, PortForward};
+pub use pool::{PoolStats, SessionKey, SessionPool};
+pub use session::{
+    CommandOutput, HostKeyPolicy, RemoteSession, RemoteTarget, SessionError, fingerprint_of,
+    known_hosts_path,
+};
 pub use sftp::{RemoteDirEntry, SftpClient, SftpError};
 
 use std::collections::HashMap;

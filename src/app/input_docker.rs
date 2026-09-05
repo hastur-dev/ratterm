@@ -713,7 +713,7 @@ impl App {
                 }
             };
 
-            let Some((hostname, ssh_port, username, password)) = host_data else {
+            let Some((hostname, _ssh_port, username, password)) = host_data else {
                 info!(
                     "docker_confirm_host_selection: host_data is None, prompting for credentials"
                 );
@@ -785,14 +785,7 @@ impl App {
                 username, hostname
             );
 
-            let docker_host = crate::docker::DockerHost::remote_with_password(
-                hid,
-                hostname.clone(),
-                ssh_port,
-                username.clone(),
-                Some(display_name.clone()),
-                password.clone(),
-            );
+            let docker_host = crate::docker::DockerHost::remote_labelled(hid, display_name.clone());
 
             // Set the host in docker_items
             self.docker_items.set_selected_host(docker_host.clone());
@@ -879,13 +872,6 @@ impl App {
 
         let (username, password, save, host_id, hd) = cred_info;
 
-        // Get the SSH port from the SSH host
-        let ssh_port = self
-            .ssh_hosts
-            .get_by_id(host_id)
-            .map(|h| h.port)
-            .unwrap_or(22);
-
         // Save credentials if requested
         if save {
             let creds = crate::ssh::SSHCredentials::new(username.clone(), Some(password.clone()));
@@ -896,14 +882,8 @@ impl App {
         }
 
         // Create the docker host with the credentials including password
-        let docker_host = crate::docker::DockerHost::remote_with_password(
-            host_id,
-            hd.hostname.clone(),
-            ssh_port,
-            username.clone(),
-            Some(hd.display_name.clone()),
-            Some(password),
-        );
+        let docker_host =
+            crate::docker::DockerHost::remote_labelled(host_id, hd.display_name.clone());
 
         // Update both docker_items AND manager selected host to stay in sync
         self.docker_items.set_selected_host(docker_host.clone());

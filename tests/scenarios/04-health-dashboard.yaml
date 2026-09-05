@@ -1,0 +1,13 @@
+# The health dashboard opens, lists the fleet, and closes.
+#
+# Run with `--fixtures tests/fixtures/fleet` so the fleet is the same on every
+# machine.
+name: health dashboard lists the fleet
+steps:
+  - key: F4
+  - expect_text: "SSH Health Dashboard"
+  - expect_text: "4 devices"
+  - expect_text: "fixture-gpu"
+  - snapshot: open
+  - key: esc
+  - expect_not_text: "SSH Health Dashboard"

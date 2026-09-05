@@ -1,0 +1,121 @@
+{
+  "arch": "x86_64",
+  "failed": 0,
+  "platform": "windows",
+  "scenarios": [
+    {
+      "duration_ms": 9928,
+      "failure": null,
+      "name": "startup renders",
+      "passed": true,
+      "passed_steps": 4,
+      "snapshots": [
+        "test-results\\startup-renders-initial.txt"
+      ],
+      "steps": 4
+    },
+    {
+      "duration_ms": 114,
+      "failure": null,
+      "name": "ssh manager lists hosts",
+      "passed": true,
+      "passed_steps": 9,
+      "snapshots": [
+        "test-results\\ssh-manager-lists-hosts-open.txt"
+      ],
+      "steps": 9
+    },
+    {
+      "duration_ms": 18,
+      "failure": null,
+      "name": "docker manager opens",
+      "passed": true,
+      "passed_steps": 4,
+      "snapshots": [
+        "test-results\\docker-manager-opens-open.txt"
+      ],
+      "steps": 4
+    },
+    {
+      "duration_ms": 1619,
+      "failure": null,
+      "name": "health dashboard lists the fleet",
+      "passed": true,
+      "passed_steps": 7,
+      "snapshots": [
+        "test-results\\health-dashboard-lists-the-fleet-open.txt"
+      ],
+      "steps": 7
+    },
+    {
+      "duration_ms": 91,
+      "failure": null,
+      "name": "command palette filters",
+      "passed": true,
+      "passed_steps": 10,
+      "snapshots": [
+        "test-results\\command-palette-filters-open.txt",
+        "test-results\\command-palette-filters-filtered.txt"
+      ],
+      "steps": 10
+    },
+    {
+      "duration_ms": 68,
+      "failure": null,
+      "name": "editor keeps unsaved work across tabs",
+      "passed": true,
+      "passed_steps": 17,
+      "snapshots": [
+        "test-results\\editor-keeps-unsaved-work-across-tabs-second-tab.txt",
+        "test-results\\editor-keeps-unsaved-work-across-tabs-back-on-second.txt"
+      ],
+      "steps": 17
+    },
+    {
+      "duration_ms": 82,
+      "failure": null,
+      "name": "editor opens a file",
+      "passed": true,
+      "passed_steps": 4,
+      "snapshots": [
+        "test-results\\editor-opens-a-file-open.txt"
+      ],
+      "steps": 4
+    },
+    {
+      "duration_ms": 10,
+      "failure": null,
+      "name": "interface follows the terminal size",
+      "passed": true,
+      "passed_steps": 5,
+      "snapshots": [
+        "test-results\\interface-follows-the-terminal-size-wide.txt",
+        "test-results\\interface-follows-the-terminal-size-narrow.txt"
+      ],
+      "steps": 5
+    },
+    {
+      "duration_ms": 17,
+      "failure": null,
+      "name": "status and hint bars render",
+      "passed": true,
+      "passed_steps": 5,
+      "snapshots": [
+        "test-results\\status-and-hint-bars-render-bars.txt"
+      ],
+      "steps": 5
+    },
+    {
+      "duration_ms": 13,
+      "failure": null,
+      "name": "quitting with unsaved work asks first",
+      "passed": true,
+      "passed_steps": 7,
+      "snapshots": [
+        "test-results\\quitting-with-unsaved-work-asks-first-confirm.txt"
+      ],
+      "steps": 7
+    }
+  ],
+  "total": 10
+}

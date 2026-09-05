@@ -41,6 +41,7 @@ impl App {
     pub fn hide_docker_manager(&mut self) {
         self.popup.hide();
         self.mode = AppMode::Normal;
+        self.set_status("Docker manager closed");
         self.request_redraw();
     }
 
@@ -70,19 +71,15 @@ impl App {
         // Debug: show host details
         let host_debug = match &host {
             DockerHost::Local => "Local".to_string(),
-            DockerHost::Remote {
-                hostname,
-                username,
-                password,
-                ..
-            } => {
-                format!(
+            DockerHost::Remote { host_id, .. } => match self.ssh_hosts.target(*host_id) {
+                Some(target) => format!(
                     "Remote({}@{}, has_pwd={})",
-                    username,
-                    hostname,
-                    password.is_some()
-                )
-            }
+                    target.username,
+                    target.hostname,
+                    target.password.is_some()
+                ),
+                None => format!("Remote(host {host_id}, unresolved)"),
+            },
         };
         info!("refresh_docker_discovery: host={}", host_debug);
         self.set_status(format!("Discovery: host={}", host_debug));
@@ -185,14 +182,9 @@ impl App {
     /// Returns display name for the currently selected host.
     #[must_use]
     pub fn docker_host_display_name(&self) -> String {
-        match &self.docker_items.selected_host {
-            DockerHost::Local => "Local".to_string(),
-            DockerHost::Remote {
-                display_name,
-                hostname,
-                ..
-            } => display_name.clone().unwrap_or_else(|| hostname.clone()),
-        }
+        self.docker_items
+            .selected_host
+            .display_name_in(&self.ssh_hosts)
     }
 
     /// Saves Docker items to storage.
@@ -297,23 +289,16 @@ impl App {
     ///
     /// This bypasses the UI and sets the host directly, useful for testing.
     /// After setting, call `refresh_docker_discovery()` to refresh the container list.
-    pub fn docker_set_remote_host(
-        &mut self,
-        host_id: u32,
-        hostname: &str,
-        port: u16,
-        username: &str,
-        password: &str,
-        display_name: Option<&str>,
-    ) {
-        let mut manager = DockerHostManager::new(&mut self.docker_items);
-        manager.set_remote_with_password(host_id, hostname, port, username, password, display_name);
+    pub fn docker_set_remote_host(&mut self, host_id: u32) {
+        let label = self
+            .ssh_hosts
+            .label(host_id)
+            .unwrap_or_else(|| format!("host {host_id}"));
 
-        let host_display = display_name.unwrap_or(hostname);
-        self.set_status(format!(
-            "Set Docker host: {}@{} (pwd=true)",
-            username, host_display
-        ));
+        let mut manager = DockerHostManager::new(&mut self.docker_items);
+        manager.set_remote_labelled(host_id, &label);
+
+        self.set_status(format!("Set Docker host: {label}"));
     }
 
     /// Sets the Docker host to local.
@@ -331,22 +316,21 @@ impl App {
             DockerHost::Local => "DockerHost::Local".to_string(),
             DockerHost::Remote {
                 host_id,
-                hostname,
-                port,
-                username,
-                display_name,
-                password,
-            } => {
-                format!(
-                    "DockerHost::Remote {{ id: {}, host: {}, port: {}, user: {}, name: {:?}, has_pwd: {} }}",
+                cached_label,
+            } => match self.ssh_hosts.target(*host_id) {
+                Some(target) => format!(
+                    "DockerHost::Remote {{ id: {}, host: {}, port: {}, user: {}, label: {:?}, has_pwd: {} }}",
                     host_id,
-                    hostname,
-                    port,
-                    username,
-                    display_name,
-                    password.is_some()
-                )
-            }
+                    target.hostname,
+                    target.port,
+                    target.username,
+                    cached_label,
+                    target.password.is_some()
+                ),
+                None => format!(
+                    "DockerHost::Remote {{ id: {host_id}, label: {cached_label:?}, unresolved }}"
+                ),
+            },
         }
     }
 
@@ -359,16 +343,8 @@ impl App {
     /// Convenience method to set a remote host and immediately discover containers.
     ///
     /// This is the recommended way to programmatically switch to a remote host.
-    pub fn docker_switch_to_remote(
-        &mut self,
-        host_id: u32,
-        hostname: &str,
-        port: u16,
-        username: &str,
-        password: &str,
-        display_name: Option<&str>,
-    ) {
-        self.docker_set_remote_host(host_id, hostname, port, username, password, display_name);
+    pub fn docker_switch_to_remote(&mut self, host_id: u32) {
+        self.docker_set_remote_host(host_id);
         self.refresh_docker_discovery();
     }
 

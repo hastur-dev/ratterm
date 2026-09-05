@@ -145,6 +145,25 @@ impl DockerDiscoveryResult {
     }
 }
 
+/// Builds an `ExitStatus` from a raw exit code.
+///
+/// `std::process::ExitStatus` has no portable constructor, but a remote command
+/// still has an exit code, and the discovery code is written against
+/// `std::process::Output`.
+fn exit_status_from(code: i32) -> std::process::ExitStatus {
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt;
+        // A Unix wait status puts the exit code in the high byte.
+        std::process::ExitStatus::from_raw(code << 8)
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::ExitStatusExt;
+        std::process::ExitStatus::from_raw(code as u32)
+    }
+}
+
 /// Docker discovery service.
 pub struct DockerDiscovery;
 
@@ -225,33 +244,23 @@ impl DockerDiscovery {
         }
     }
 
-    /// Returns the SSH command name for the current platform.
-    fn ssh_cmd() -> &'static str {
-        if cfg!(target_os = "windows") {
-            "ssh.exe"
-        } else {
-            "ssh"
-        }
-    }
-
-    /// Runs a Docker command on a remote host via SSH.
+    /// Runs a Docker command on a remote host through the pooled SSH session.
     ///
-    /// # Arguments
-    /// * `host` - The remote Docker host with SSH connection info
-    /// * `docker_args` - Arguments to pass to docker command
-    /// * `timeout_ms` - Timeout in milliseconds
+    /// This used to build a shell string and spawn `ssh`, `sshpass` or
+    /// `plink` per call, which put the password in the process list, disabled
+    /// host-key checking, and paid for a TCP and authentication handshake
+    /// every time. The command now travels over an already-authenticated
+    /// session; `timeout_ms` is unused because the session carries its own
+    /// I/O timeout.
     fn run_remote_with_timeout(
         host: &DockerHost,
         docker_args: &[&str],
-        timeout_ms: u64,
+        _timeout_ms: u64,
     ) -> Option<Output> {
-        if !host.is_remote() {
-            return None;
-        }
+        let host_id = host.host_id()?;
 
-        // Build the docker command string - always use "docker" for remote hosts
-        // since they're typically Linux, not "docker.exe" which is Windows-specific
-        // Quote arguments that contain special shell characters (like {{json .}})
+        // Quote arguments the remote shell would otherwise mangle, such as
+        // the `{{json .}}` format strings.
         let quoted_args: Vec<String> = docker_args
             .iter()
             .map(|arg| {
@@ -264,152 +273,15 @@ impl DockerDiscovery {
             .collect();
         let docker_cmd = format!("docker {}", quoted_args.join(" "));
 
-        // On Windows with password, run plink directly to avoid cmd.exe quoting issues
-        #[cfg(target_os = "windows")]
-        if let Some(password) = host.password() {
-            tracing::info!(
-                "run_remote_with_timeout: using run_plink_direct for docker_cmd={}",
-                docker_cmd
-            );
-            let result = Self::run_plink_direct(host, password, &docker_cmd, timeout_ms);
-            if let Some(ref out) = result {
-                tracing::info!(
-                    "run_plink_direct result: status={:?}, stdout_len={}, stderr_len={}",
-                    out.status,
-                    out.stdout.len(),
-                    out.stderr.len()
-                );
-            } else {
-                tracing::info!("run_plink_direct result: None (timeout or error)");
-            }
-            return result;
-        }
-
-        // Build the full SSH/plink command for shell execution
-        let full_cmd = Self::build_remote_docker_command(host, &docker_cmd);
-
-        // Execute via shell
-        let mut cmd = if cfg!(target_os = "windows") {
-            let mut c = Command::new("cmd");
-            c.args(["/C", &full_cmd]);
-            c
-        } else {
-            let mut c = Command::new("sh");
-            c.args(["-c", &full_cmd]);
-            c
-        };
-
-        Self::run_with_timeout(&mut cmd, timeout_ms)
-    }
-
-    /// Runs plink directly on Windows with password authentication.
-    /// This bypasses cmd.exe to avoid quoting/escaping issues.
-    /// Pipes "y" to stdin to auto-accept SSH host key prompts.
-    #[cfg(target_os = "windows")]
-    fn run_plink_direct(
-        host: &DockerHost,
-        password: &str,
-        docker_cmd: &str,
-        timeout_ms: u64,
-    ) -> Option<Output> {
-        use std::io::Write;
-
-        let DockerHost::Remote {
-            hostname,
-            port,
-            username,
-            ..
-        } = host
-        else {
-            return None;
-        };
-
-        let mut cmd = Command::new("plink");
-        cmd.args(["-pw", password]);
-
-        if *port != 22 {
-            cmd.args(["-P", &port.to_string()]);
-        }
-
-        cmd.arg(format!("{}@{}", username, hostname));
-
-        // Pass the docker command directly - plink will pass it to the remote shell
-        cmd.arg(docker_cmd);
-
-        // Debug: log the command
-        tracing::debug!(
-            "plink command: plink -pw [REDACTED] {}@{} {}",
-            username,
-            hostname,
-            docker_cmd
-        );
-
-        // Configure to pipe stdin and capture output
-        cmd.stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
-
-        // Spawn the process
-        let mut child = match cmd.spawn() {
-            Ok(c) => c,
-            Err(_) => return None,
-        };
-
-        // Write "y\n" to stdin to accept host key prompt
-        if let Some(mut stdin) = child.stdin.take() {
-            let _ = stdin.write_all(b"y\n");
-        }
-
-        let start = std::time::Instant::now();
-        let timeout = Duration::from_millis(timeout_ms);
-
-        // Poll for completion with timeout
-        loop {
-            match child.try_wait() {
-                Ok(Some(status)) => {
-                    // Process completed - collect output
-                    let stdout = child
-                        .stdout
-                        .take()
-                        .map(|mut s| {
-                            let mut buf = Vec::new();
-                            std::io::Read::read_to_end(&mut s, &mut buf).ok();
-                            buf
-                        })
-                        .unwrap_or_default();
-
-                    let stderr = child
-                        .stderr
-                        .take()
-                        .map(|mut s| {
-                            let mut buf = Vec::new();
-                            std::io::Read::read_to_end(&mut s, &mut buf).ok();
-                            buf
-                        })
-                        .unwrap_or_default();
-
-                    return Some(Output {
-                        status,
-                        stdout,
-                        stderr,
-                    });
-                }
-                Ok(None) => {
-                    // Still running - check timeout
-                    if start.elapsed() >= timeout {
-                        // Timeout - kill the process
-                        let _ = child.kill();
-                        let _ = child.wait(); // Reap the zombie
-                        return None;
-                    }
-                    // Sleep briefly before polling again
-                    std::thread::sleep(Duration::from_millis(POLL_INTERVAL_MS));
-                }
-                Err(_) => {
-                    // Error checking status
-                    let _ = child.kill();
-                    return None;
-                }
+        match crate::remote::exec_on_host(host_id, &docker_cmd) {
+            Ok(result) => Some(Output {
+                status: exit_status_from(result.exit_status),
+                stdout: result.stdout.into_bytes(),
+                stderr: result.stderr.into_bytes(),
+            }),
+            Err(e) => {
+                tracing::warn!("remote docker command failed on host {host_id}: {e}");
+                None
             }
         }
     }
@@ -502,13 +374,6 @@ impl DockerDiscovery {
     #[must_use]
     pub fn discover_all_remote(host: &DockerHost) -> DockerDiscoveryResult {
         assert!(host.is_remote(), "host must be remote");
-
-        // Check if SSH authentication tools are available when password is needed
-        if host.password().is_some()
-            && let Err(tool_error) = Self::check_ssh_auth_tools()
-        {
-            return DockerDiscoveryResult::daemon_error(tool_error);
-        }
 
         // Check availability first
         let availability = Self::check_availability_remote(host);
@@ -624,131 +489,6 @@ impl DockerDiscovery {
         let images = Self::parse_images_json(&stdout);
 
         Ok(images)
-    }
-
-    /// Builds a command string for executing docker on a remote host.
-    ///
-    /// If the host has a password set, this will use sshpass (Linux/Mac)
-    /// or plink (Windows) to handle password authentication.
-    #[must_use]
-    pub fn build_remote_docker_command(host: &DockerHost, docker_cmd: &str) -> String {
-        assert!(host.is_remote(), "host must be remote");
-        assert!(!docker_cmd.is_empty(), "docker_cmd must not be empty");
-
-        let ssh_args = host.ssh_args().unwrap_or_default();
-
-        // Check if we have a password and need to use sshpass/plink
-        if let Some(password) = host.password() {
-            // Use plink on Windows, sshpass on Linux/Mac
-            if cfg!(target_os = "windows") {
-                // Try plink first (PuTTY), fallback to ssh
-                if Self::is_plink_available() {
-                    return Self::build_plink_command(host, password, docker_cmd);
-                }
-                // Fall through to regular SSH (will fail if password required)
-            } else {
-                // Linux/Mac - use sshpass if available
-                if Self::is_sshpass_available() {
-                    return Self::build_sshpass_command(&ssh_args, password, docker_cmd);
-                }
-                // Fall through to regular SSH (will fail if password required)
-            }
-        }
-
-        // No password or password tool not available - use plain SSH
-        let ssh_cmd = Self::ssh_cmd();
-        format!("{} {} {}", ssh_cmd, ssh_args.join(" "), docker_cmd)
-    }
-
-    /// Checks if sshpass is available on the system.
-    fn is_sshpass_available() -> bool {
-        Command::new("sshpass")
-            .arg("-V")
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .map(|s| s.success())
-            .unwrap_or(false)
-    }
-
-    /// Checks if plink (PuTTY) is available on the system.
-    fn is_plink_available() -> bool {
-        Command::new("plink")
-            .arg("-V")
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .is_ok()
-    }
-
-    /// Checks if SSH password authentication tools are available.
-    ///
-    /// Returns `Ok(())` if tools are available, or an error message explaining
-    /// what's missing and how to fix it.
-    pub fn check_ssh_auth_tools() -> Result<(), String> {
-        if cfg!(target_os = "windows") {
-            if Self::is_plink_available() {
-                Ok(())
-            } else {
-                Err(
-                    "plink (PuTTY) is required for SSH password authentication on Windows. \
-                     Install PuTTY from https://www.putty.org/ and ensure plink.exe is in PATH, \
-                     or use SSH key authentication instead."
-                        .to_string(),
-                )
-            }
-        } else if Self::is_sshpass_available() {
-            Ok(())
-        } else {
-            Err("sshpass is required for SSH password authentication. \
-                 Install it with: apt install sshpass (Debian/Ubuntu), \
-                 brew install sshpass (macOS), or use SSH key authentication instead."
-                .to_string())
-        }
-    }
-
-    /// Builds a command using sshpass for password authentication.
-    fn build_sshpass_command(ssh_args: &[String], password: &str, docker_cmd: &str) -> String {
-        // Escape single quotes in password for shell
-        let escaped_pwd = password.replace('\'', "'\\''");
-        format!(
-            "sshpass -p '{}' ssh -o StrictHostKeyChecking=no {} {}",
-            escaped_pwd,
-            ssh_args.join(" "),
-            docker_cmd
-        )
-    }
-
-    /// Builds a command using plink (PuTTY) for password authentication.
-    ///
-    /// Uses plink with -pw for password and -batch mode to auto-accept
-    /// cached host keys. Password is wrapped in double quotes.
-    fn build_plink_command(host: &DockerHost, password: &str, docker_cmd: &str) -> String {
-        match host {
-            DockerHost::Remote {
-                hostname,
-                port,
-                username,
-                ..
-            } => {
-                // Escape double quotes inside the password and wrap in double quotes
-                let escaped_pwd = password.replace('"', "\\\"");
-
-                // Use -batch mode to auto-accept cached host keys (no interactive prompt)
-                if *port == 22 {
-                    format!(
-                        "plink -batch -pw \"{}\" {}@{} {}",
-                        escaped_pwd, username, hostname, docker_cmd
-                    )
-                } else {
-                    format!(
-                        "plink -batch -pw \"{}\" -P {} {}@{} {}",
-                        escaped_pwd, port, username, hostname, docker_cmd
-                    )
-                }
-            }
-            DockerHost::Local => docker_cmd.to_string(),
-        }
     }
 
     /// Checks if Docker CLI is available on the system.
@@ -1747,36 +1487,25 @@ mod tests {
     }
 
     #[test]
-    fn test_build_remote_docker_command() {
-        let host = DockerHost::remote(
-            1,
-            "server.example.com".to_string(),
-            22,
-            "admin".to_string(),
-            None,
-        );
-
-        let cmd = DockerDiscovery::build_remote_docker_command(&host, "docker ps");
-        assert!(cmd.contains("ssh"));
-        assert!(cmd.contains("admin@server.example.com"));
-        assert!(cmd.contains("docker ps"));
+    fn a_remote_command_on_an_unregistered_host_reports_failure() {
+        // No target has been published for this id, so the executor refuses
+        // rather than reaching for a subprocess. Before this change the same
+        // call would have spawned `ssh` and hung on a password prompt.
+        let host = DockerHost::remote(876_543);
+        let output = DockerDiscovery::run_remote_with_timeout(&host, &["ps"], 1000);
+        assert!(output.is_none());
     }
 
     #[test]
-    fn test_build_remote_docker_command_custom_port() {
-        let host = DockerHost::remote(
-            2,
-            "192.168.1.100".to_string(),
-            2222,
-            "user".to_string(),
-            None,
-        );
+    fn a_local_host_has_no_remote_path() {
+        let output = DockerDiscovery::run_remote_with_timeout(&DockerHost::Local, &["ps"], 1000);
+        assert!(output.is_none());
+    }
 
-        let cmd =
-            DockerDiscovery::build_remote_docker_command(&host, "docker exec -it abc123 /bin/sh");
-        assert!(cmd.contains("ssh"));
-        assert!(cmd.contains("-p 2222"));
-        assert!(cmd.contains("user@192.168.1.100"));
-        assert!(cmd.contains("docker exec -it abc123 /bin/sh"));
+    #[test]
+    fn exit_statuses_round_trip_through_the_conversion() {
+        assert!(exit_status_from(0).success());
+        assert!(!exit_status_from(1).success());
+        assert_eq!(exit_status_from(3).code(), Some(3));
     }
 }

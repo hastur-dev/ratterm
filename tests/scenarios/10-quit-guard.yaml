@@ -1,0 +1,10 @@
+# Unsaved work blocks the exit rather than being lost.
+name: quitting with unsaved work asks first
+steps:
+  - key: ctrl+t
+  - key: i
+  - type: unsaved work
+  - expect_text: "unsaved work"
+  - key: ctrl+q
+  - expect_text: "Save"
+  - snapshot: confirm

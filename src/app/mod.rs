@@ -33,6 +33,7 @@ mod lsp_ops;
 mod popup_ops;
 mod render;
 mod session_ops;
+pub mod snapshot;
 mod ssh_connect;
 mod ssh_ops;
 mod ssh_scan;
@@ -64,8 +65,9 @@ use crate::filebrowser::FileBrowser;
 use crate::git::BlameLine;
 use crate::git::dashboard::GitDashboard;
 use crate::git::gutter::GutterMark;
+use crate::hosts::HostRegistry;
 use crate::remote::{RemoteFileBrowser, RemoteFileManager};
-use crate::ssh::{NetworkScanner, SSHHostList, SSHStorage, StatusChecker};
+use crate::ssh::{NetworkScanner, SSHStorage, StatusChecker};
 use crate::terminal::{BackgroundManager, TerminalMultiplexer, pty::PtyError};
 use crate::ui::health_dashboard::HealthDashboard;
 use crate::ui::{
@@ -223,8 +225,11 @@ pub struct App {
     pub(crate) ssh_manager: Option<SSHManagerSelector>,
     /// SSH host storage.
     pub(crate) ssh_storage: SSHStorage,
-    /// SSH host list.
-    pub(crate) ssh_hosts: SSHHostList,
+    /// SSH hosts, their reachability and their detected capabilities.
+    ///
+    /// Derefs to the underlying `SSHHostList`, so this is the single owner of
+    /// the host data rather than a second copy beside it.
+    pub(crate) ssh_hosts: HostRegistry,
     /// Network scanner for SSH host discovery.
     pub(crate) ssh_scanner: Option<NetworkScanner>,
     /// Background TCP status checker for SSH hosts.
@@ -262,6 +267,12 @@ pub struct App {
     pub(crate) host_statuses: HashMap<u32, crate::ssh::ConnectionStatus>,
     /// Whether --test-keys mode is active (F1/F2/F3 open palette/SSH/Docker).
     pub(crate) test_keys: bool,
+    /// Whether state came from a fixture directory.
+    ///
+    /// While set, the application neither reads nor writes the user's real
+    /// configuration, which is what makes a scripted run repeatable and keeps
+    /// it away from real machines.
+    pub(crate) fixture_mode: bool,
     /// Hotkey help overlay (shown with `?` in dashboards).
     pub(crate) hotkey_overlay: Option<crate::ui::hotkey_overlay::HotkeyOverlay>,
     /// Active Docker log stream handle.
@@ -343,6 +354,9 @@ pub struct AppOptions {
     /// Explicit control-API configuration; `None` mints a token and listens on
     /// the platform default endpoint.
     pub api_config: Option<ApiServerConfig>,
+    /// Load hosts, Docker entries and metrics from this directory instead of
+    /// the user's configuration, and cut off remote access.
+    pub fixtures: Option<PathBuf>,
 }
 
 impl AppOptions {
@@ -354,6 +368,7 @@ impl AppOptions {
             without_api: false,
             load_user_config: true,
             api_config: None,
+            fixtures: None,
         }
     }
 
@@ -366,6 +381,7 @@ impl AppOptions {
             without_api: true,
             load_user_config: false,
             api_config: None,
+            fixtures: None,
         }
     }
 
@@ -374,6 +390,13 @@ impl AppOptions {
     pub fn with_api(mut self, config: ApiServerConfig) -> Self {
         self.without_api = false;
         self.api_config = Some(config);
+        self
+    }
+
+    /// Loads state from a fixture directory instead of the real configuration.
+    #[must_use]
+    pub fn with_fixtures(mut self, dir: impl Into<PathBuf>) -> Self {
+        self.fixtures = Some(dir.into());
         self
     }
 }
@@ -441,6 +464,29 @@ impl App {
             warn!("Falling back to the default secret backend: {}", e);
         }
 
+        let mut ssh_hosts = HostRegistry::new();
+        let fixture_mode = options.fixtures.is_some();
+        if let Some(dir) = options.fixtures.as_ref() {
+            match crate::fixtures::Fixtures::load(dir) {
+                Ok(fixtures) => {
+                    info!(
+                        "using fixtures from {} ({} hosts)",
+                        dir.display(),
+                        fixtures.host_count()
+                    );
+                    ssh_hosts.set_hosts(fixtures.hosts);
+                    // A fixture run must not be able to reach a real machine,
+                    // and must not write over the user's host file.
+                    crate::fixtures::Fixtures::isolate_remote_access();
+                    let scratch = std::env::temp_dir()
+                        .join("ratterm-fixture-run")
+                        .join("ssh_hosts.toml");
+                    ssh_storage = SSHStorage::with_path(scratch);
+                }
+                Err(e) => warn!("could not load fixtures from {}: {}", dir.display(), e),
+            }
+        }
+
         let (api_server, api_request_rx) = if options.without_api {
             (None, None)
         } else {
@@ -494,7 +540,7 @@ impl App {
             last_screen_size: (80, 24),
             ssh_manager: None,
             ssh_storage,
-            ssh_hosts: SSHHostList::new(),
+            ssh_hosts,
             ssh_scanner: None,
             status_checker: None,
             remote_manager: RemoteFileManager::new(),
@@ -512,6 +558,7 @@ impl App {
             daemon_manager: None,
             host_statuses: HashMap::new(),
             test_keys: false,
+            fixture_mode,
             hotkey_overlay: None,
             docker_log_stream: None,
             docker_log_rx: None,
@@ -600,6 +647,41 @@ impl App {
     #[must_use]
     pub fn status(&self) -> &str {
         &self.status
+    }
+
+    /// Returns the current application mode.
+    #[must_use]
+    pub const fn mode(&self) -> AppMode {
+        self.mode
+    }
+
+    /// Returns the last known screen size.
+    #[must_use]
+    pub const fn screen_size(&self) -> (u16, u16) {
+        self.last_screen_size
+    }
+
+    /// Returns the host registry.
+    #[must_use]
+    pub const fn host_registry(&self) -> &HostRegistry {
+        &self.ssh_hosts
+    }
+
+    /// Returns true if this instance is running on fixture state.
+    #[must_use]
+    pub const fn is_fixture_mode(&self) -> bool {
+        self.fixture_mode
+    }
+
+    /// Returns the control-API endpoint, if the server started.
+    #[must_use]
+    pub fn api_endpoint(&self) -> Option<&str> {
+        self.api_server.as_ref().map(ApiServer::endpoint)
+    }
+
+    /// Returns a mutable host registry.
+    pub fn host_registry_mut(&mut self) -> &mut HostRegistry {
+        &mut self.ssh_hosts
     }
 
     /// Returns the current file path (if any).
@@ -846,11 +928,12 @@ impl App {
         }
     }
 
-    /// Processes events and updates state.
+    /// Advances every background task by one step.
     ///
-    /// # Errors
-    /// Returns error if event processing fails.
-    pub fn update(&mut self) -> io::Result<()> {
+    /// Separate from [`App::update`] because a headless run and the scenario
+    /// runner need the state machine to move without a terminal to read
+    /// events from.
+    pub fn tick(&mut self) {
         self.process_api_requests();
         self.background_manager.update_counts();
         self.poll_ssh_scanner();
@@ -872,6 +955,14 @@ impl App {
                 self.set_status("Copied from remote");
             }
         }
+    }
+
+    /// Processes events and updates state.
+    ///
+    /// # Errors
+    /// Returns error if event processing fails.
+    pub fn update(&mut self) -> io::Result<()> {
+        self.tick();
 
         if event::poll(Duration::from_millis(POLL_TIMEOUT_MS))? {
             match event::read()? {

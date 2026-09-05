@@ -1,0 +1,33 @@
+[
+  {
+    "host_id": 1,
+    "cpu_load1": 2.4,
+    "cpu_percent": 31.5,
+    "mem_used_bytes": 12884901888,
+    "mem_total_bytes": 33285996544,
+    "disk_used_bytes": 214748364800,
+    "disk_total_bytes": 858993459200,
+    "gpu_util_percent": 78.0,
+    "online": true
+  },
+  {
+    "host_id": 2,
+    "cpu_load1": 0.4,
+    "cpu_percent": 8.0,
+    "mem_used_bytes": 2147483648,
+    "mem_total_bytes": 8589934592,
+    "disk_used_bytes": 21474836480,
+    "disk_total_bytes": 128849018880,
+    "online": true
+  },
+  {
+    "host_id": 3,
+    "online": false
+  },
+  {
+    "host_id": 4,
+    "cpu_load1": 0.1,
+    "cpu_percent": 2.0,
+    "online": true
+  }
+]

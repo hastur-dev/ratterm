@@ -1,0 +1,15 @@
+# The SSH manager opens, lists the fixture fleet, and closes again.
+#
+# Run with `--fixtures tests/fixtures/fleet`, which is what makes the host
+# names below deterministic on every machine.
+name: ssh manager lists hosts
+steps:
+  - key: F2
+  - expect_text: "SSH Manager"
+  - expect_text: "fixture-gpu"
+  - expect_text: "fixture-rock5c"
+  - expect_text: "192.0.2.12:2222"
+  - snapshot: open
+  - key: esc
+  - expect_not_text: "fixture-gpu"
+  - expect_status: "closed"

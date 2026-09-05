@@ -1,0 +1,12 @@
+# The application starts, renders, and reports its own state.
+#
+# Deliberately the least demanding scenario in the set: if this fails, nothing
+# else in the directory is worth reading.
+name: startup renders
+width: 120
+height: 40
+steps:
+  - note: a fresh instance draws a frame and accepts a tick
+  - tick
+  - snapshot: initial
+  - expect_not_text: "panicked"

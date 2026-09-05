@@ -6,13 +6,29 @@ use super::App;
 
 impl App {
     /// Builds a command, wrapping with SSH for remote hosts.
+    ///
+    /// This produces a command line for a *terminal tab*, which still needs a
+    /// real `ssh` invocation the user can see and interrupt. Programmatic
+    /// Docker calls go through the pooled session instead and never build a
+    /// command line at all.
     fn build_command_for_host(&self, docker_cmd: &str) -> String {
         let host = &self.docker_items.selected_host;
-        match host {
-            DockerHost::Local => docker_cmd.to_string(),
-            DockerHost::Remote { .. } => {
-                DockerDiscovery::build_remote_docker_command(host, docker_cmd)
-            }
+        match host.host_id() {
+            None => docker_cmd.to_string(),
+            Some(host_id) => match self.ssh_hosts.target(host_id) {
+                Some(target) => {
+                    let port_flag = if target.port == 22 {
+                        String::new()
+                    } else {
+                        format!("-p {} ", target.port)
+                    };
+                    format!(
+                        "ssh {port_flag}{}@{} {docker_cmd}",
+                        target.username, target.hostname
+                    )
+                }
+                None => docker_cmd.to_string(),
+            },
         }
     }
 
@@ -26,6 +42,8 @@ impl App {
         let shell = self.docker_default_shell().to_string();
         let host = self.docker_items.selected_host.clone();
         let host_name = self.docker_host_display_name();
+        // Resolve before borrowing the terminal multiplexer mutably.
+        let target = host.host_id().and_then(|id| self.ssh_hosts.target(id));
 
         self.set_status(format!(
             "Connecting to {} on {}...",
@@ -42,25 +60,24 @@ impl App {
                 // Local container - use direct docker exec
                 terminals.add_docker_exec_tab(container_id, container_name, &shell)
             }
-            DockerHost::Remote {
-                host_id,
-                hostname,
-                port,
-                username,
-                password,
-                ..
-            } => {
-                // Remote container - use SSH + docker exec
-                terminals.add_docker_exec_ssh_tab(
-                    container_id,
-                    container_name,
-                    &shell,
-                    hostname,
-                    *port,
-                    username,
-                    *host_id,
-                    password.as_deref(),
-                )
+            DockerHost::Remote { host_id, .. } => {
+                // Remote container: resolve the connection from the registry
+                // rather than from a copy stored with the container entry.
+                match target {
+                    Some(target) => terminals.add_docker_exec_ssh_tab(
+                        container_id,
+                        container_name,
+                        &shell,
+                        &target.hostname,
+                        target.port,
+                        &target.username,
+                        *host_id,
+                        target.password.as_ref().map(|p| p.as_str()),
+                    ),
+                    None => Err(crate::terminal::pty::PtyError::Other(format!(
+                        "SSH host {host_id} is not configured; open the SSH manager and add credentials"
+                    ))),
+                }
             }
         };
 
@@ -202,15 +219,14 @@ impl App {
                 ..
             } => {
                 // Build SSH command to run Docker on remote host
-                let docker_host = DockerHost::Remote {
-                    host_id: 0,
-                    hostname: hostname.clone(),
-                    port: *port,
-                    username: username.clone(),
-                    password: None,
-                    display_name: None,
+                // The container's terminal already carries the SSH details,
+                // so build the remote invocation from those directly.
+                let port_flag = if *port == 22 {
+                    String::new()
+                } else {
+                    format!("-p {port} ")
                 };
-                DockerDiscovery::build_remote_docker_command(&docker_host, docker_cmd)
+                format!("ssh {port_flag}{username}@{hostname} {docker_cmd}")
             }
         }
     }

@@ -1,0 +1,40 @@
+┌SSH Health Dashboard──────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ 4 devices │ 0 online │ 0 offline │ Last update: 0s ago │ Auto: ON                                                    │
+│                                                                                                                      │
+│▸ fixture-gpu (192.0.2.10) [UNKNOWN]                                                                                  │
+│    CPU: --        RAM: --         DISK: --         GPU: --                                                           │
+│  fixture-rock5c (192.0.2.11) [UNKNOWN]                                                                               │
+│    CPU: --        RAM: --         DISK: --         GPU: --                                                           │
+│  fixture-pi (192.0.2.12:2222) [UNKNOWN]                                                                              │
+│    CPU: --        RAM: --         DISK: --         GPU: --                                                           │
+│  fixture-behind-jump (192.0.2.13) [UNKNOWN]                                                                          │
+│    CPU: --        RAM: --         DISK: --         GPU: --                                                           │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                  [↑/↓] Navigate  [Enter] Details  [?] All shortcuts                                  │
+│                                                                                                                      │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+  Ctrl+Shift+P Palette │  Ctrl+Shift+U SSH │  Ctrl+Shift+D Docker │  Ctrl+T New Tab │  Ctrl+S Split …+2
+  TERM │ VIM  │ SSH Health Dashboard - Monitoring 4 hosts
