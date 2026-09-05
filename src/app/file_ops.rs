@@ -12,7 +12,90 @@ use crate::ui::layout::FocusedPane;
 use super::{App, AppMode, OpenFile};
 
 impl App {
+    /// Parks the active document into its tab entry.
+    ///
+    /// After this call the editor holds an empty document and every tab owns
+    /// its own state. No-op when there are no tabs (the scratch buffer is not
+    /// a tab).
+    pub(crate) fn park_active_tab(&mut self) {
+        if self.current_file_idx >= self.open_files.len() {
+            return;
+        }
+
+        let state = self.editor.take_state();
+        let idx = self.current_file_idx;
+        let Some(file) = self.open_files.get_mut(idx) else {
+            return;
+        };
+
+        // A "save as" changes the document's path; keep the tab label honest.
+        if let Some(new_path) = state.path.clone() {
+            if new_path != file.path && !file.name.starts_with("[SSH]") {
+                file.name = new_path
+                    .file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_else(|| new_path.to_string_lossy().to_string());
+                file.path = new_path;
+            }
+        }
+
+        file.saved_state = Some(state);
+    }
+
+    /// Makes the tab at `index` the active one, swapping documents in place.
+    ///
+    /// Returns false if `index` is out of range. Unlike the old behaviour this
+    /// never re-reads the file from disk, so unsaved edits and undo history
+    /// survive a tab switch.
+    pub fn activate_tab(&mut self, index: usize) -> bool {
+        if index >= self.open_files.len() {
+            return false;
+        }
+
+        if index == self.current_file_idx && self.open_files[index].saved_state.is_none() {
+            return true;
+        }
+
+        self.park_active_tab();
+        self.current_file_idx = index;
+
+        match self.open_files[index].saved_state.take() {
+            Some(state) => self.editor.restore_state(state),
+            None => {
+                // A tab with no parked state should not exist; recover by
+                // reading the file rather than showing the wrong document.
+                let path = self.open_files[index].path.clone();
+                match self.editor.load_state_from_disk(&path) {
+                    Ok(state) => self.editor.restore_state(state),
+                    Err(e) => {
+                        self.editor.new_buffer();
+                        self.set_status(format!("Could not reload {}: {}", path.display(), e));
+                    }
+                }
+            }
+        }
+
+        self.update_git_gutter();
+        self.request_redraw();
+        true
+    }
+
+    /// Returns the number of open tabs.
+    #[must_use]
+    pub fn tab_count(&self) -> usize {
+        self.open_files.len()
+    }
+
+    /// Returns the index of the active tab.
+    #[must_use]
+    pub fn active_tab_index(&self) -> usize {
+        self.current_file_idx
+    }
+
     /// Opens a file in the editor.
+    ///
+    /// If the file already has a tab, that tab is activated rather than
+    /// reloaded, so pending edits are not thrown away.
     ///
     /// # Errors
     /// Returns error if file cannot be opened.
@@ -42,19 +125,22 @@ impl App {
             }
         }
 
-        self.editor.open(&path)?;
+        if let Some(idx) = self.open_files.iter().position(|f| f.path == path) {
+            self.activate_tab(idx);
+        } else {
+            // Read before parking so a failed open leaves everything as it was.
+            let mut state = self.editor.load_state_from_disk(&path)?;
+            state.mode = self.editor.mode();
 
-        let name = path
-            .file_name()
-            .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_else(|| path.to_string_lossy().to_string());
+            let name = path
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_else(|| path.to_string_lossy().to_string());
 
-        if !self.open_files.iter().any(|f| f.path == path) {
-            self.open_files.push(OpenFile {
-                path: path.clone(),
-                name,
-            });
+            self.park_active_tab();
+            self.open_files.push(OpenFile::active(path.clone(), name));
             self.current_file_idx = self.open_files.len() - 1;
+            self.editor.restore_state(state);
         }
 
         self.set_status(format!("Opened {}", path.display()));
@@ -198,20 +284,17 @@ impl App {
         match self.remote_manager.fetch_file(ctx, remote_path, cwd) {
             Ok((content, remote_file)) => {
                 let display = remote_file.display_string();
+                let cache_path = remote_file.local_cache_path.clone();
 
-                self.editor.open_remote(&content, remote_file.clone());
-
-                let name = format!("[SSH] {}", remote_file.filename());
-                if !self
-                    .open_files
-                    .iter()
-                    .any(|f| f.path == remote_file.local_cache_path)
-                {
-                    self.open_files.push(OpenFile {
-                        path: remote_file.local_cache_path,
-                        name,
-                    });
+                if let Some(idx) = self.open_files.iter().position(|f| f.path == cache_path) {
+                    self.activate_tab(idx);
+                } else {
+                    let name = format!("[SSH] {}", remote_file.filename());
+                    let state = self.editor.remote_state(&content, remote_file);
+                    self.park_active_tab();
+                    self.open_files.push(OpenFile::active(cache_path, name));
                     self.current_file_idx = self.open_files.len() - 1;
+                    self.editor.restore_state(state);
                 }
 
                 self.set_status(format!("Opened {}", display));
@@ -352,10 +435,8 @@ impl App {
         if self.open_files.is_empty() {
             return;
         }
-        self.current_file_idx = (self.current_file_idx + 1) % self.open_files.len();
-        if let Some(file) = self.open_files.get(self.current_file_idx) {
-            let _ = self.editor.open(&file.path);
-        }
+        let next = (self.current_file_idx + 1) % self.open_files.len();
+        self.activate_tab(next);
     }
 
     /// Switches to the previous open file.
@@ -363,14 +444,12 @@ impl App {
         if self.open_files.is_empty() {
             return;
         }
-        self.current_file_idx = if self.current_file_idx == 0 {
+        let prev = if self.current_file_idx == 0 {
             self.open_files.len() - 1
         } else {
             self.current_file_idx - 1
         };
-        if let Some(file) = self.open_files.get(self.current_file_idx) {
-            let _ = self.editor.open(&file.path);
-        }
+        self.activate_tab(prev);
     }
 
     /// Creates a new untitled editor tab.
@@ -387,44 +466,58 @@ impl App {
             format!("Untitled-{}", untitled_count + 1)
         };
 
+        self.park_active_tab();
         self.editor.new_buffer();
 
-        self.open_files.push(OpenFile {
-            path: PathBuf::from(&name),
-            name: name.clone(),
-        });
+        self.open_files
+            .push(OpenFile::active(PathBuf::from(&name), name.clone()));
         self.current_file_idx = self.open_files.len() - 1;
 
         self.set_status(format!("Created {}", name));
     }
 
     /// Closes the current editor tab.
+    ///
+    /// Refuses while the tab has unsaved changes, prompting instead.
     pub fn close_editor_tab(&mut self) {
         if self.open_files.is_empty() {
             self.set_status("No tabs to close");
             return;
         }
 
-        if self.editor.is_modified() {
+        if self.tab_is_modified(self.current_file_idx) {
             self.show_popup(crate::ui::popup::PopupKind::ConfirmSaveBeforeExit);
             return;
         }
 
         let closed_name = self.open_files[self.current_file_idx].name.clone();
+        // The active document lives in the editor, so dropping the tab entry
+        // is enough; the editor is repointed below.
         self.open_files.remove(self.current_file_idx);
 
-        if self.current_file_idx >= self.open_files.len() && !self.open_files.is_empty() {
-            self.current_file_idx = self.open_files.len() - 1;
-        }
-
-        if let Some(file) = self.open_files.get(self.current_file_idx) {
-            let _ = self.editor.open(&file.path);
-        } else {
-            self.editor.new_buffer();
+        if self.open_files.is_empty() {
             self.current_file_idx = 0;
+            self.editor.new_buffer();
+        } else {
+            let next = self.current_file_idx.min(self.open_files.len() - 1);
+            // The editor still holds the closed document, so force a reload of
+            // the neighbour rather than parking the corpse into its slot.
+            self.current_file_idx = next;
+            match self.open_files[next].saved_state.take() {
+                Some(state) => self.editor.restore_state(state),
+                None => {
+                    let path = self.open_files[next].path.clone();
+                    match self.editor.load_state_from_disk(&path) {
+                        Ok(state) => self.editor.restore_state(state),
+                        Err(_) => self.editor.new_buffer(),
+                    }
+                }
+            }
+            self.update_git_gutter();
         }
 
         self.set_status(format!("Closed {}", closed_name));
+        self.request_redraw();
         self.check_ide_auto_hide();
     }
 

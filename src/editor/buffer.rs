@@ -29,6 +29,7 @@ pub enum BufferError {
 }
 
 /// Text buffer with undo/redo support.
+#[derive(Debug, Clone)]
 pub struct Buffer {
     /// The rope holding the text.
     rope: Rope,
@@ -323,7 +324,9 @@ impl Buffer {
             }
             Edit::Delete { pos, text } => {
                 let pos = (*pos).min(self.rope.len_chars());
-                let end = (pos + text.len()).min(self.rope.len_chars());
+                // Rope indices are character offsets, so the span to remove is
+                // the character count of the recorded text, not its byte length.
+                let end = (pos + text.chars().count()).min(self.rope.len_chars());
                 if pos < end {
                     self.rope.remove(pos..end);
                 }
@@ -354,8 +357,9 @@ impl Buffer {
 
         self.begin_undo_group();
 
+        let pattern_chars = pattern.chars().count();
         for pos in matches.into_iter().rev() {
-            let end_idx = self.position_to_index(pos) + pattern.len();
+            let end_idx = self.position_to_index(pos) + pattern_chars;
             let end = self.index_to_position(end_idx);
             self.delete_range(pos, end);
             self.insert_str(pos, replacement);
@@ -498,5 +502,74 @@ mod tests {
         buffer.undo();
         buffer.redo();
         assert_eq!(buffer.text(), "Hello!");
+    }
+
+    #[test]
+    fn undo_of_multibyte_insert_restores_exactly() {
+        // Undo replays the inverse edit against character indices. Using the
+        // byte length of the recorded text removed too many characters.
+        let mut buffer = Buffer::from_str("aé");
+        buffer.insert_str(Position::new(0, 2), "ü");
+        assert_eq!(buffer.text(), "aéü");
+        buffer.undo();
+        assert_eq!(buffer.text(), "aé");
+    }
+
+    #[test]
+    fn undo_of_multibyte_delete_restores_exactly() {
+        let mut buffer = Buffer::from_str("αβγ");
+        buffer.delete_range(Position::new(0, 0), Position::new(0, 2));
+        assert_eq!(buffer.text(), "γ");
+        buffer.undo();
+        assert_eq!(buffer.text(), "αβγ");
+        buffer.redo();
+        assert_eq!(buffer.text(), "γ");
+    }
+
+    #[test]
+    fn replace_all_handles_multibyte_patterns() {
+        let mut buffer = Buffer::from_str("naïve naïve");
+        let count = buffer.replace_all("naïve", "plain");
+        assert_eq!(count, 2);
+        assert_eq!(buffer.text(), "plain plain");
+    }
+
+    #[test]
+    fn replace_all_does_not_double_replace_overlapping_patterns() {
+        let mut buffer = Buffer::from_str("aaaa");
+        let count = buffer.replace_all("aa", "b");
+        assert_eq!(count, 2);
+        assert_eq!(buffer.text(), "bb");
+    }
+
+    #[test]
+    fn replace_all_returns_zero_for_empty_or_absent_pattern() {
+        let mut buffer = Buffer::from_str("hello");
+        assert_eq!(buffer.replace_all("", "x"), 0);
+        assert_eq!(buffer.replace_all("zzz", "x"), 0);
+        assert_eq!(buffer.text(), "hello");
+    }
+
+    #[test]
+    fn replace_all_is_a_single_undo_step() {
+        let mut buffer = Buffer::from_str("a a a");
+        buffer.replace_all("a", "b");
+        assert_eq!(buffer.text(), "b b b");
+        buffer.undo();
+        assert_eq!(buffer.text(), "a a a");
+    }
+
+    #[test]
+    fn clone_preserves_text_and_modified_flag() {
+        let mut buffer = Buffer::from_str("hello");
+        buffer.insert_char(Position::new(0, 5), '!');
+        let copy = buffer.clone();
+        assert_eq!(copy.text(), "hello!");
+        assert!(copy.is_modified());
+        // The clone owns its own undo history.
+        let mut copy = copy;
+        copy.undo();
+        assert_eq!(copy.text(), "hello");
+        assert_eq!(buffer.text(), "hello!");
     }
 }

@@ -5,6 +5,9 @@ use super::{Editor, edit::Position};
 impl Editor {
     /// Duplicates the current line.
     pub fn duplicate_line(&mut self) {
+        if self.reject_edit() {
+            return;
+        }
         let line_idx = self.cursor.position().line;
         let line_content = self.buffer.line(line_idx).unwrap_or_default();
 
@@ -25,6 +28,9 @@ impl Editor {
 
     /// Deletes the current line.
     pub fn delete_line(&mut self) {
+        if self.reject_edit() {
+            return;
+        }
         let line_idx = self.cursor.position().line;
         let total_lines = self.buffer.len_lines();
 
@@ -74,6 +80,9 @@ impl Editor {
 
     /// Moves the current line up.
     pub fn move_line_up(&mut self) {
+        if self.reject_edit() {
+            return;
+        }
         let line_idx = self.cursor.position().line;
         if line_idx == 0 {
             return;
@@ -114,6 +123,9 @@ impl Editor {
 
     /// Moves the current line down.
     pub fn move_line_down(&mut self) {
+        if self.reject_edit() {
+            return;
+        }
         let line_idx = self.cursor.position().line;
         let last_line = self.buffer.len_lines().saturating_sub(1);
 
@@ -156,6 +168,9 @@ impl Editor {
 
     /// Toggles line comment on current line or selection.
     pub fn toggle_comment(&mut self) {
+        if self.reject_edit() {
+            return;
+        }
         let line_idx = self.cursor.position().line;
         let line = self.buffer.line(line_idx).unwrap_or_default();
         let trimmed = line.trim_start();
@@ -225,6 +240,9 @@ impl Editor {
 
     /// Indents the current line or selection.
     pub fn indent(&mut self) {
+        if self.reject_edit() {
+            return;
+        }
         let line_idx = self.cursor.position().line;
         let indent_str = "    "; // 4 spaces
 
@@ -240,6 +258,9 @@ impl Editor {
 
     /// Removes indentation from the current line.
     pub fn outdent(&mut self) {
+        if self.reject_edit() {
+            return;
+        }
         let line_idx = self.cursor.position().line;
         let line = self.buffer.line(line_idx).unwrap_or_default();
 

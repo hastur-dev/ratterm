@@ -218,27 +218,9 @@ impl App {
 
     /// Opens a file and jumps to a specific line.
     pub fn open_file_at_line(&mut self, path: &std::path::Path, line: usize) {
-        // Check if file is already open
-        let already_open = self.open_files.iter().position(|f| f.path == path);
-        if let Some(idx) = already_open {
-            self.current_file_idx = idx;
-            // Reload buffer if needed
-            if self.editor.path() != Some(&path.to_path_buf()) {
-                let _ = self.editor.open(path);
-            }
-        } else {
-            // Open new tab
-            let _ = self.editor.open(path);
-            let name = path
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("untitled")
-                .to_string();
-            self.open_files.push(super::OpenFile {
-                path: path.to_path_buf(),
-                name,
-            });
-            self.current_file_idx = self.open_files.len() - 1;
+        if let Err(e) = self.open_file(path.to_path_buf()) {
+            self.set_status(format!("Could not open {}: {}", path.display(), e));
+            return;
         }
         self.editor.goto_line(line);
     }

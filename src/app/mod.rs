@@ -58,7 +58,7 @@ use crate::daemon::DaemonManager;
 use crate::debugger::breakpoints::BreakpointStore;
 use crate::debugger::session::DebugSession;
 use crate::docker::{DockerItemList, DockerStorage};
-use crate::editor::Editor;
+use crate::editor::{Editor, EditorState};
 use crate::extension::ExtensionManager;
 use crate::filebrowser::FileBrowser;
 use crate::git::BlameLine;
@@ -124,12 +124,43 @@ pub enum DockerBackgroundResult {
 }
 
 /// Open file tab.
-#[derive(Debug, Clone)]
+///
+/// A tab owns its document. `saved_state` holds the parked
+/// [`EditorState`](crate::editor::EditorState) for every tab except the active
+/// one, whose state lives in [`App::editor`] while it is on screen. Switching
+/// tabs swaps states instead of re-reading the file, so unsaved edits and undo
+/// history survive.
+#[derive(Debug)]
 pub struct OpenFile {
     /// File path.
     pub path: PathBuf,
     /// Display name.
     pub name: String,
+    /// Parked document state; `None` for the tab that is currently active.
+    pub(crate) saved_state: Option<EditorState>,
+}
+
+impl OpenFile {
+    /// Creates a tab entry whose document is currently loaded in the editor.
+    #[must_use]
+    pub fn active(path: PathBuf, name: String) -> Self {
+        Self {
+            path,
+            name,
+            saved_state: None,
+        }
+    }
+
+    /// Returns true if this tab has unsaved changes.
+    ///
+    /// Only meaningful for parked tabs; the active tab reports through the
+    /// editor, since that is where its buffer lives.
+    #[must_use]
+    pub fn is_parked_modified(&self) -> bool {
+        self.saved_state
+            .as_ref()
+            .is_some_and(EditorState::is_modified)
+    }
 }
 
 /// Application state.
@@ -296,27 +327,91 @@ pub struct App {
     pub(crate) lsp_format_on_save: bool,
 }
 
+/// Construction options for [`App`].
+///
+/// The defaults reproduce the interactive application. Tests and headless runs
+/// switch pieces off so several instances can exist at once without competing
+/// for a shell or for the single IPC endpoint.
+#[derive(Debug, Clone, Default)]
+pub struct AppOptions {
+    /// Do not spawn the PTY terminal multiplexer.
+    pub without_terminals: bool,
+    /// Do not start the IPC API server.
+    pub without_api: bool,
+    /// Load configuration from disk (`false` uses built-in defaults).
+    pub load_user_config: bool,
+}
+
+impl AppOptions {
+    /// Options for the interactive application.
+    #[must_use]
+    pub fn interactive() -> Self {
+        Self {
+            without_terminals: false,
+            without_api: false,
+            load_user_config: true,
+        }
+    }
+
+    /// Options for a self-contained instance with no shell, no IPC endpoint,
+    /// and no dependency on the developer's `~/.ratrc`.
+    #[must_use]
+    pub fn isolated() -> Self {
+        Self {
+            without_terminals: true,
+            without_api: true,
+            load_user_config: false,
+        }
+    }
+}
+
 impl App {
     /// Creates a new application.
     ///
     /// # Errors
     /// Returns error if terminal creation fails.
     pub fn new(cols: u16, rows: u16) -> Result<Self, PtyError> {
+        Self::with_options(cols, rows, AppOptions::interactive())
+    }
+
+    /// Creates an application with no shell and no IPC endpoint.
+    ///
+    /// Used by tests and by headless runs, where spawning a shell and claiming
+    /// the single API endpoint would make instances interfere with each other.
+    ///
+    /// # Errors
+    /// Returns error if construction fails.
+    pub fn isolated(cols: u16, rows: u16) -> Result<Self, PtyError> {
+        Self::with_options(cols, rows, AppOptions::isolated())
+    }
+
+    /// Creates a new application with explicit options.
+    ///
+    /// # Errors
+    /// Returns error if terminal creation fails.
+    pub fn with_options(cols: u16, rows: u16, options: AppOptions) -> Result<Self, PtyError> {
         assert!(cols > 0, "Columns must be positive");
         assert!(rows > 0, "Rows must be positive");
 
-        let config = Config::load().unwrap_or_default();
+        let config = if options.load_user_config {
+            Config::load().unwrap_or_default()
+        } else {
+            Config::default()
+        };
         let lsp_format_on_save = config.lsp_format_on_save;
         let shell_path = config.shell.get_shell_path();
 
-        let terminals =
+        let terminals = if options.without_terminals {
+            None
+        } else {
             match TerminalMultiplexer::with_shell(cols / 2, rows.saturating_sub(4), shell_path) {
                 Ok(t) => Some(t),
                 Err(e) => {
                     tracing::warn!("Failed to create terminal: {}", e);
                     None
                 }
-            };
+            }
+        };
 
         let editor = Editor::new(cols / 2, rows.saturating_sub(4));
         let file_browser = FileBrowser::default();
@@ -328,14 +423,18 @@ impl App {
             SplitLayout::new()
         };
 
-        let (api_server, api_request_rx) = match ApiServer::start(None) {
-            Ok((server, rx)) => {
-                info!("API server started");
-                (Some(server), Some(rx))
-            }
-            Err(e) => {
-                warn!("Failed to start API server: {}", e);
-                (None, None)
+        let (api_server, api_request_rx) = if options.without_api {
+            (None, None)
+        } else {
+            match ApiServer::start(None) {
+                Ok((server, rx)) => {
+                    info!("API server started");
+                    (Some(server), Some(rx))
+                }
+                Err(e) => {
+                    warn!("Failed to start API server: {}", e);
+                    (None, None)
+                }
             }
         };
 
@@ -612,8 +711,10 @@ impl App {
     }
 
     /// Requests to quit the application.
+    ///
+    /// Any tab with unsaved changes blocks the exit, not just the visible one.
     pub fn request_quit(&mut self) {
-        if self.editor.is_modified() {
+        if self.editor.is_modified() || self.any_tab_modified() {
             self.show_popup(PopupKind::ConfirmSaveBeforeExit);
         } else {
             self.running = false;
@@ -653,9 +754,28 @@ impl App {
                 index: i,
                 name: file.name.clone(),
                 is_active: i == self.current_file_idx,
-                is_modified: i == self.current_file_idx && self.editor.is_modified(),
+                is_modified: self.tab_is_modified(i),
             })
             .collect()
+    }
+
+    /// Returns true if the tab at `index` has unsaved changes.
+    ///
+    /// The active tab's buffer lives in the editor; every other tab carries its
+    /// own parked state.
+    #[must_use]
+    pub fn tab_is_modified(&self, index: usize) -> bool {
+        match self.open_files.get(index) {
+            None => false,
+            Some(_) if index == self.current_file_idx => self.editor.is_modified(),
+            Some(file) => file.is_parked_modified(),
+        }
+    }
+
+    /// Returns true if any open tab has unsaved changes.
+    #[must_use]
+    pub fn any_tab_modified(&self) -> bool {
+        (0..self.open_files.len()).any(|i| self.tab_is_modified(i))
     }
 
     /// Handles terminal resize.
