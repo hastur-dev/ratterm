@@ -145,7 +145,8 @@ A misspelled step name fails the run rather than being skipped: a silently
 skipped assertion is a test that passes for the wrong reason. A scenario with
 no assertions at all is reported with a warning for the same reason.
 
-Scenarios enable the F1–F4 test keys by default (`test_keys: false` opts out).
+Scenarios enable the F1–F4 and F6 test keys by default (`test_keys: false` opts
+out; F5 is the debugger's, so it is not one of them).
 The real shortcut for the command palette differs between Windows 11 and every
 other platform, so a scenario written against it would not be the same test
 everywhere.
@@ -163,12 +164,18 @@ A fixture directory stands in for `~/.ratterm`:
 | `ssh_hosts.toml` | Hosts and credentials, in the real format |
 | `docker_items.toml` | Quick-connect slots and the selected Docker host |
 | `metrics.json` | One entry per host, seeding the health dashboard |
+| `kubeconfig` | Contexts for the Kubernetes screens |
 
-All three are optional. While fixtures are active the application neither reads
+All four are optional. While fixtures are active the application neither reads
 nor writes the user's real configuration, and the shared remote executor is
 cleared, so a run cannot reach a real machine: a remote call fails immediately
 with "unknown host" instead of dialling out. The shipped fleet uses addresses
 from the RFC 5737 documentation range, which resolve to nothing.
+
+That extends to Kubernetes: with fixtures active the screens read
+`<fixtures>/kubeconfig` or nothing at all, never `~/.kube/config`. A fixture
+directory with no kubeconfig produces a screen saying so, which is the correct
+result for a run that was not given one.
 
 ## Running the scenarios from `cargo test`
 

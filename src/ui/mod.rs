@@ -11,6 +11,7 @@ pub mod ghost_text;
 pub mod git_dashboard;
 pub mod health_dashboard;
 pub mod hotkey_overlay;
+pub mod k8s_manager;
 pub mod key_hint_bar;
 pub mod layout;
 pub mod lsp_actions;

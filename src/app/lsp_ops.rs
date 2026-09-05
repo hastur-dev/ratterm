@@ -7,169 +7,133 @@ use super::App;
 impl App {
     /// Dismisses the current hover popup.
     pub fn dismiss_hover(&mut self) {
-        self.lsp_hover = None;
+        self.lsp.hover = None;
     }
 
     /// Dismisses the references panel.
     pub fn dismiss_references(&mut self) {
-        self.lsp_references = None;
-        self.lsp_references_selected = 0;
-        self.lsp_references_scroll = 0;
+        self.lsp.references.close();
     }
 
     /// Dismisses code actions popup.
     pub fn dismiss_code_actions(&mut self) {
-        self.lsp_code_actions = None;
-        self.lsp_code_action_selected = 0;
+        self.lsp.code_actions.close();
     }
 
     /// Dismisses signature help.
     pub fn dismiss_signature_help(&mut self) {
-        self.lsp_signature_help = None;
+        self.lsp.signature_help = None;
     }
 
     /// Dismisses document symbols panel.
     pub fn dismiss_document_symbols(&mut self) {
-        self.lsp_document_symbols = None;
-        self.lsp_symbols_selected = 0;
-        self.lsp_symbols_scroll = 0;
+        self.lsp.document_symbols.close();
     }
 
     /// Dismisses workspace symbols panel.
     pub fn dismiss_workspace_symbols(&mut self) {
-        self.lsp_workspace_symbols = None;
-        self.lsp_workspace_query.clear();
-        self.lsp_workspace_selected = 0;
+        self.lsp.workspace_symbols.close();
+        self.lsp.workspace_query.clear();
     }
 
     /// Dismisses rename input.
     pub fn dismiss_rename(&mut self) {
-        self.lsp_rename_input = None;
-        self.lsp_rename_range = None;
+        self.lsp.rename = None;
     }
 
     /// Toggles the diagnostics panel.
     pub fn toggle_diagnostics_panel(&mut self) {
-        self.lsp_diagnostics_panel_visible = !self.lsp_diagnostics_panel_visible;
-        if self.lsp_diagnostics_panel_visible {
-            self.lsp_diagnostics_selected = 0;
-            self.lsp_diagnostics_scroll = 0;
+        if self.lsp.diagnostics_panel.is_open() {
+            self.lsp.diagnostics_panel.close();
+        } else {
+            let count = self.lsp.diagnostics.total_count();
+            self.lsp.open_diagnostics(count);
         }
     }
 
-    /// Returns whether any LSP overlay is active.
+    /// Returns whether any LSP overlay is showing.
     pub fn has_lsp_overlay(&self) -> bool {
-        self.lsp_hover.is_some()
-            || self.lsp_references.is_some()
-            || self.lsp_code_actions.is_some()
-            || self.lsp_signature_help.is_some()
-            || self.lsp_document_symbols.is_some()
-            || self.lsp_workspace_symbols.is_some()
-            || self.lsp_rename_input.is_some()
+        self.lsp.has_overlay()
     }
 
     /// Dismisses all LSP overlays.
     pub fn dismiss_all_lsp_overlays(&mut self) {
-        self.dismiss_hover();
-        self.dismiss_references();
-        self.dismiss_code_actions();
-        self.dismiss_signature_help();
-        self.dismiss_document_symbols();
-        self.dismiss_workspace_symbols();
-        self.dismiss_rename();
+        self.lsp.close_overlays();
     }
 
     /// Navigates references list up.
     pub fn references_up(&mut self) {
-        if self.lsp_references_selected > 0 {
-            self.lsp_references_selected -= 1;
-        }
+        self.lsp.references.select_previous();
     }
 
     /// Navigates references list down.
     pub fn references_down(&mut self) {
-        if let Some(ref groups) = self.lsp_references {
-            let total: usize = groups.iter().map(|g| g.locations.len()).sum();
-            if self.lsp_references_selected + 1 < total {
-                self.lsp_references_selected += 1;
-            }
-        }
+        // One row per location, not one per file.
+        let rows: usize = self
+            .lsp
+            .references
+            .items()
+            .iter()
+            .map(|g| g.locations.len())
+            .sum();
+        self.lsp.references.select_next_in(rows);
     }
 
     /// Navigates code actions up.
     pub fn code_actions_up(&mut self) {
-        if self.lsp_code_action_selected > 0 {
-            self.lsp_code_action_selected -= 1;
-        }
+        self.lsp.code_actions.select_previous();
     }
 
     /// Navigates code actions down.
     pub fn code_actions_down(&mut self) {
-        if let Some(ref actions) = self.lsp_code_actions
-            && self.lsp_code_action_selected + 1 < actions.len()
-        {
-            self.lsp_code_action_selected += 1;
-        }
+        self.lsp.code_actions.select_next();
     }
 
     /// Navigates document symbols up.
     pub fn symbols_up(&mut self) {
-        if self.lsp_symbols_selected > 0 {
-            self.lsp_symbols_selected -= 1;
-        }
+        self.lsp.document_symbols.select_previous();
     }
 
     /// Navigates document symbols down.
     pub fn symbols_down(&mut self) {
-        if let Some(ref symbols) = self.lsp_document_symbols {
-            let total = lsp::symbols::flatten_symbols(symbols, 0).len();
-            if self.lsp_symbols_selected + 1 < total {
-                self.lsp_symbols_selected += 1;
-            }
-        }
+        // The outline is a tree drawn flattened, so the row count is not the
+        // number of top-level symbols.
+        let rows = lsp::symbols::flatten_symbols(self.lsp.document_symbols.items(), 0).len();
+        self.lsp.document_symbols.select_next_in(rows);
     }
 
     /// Navigates workspace symbols up.
     pub fn workspace_symbols_up(&mut self) {
-        if self.lsp_workspace_selected > 0 {
-            self.lsp_workspace_selected -= 1;
-        }
+        self.lsp.workspace_symbols.select_previous();
     }
 
     /// Navigates workspace symbols down.
     pub fn workspace_symbols_down(&mut self) {
-        if let Some(ref symbols) = self.lsp_workspace_symbols
-            && self.lsp_workspace_selected + 1 < symbols.len()
-        {
-            self.lsp_workspace_selected += 1;
-        }
+        self.lsp.workspace_symbols.select_next();
     }
 
     /// Navigates diagnostics up.
     pub fn diagnostics_up(&mut self) {
-        if self.lsp_diagnostics_selected > 0 {
-            self.lsp_diagnostics_selected -= 1;
-        }
+        self.lsp.diagnostics_panel.select_previous();
     }
 
     /// Navigates diagnostics down.
     pub fn diagnostics_down(&mut self) {
-        let total = self.diagnostic_store.total_count();
-        if self.lsp_diagnostics_selected + 1 < total {
-            self.lsp_diagnostics_selected += 1;
-        }
+        let total = self.lsp.diagnostics.total_count();
+        self.lsp.sync_diagnostics(total);
+        self.lsp.diagnostics_panel.select_next_in(total);
     }
 
     /// Navigates to the selected reference location.
     pub fn goto_selected_reference(&mut self) {
-        let groups = match &self.lsp_references {
-            Some(g) => g.clone(),
-            None => return,
-        };
+        let groups = self.lsp.references.items().to_vec();
+        if groups.is_empty() {
+            return;
+        }
 
         let (gi, li) = match crate::ui::lsp_references::LspReferencesWidget::index_to_group_location(
             &groups,
-            self.lsp_references_selected,
+            self.lsp.references.selected(),
         ) {
             Some(pair) => pair,
             None => return,
@@ -186,13 +150,9 @@ impl App {
 
     /// Navigates to the selected document symbol.
     pub fn goto_selected_symbol(&mut self) {
-        let symbols = match &self.lsp_document_symbols {
-            Some(s) => s.clone(),
-            None => return,
-        };
-
+        let symbols = self.lsp.document_symbols.items().to_vec();
         let flat = lsp::symbols::flatten_symbols(&symbols, 0);
-        if let Some((_, symbol)) = flat.get(self.lsp_symbols_selected) {
+        if let Some((_, symbol)) = flat.get(self.lsp.document_symbols.selected()) {
             let line = symbol.selection_range.start_line as usize;
             let name = symbol.name.clone();
             self.dismiss_document_symbols();
@@ -203,12 +163,8 @@ impl App {
 
     /// Navigates to the selected workspace symbol.
     pub fn goto_selected_workspace_symbol(&mut self) {
-        let symbols = match &self.lsp_workspace_symbols {
-            Some(s) => s.clone(),
-            None => return,
-        };
-
-        if let Some(symbol) = symbols.get(self.lsp_workspace_selected) {
+        let symbols = self.lsp.workspace_symbols.items().to_vec();
+        if let Some(symbol) = symbols.get(self.lsp.workspace_symbols.selected()) {
             let path = symbol.path.clone();
             let line = symbol.line as usize;
             self.dismiss_workspace_symbols();
@@ -228,7 +184,7 @@ impl App {
     /// Returns diagnostics for the current file.
     pub fn current_file_diagnostics(&self) -> Vec<crate::lsp::diagnostics::DiagnosticInfo> {
         match self.current_file_path() {
-            Some(path) => self.diagnostic_store.get(path),
+            Some(path) => self.lsp.diagnostics.get(path),
             None => Vec::new(),
         }
     }

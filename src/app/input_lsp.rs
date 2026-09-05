@@ -14,38 +14,38 @@ impl App {
         );
 
         // Handle references panel
-        if self.lsp_references.is_some() {
+        if self.lsp.references.is_open() {
             return self.handle_lsp_references_key(key);
         }
 
         // Handle code actions
-        if self.lsp_code_actions.is_some() {
+        if self.lsp.code_actions.is_open() {
             return self.handle_lsp_code_actions_key(key);
         }
 
         // Handle document symbols
-        if self.lsp_document_symbols.is_some() {
+        if self.lsp.document_symbols.is_open() {
             return self.handle_lsp_symbols_key(key);
         }
 
         // Handle workspace symbols
-        if self.lsp_workspace_symbols.is_some() {
+        if self.lsp.workspace_symbols.is_open() {
             return self.handle_lsp_workspace_symbols_key(key);
         }
 
         // Handle rename input
-        if self.lsp_rename_input.is_some() {
+        if self.lsp.rename.is_some() {
             return self.handle_lsp_rename_key(key);
         }
 
         // Handle hover (dismiss on any key)
-        if self.lsp_hover.is_some() {
+        if self.lsp.hover.is_some() {
             self.dismiss_hover();
             return false; // Don't consume - let the key through
         }
 
         // Handle signature help (dismiss on Esc, let other keys through)
-        if self.lsp_signature_help.is_some() {
+        if self.lsp.signature_help.is_some() {
             if key.code == KeyCode::Esc {
                 self.dismiss_signature_help();
                 return true;
@@ -110,13 +110,13 @@ impl App {
             KeyCode::Esc => self.dismiss_rename(),
             KeyCode::Enter => self.confirm_rename(),
             KeyCode::Backspace => {
-                if let Some(ref mut input) = self.lsp_rename_input {
-                    input.pop();
+                if let Some(ref mut rename) = self.lsp.rename {
+                    rename.input.pop();
                 }
             }
             KeyCode::Char(c) => {
-                if let Some(ref mut input) = self.lsp_rename_input {
-                    input.push(c);
+                if let Some(ref mut rename) = self.lsp.rename {
+                    rename.input.push(c);
                 }
             }
             _ => {}
@@ -126,13 +126,9 @@ impl App {
 
     /// Applies the selected code action.
     fn apply_selected_code_action(&mut self) {
-        let actions = match self.lsp_code_actions.take() {
-            Some(a) => a,
-            None => return,
-        };
-
-        let selected = self.lsp_code_action_selected;
-        self.lsp_code_action_selected = 0;
+        let selected = self.lsp.code_actions.selected();
+        let actions = self.lsp.code_actions.items().to_vec();
+        self.lsp.code_actions.close();
 
         if let Some(action) = actions.get(selected) {
             if action.edit.is_some() {
@@ -145,14 +141,13 @@ impl App {
 
     /// Confirms rename operation.
     fn confirm_rename(&mut self) {
-        let new_name = match self.lsp_rename_input.take() {
-            Some(n) if !n.is_empty() => n,
+        let new_name = match self.lsp.rename.take() {
+            Some(rename) if !rename.is_empty() => rename.input,
             _ => {
                 self.dismiss_rename();
                 return;
             }
         };
-        self.lsp_rename_range = None;
         self.set_status(format!(
             "Rename to '{new_name}' requested (requires LSP server)"
         ));

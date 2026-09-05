@@ -4,16 +4,23 @@
 
 mod keybindings;
 pub mod platform;
+pub mod schema;
 pub mod shell;
+pub mod toml_file;
+pub mod validate;
 
 use std::collections::HashMap;
 use std::fs;
 use std::io::{self, Write};
 use std::path::PathBuf;
 
+use tracing::warn;
+
 pub use keybindings::{KeyAction, KeyBinding, KeybindingMode, Keybindings};
 pub use platform::{PlatformKeys, command_palette_hotkey, is_windows_11};
+pub use schema::{Group, Setting, ValueKind};
 pub use shell::{ShellDetector, ShellInfo, ShellInstallInfo, ShellInstaller, ShellType};
+pub use validate::{Issue, Problem};
 
 use crate::docker_logs::config::LogStreamConfig;
 use crate::logging::LogConfig;
@@ -245,6 +252,11 @@ pub struct Config {
     pub metrics_history: bool,
     /// How many days of raw samples to keep before averaging them per minute.
     pub metrics_raw_days: u32,
+    /// Problems found while reading the configuration file.
+    ///
+    /// Kept rather than only logged so the interface can say so: a warning in
+    /// a log file nobody opens is the same as no warning.
+    issues: Vec<Issue>,
 }
 
 impl Default for Config {
@@ -273,6 +285,7 @@ impl Default for Config {
             alerts: AlertSettings::default(),
             metrics_history: false,
             metrics_raw_days: DEFAULT_METRICS_RAW_DAYS,
+            issues: Vec::new(),
         }
     }
 }
@@ -286,13 +299,33 @@ impl Config {
             .join(".ratrc")
     }
 
-    /// Loads configuration from the default path, creating it if it doesn't exist.
+    /// Loads configuration, preferring the consolidated TOML file.
+    ///
+    /// `~/.ratterm/config.toml` wins when it exists, because writing one is a
+    /// deliberate act; otherwise `~/.ratrc` is used and created if missing.
+    /// A TOML file that cannot be read is reported and skipped rather than
+    /// being a reason to refuse to start.
     ///
     /// # Errors
     /// Returns error if config cannot be read or parsed.
     pub fn load() -> io::Result<Self> {
-        let path = Self::default_config_path();
-        Self::load_from(&path)
+        let toml_path = toml_file::default_path();
+        if toml_path.exists() {
+            match toml_file::load(&toml_path) {
+                Ok(settings) => {
+                    let mut config = Self::from_content(&settings.to_ratrc(), &toml_path);
+                    for (key, _) in &settings.unrecognised {
+                        warn!("{}: `{key}` is not a setting this build knows", toml_path.display());
+                    }
+                    config.issues = settings.issues();
+                    config.report_issues();
+                    return Ok(config);
+                }
+                Err(e) => warn!("{e}"),
+            }
+        }
+
+        Self::load_from(&Self::default_config_path())
     }
 
     /// Loads configuration from a specific path.
@@ -306,23 +339,93 @@ impl Config {
         }
 
         let content = fs::read_to_string(path)?;
+        let mut config = Self::from_content(&content, path);
+        config.issues = validate::validate(&content);
+        config.report_issues();
+        Ok(config)
+    }
+
+    /// Builds a configuration from file content already in hand.
+    fn from_content(content: &str, path: &PathBuf) -> Self {
         let mut config = Self {
             config_path: path.clone(),
             ..Self::default()
         };
-        config.parse(&content);
+        config.parse(content);
 
         // Re-initialize keybindings based on parsed mode
         config.keybindings = Keybindings::for_mode(config.mode);
 
         // Re-parse to apply any custom keybinding overrides
-        config.parse_keybindings(&content);
+        config.parse_keybindings(content);
 
         // Parse and apply theme settings
-        let theme_settings = ThemeSettings::parse(&content);
+        let theme_settings = ThemeSettings::parse(content);
         theme_settings.apply_to_manager(&mut config.theme_manager);
 
-        Ok(config)
+        config
+    }
+
+    /// Writes any configuration problems to the log.
+    ///
+    /// A setting that does nothing and says nothing is worse than one that
+    /// fails, so these are never silent — but they are never fatal either,
+    /// since an unrecognised key may simply belong to a newer build.
+    fn report_issues(&self) {
+        for issue in &self.issues {
+            warn!("{}: {issue}", self.config_path.display());
+        }
+    }
+
+    /// Problems found in the configuration file, in the order they appear.
+    #[must_use]
+    pub fn issues(&self) -> &[Issue] {
+        &self.issues
+    }
+
+    /// A one-line summary of the configuration problems, if there are any.
+    ///
+    /// Shown in the status bar at start-up: a warning in a log file nobody
+    /// opens is the same as no warning.
+    #[must_use]
+    pub fn issue_summary(&self) -> Option<String> {
+        let first = self.issues.first()?;
+        Some(if self.issues.len() == 1 {
+            format!("{}: {first}", self.config_name())
+        } else {
+            format!(
+                "{}: {first} (+{} more)",
+                self.config_name(),
+                self.issues.len() - 1
+            )
+        })
+    }
+
+    /// The configuration file's name, without its directory.
+    fn config_name(&self) -> String {
+        self.config_path
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| "config".to_string())
+    }
+
+    /// Writes the settings as `~/.ratterm/config.toml`.
+    ///
+    /// Returns the path written. The `.ratrc` file is left alone: a migration
+    /// that deletes the file it read from is one the user cannot undo.
+    ///
+    /// # Errors
+    /// Returns an error if the file cannot be written.
+    pub fn migrate_to_toml(&self) -> io::Result<PathBuf> {
+        let content = fs::read_to_string(&self.config_path)?;
+        let path = toml_file::default_path();
+
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::write(&path, toml_file::render(&content))?;
+
+        Ok(path)
     }
 
     /// Parses only keybinding settings from content.

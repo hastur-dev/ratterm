@@ -9,17 +9,21 @@ Welcome to the Ratterm documentation. This folder contains detailed guides for a
 | Document | Description |
 |----------|-------------|
 | [hotkeys.md](hotkeys.md) | Complete keyboard shortcut reference |
-| [ratrc_docs.md](ratrc_docs.md) | Configuration file (`.ratrc`) reference |
+| [ratrc_docs.md](ratrc_docs.md) | Configuration file (`.ratrc` and `config.toml`) reference |
 | [command_palette.md](command_palette.md) | All command palette commands |
+| [docker.md](docker.md) | Containers across several hosts |
+| [kubernetes.md](kubernetes.md) | Clusters, contexts and resources |
 
 ### For Developers
 
 | Document | Description |
 |----------|-------------|
 | [architecture.md](architecture.md) | System architecture overview |
+| [automation.md](automation.md) | Driving ratterm from a program: snapshots, key injection, scenarios |
 | [extension_system.md](extension_system.md) | Extension REST API reference |
 | [extensions.md](extensions.md) | How to create extensions |
 | [testing.md](testing.md) | Running tests and CI |
+| [archive/](archive/) | Planning documents for work that has landed |
 
 ---
 

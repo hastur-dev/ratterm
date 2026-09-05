@@ -1,5 +1,47 @@
 # Ratterm Configuration (.ratrc)
 
+## Two files, one schema
+
+Settings live in `~/.ratrc`, the format this document describes. They can also
+live in `~/.ratterm/config.toml`, the same settings grouped into TOML sections.
+Both are read and both are checked against the same schema; when both exist the
+TOML file wins, because writing one is a deliberate act.
+
+To convert:
+
+```sh
+rat --migrate-config     # writes ~/.ratterm/config.toml from ~/.ratrc
+```
+
+`~/.ratrc` is left in place and keeps working. A key the current build does not
+recognise is carried into an `[unknown]` section rather than dropped, so a file
+written by a newer version survives a round trip.
+
+## Checking a settings file
+
+```sh
+rat --check-config
+```
+
+Every problem is reported with its line number, and the command exits non-zero
+if there are any:
+
+```
+/home/me/.ratrc:
+  line 12: `metrics_hisory` is not a setting. Did you mean `metrics_history`?
+  line 18: `mode` expects one of vim, emacs, default.
+  line 24: `alert.cpu` expects a number from 0 to 100, not 150.
+  line 31: `shell` is set again here; the value on line 4 is overridden.
+
+4 problems found.
+```
+
+A misspelled key used to be ignored in silence, which meant a setting could
+appear to be on and do nothing. Starting ratterm normally now reports the first
+problem in the status bar and writes all of them to the log; it still starts,
+because an unrecognised key may simply belong to a newer build.
+
+
 The `.ratrc` file is Ratterm's configuration file, located at `~/.ratrc` (your home directory). It is automatically created on first launch with default settings.
 
 ## File Format

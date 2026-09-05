@@ -19,73 +19,85 @@ Ratterm is a split-terminal TUI application built with Rust. It combines:
 
 ## Module Structure
 
-```
-src/
-+-- main.rs                 # Entry point, event loop
-+-- lib.rs                  # Library exports
-+-- app/
-|   +-- mod.rs              # Core App state & orchestration
-|   +-- input.rs            # Global input routing
-|   +-- input_editor.rs     # Editor-specific input handling
-|   +-- input_health.rs     # Health dashboard input
-|   +-- popup_ops.rs        # Popup operation handlers
-|   +-- keymap.rs           # Key-to-bytes conversion
-+-- config/
-|   +-- mod.rs              # Configuration loading (.ratrc)
-|   +-- keybindings.rs      # Keybinding mode definitions
-+-- editor/
-|   +-- mod.rs              # Editor core with modes
-|   +-- buffer.rs           # Text buffer (ropey-based)
-|   +-- cursor.rs           # Cursor position & movement
-|   +-- edit.rs             # Edit operations
-|   +-- find.rs             # Search functionality
-|   +-- view.rs             # Viewport management
-+-- terminal/
-|   +-- mod.rs              # Terminal core
-|   +-- pty.rs              # PTY spawning & management
-|   +-- parser.rs           # ANSI/VTE escape parsing
-|   +-- grid.rs             # Terminal cell grid
-|   +-- multiplexer/        # Multi-tab & split management
-|   +-- cell.rs             # Cell representation
-|   +-- action.rs           # Terminal actions
-|   +-- style.rs            # ANSI style handling
-+-- ui/
-|   +-- mod.rs              # UI module exports
-|   +-- layout.rs           # Split pane layout manager
-|   +-- editor_widget.rs    # Editor rendering
-|   +-- terminal_widget.rs  # Terminal rendering
-|   +-- editor_tabs.rs      # Editor tab bar
-|   +-- terminal_tabs.rs    # Terminal tab bar
-|   +-- statusbar.rs        # Status bar
-|   +-- file_picker.rs      # File browser UI
-|   +-- popup.rs            # Popup dialogs
-+-- filebrowser/
-|   +-- mod.rs              # File browser logic
-|   +-- entry.rs            # File entry representation
-+-- ssh/
-|   +-- mod.rs              # SSH manager
-|   +-- hosts.rs            # Host storage
-|   +-- scanner.rs          # Network scanning
-|   +-- health.rs           # Health monitoring
-+-- docker/
-|   +-- mod.rs              # Docker manager
-|   +-- discovery.rs        # Container discovery
-|   +-- remote.rs           # Remote host support
-+-- completion/
-|   +-- mod.rs              # Completion system
-|   +-- lsp.rs              # LSP integration
-|   +-- keywords.rs         # Keyword fallback
-+-- extensions/
-|   +-- mod.rs              # Extension loader
-|   +-- api.rs              # REST API server
-|   +-- manager.rs          # Extension lifecycle
-+-- clipboard.rs            # Clipboard operations
-+-- updater.rs              # Auto-update checking
-```
+Every top-level module, and what it is for. `tests/docs_tests.rs` fails if this
+list and `src/lib.rs` disagree, which is how the previous version of this
+section came to name three modules that did not exist.
+
+| Module | Purpose |
+|---|---|
+| `api` | Control API: named pipe, Unix socket or loopback TCP, with per-session token authentication |
+| `app` | Application state and the orchestration between every other module |
+| `cli` | Command-line parsing for headless runs, scenarios and endpoint selection |
+| `clipboard` | Copy and paste, with an OSC 52 path for remote shells |
+| `completion` | Autocomplete: keyword fallback, caching and debouncing |
+| `config` | `.ratrc` parsing, keybinding modes, platform key differences |
+| `daemon` | Push metric collection: deployment, and the receiver remote hosts report to |
+| `debugger` | Debug Adapter Protocol sessions and breakpoints |
+| `docker` | Container, image and host management |
+| `docker_logs` | Container log streaming, storage and search |
+| `editor` | Text buffer, cursor, viewport, per-tab state, Vim and Emacs behaviour |
+| `extension` | Extension loading, approval and lifecycle |
+| `filebrowser` | File and directory browsing with fuzzy search |
+| `fixtures` | Fixture state for scripted runs, in place of the user's real configuration |
+| `git` | Status, gutter marks, blame, diff and the Git dashboard |
+| `hosts` | The one host registry: identity, capabilities and reachability |
+| `k8s` | Kubernetes: contexts, typed resource views, actions and pod logs |
+| `logging` | Tracing setup and log retention |
+| `lsp` | Language servers: diagnostics, hover, definitions, symbols, formatting |
+| `remote` | Persistent SSH sessions, the session pool, port forwards and remote execution |
+| `scenario` | Scripted interface runs and their assertions |
+| `secrets` | Credential storage: the OS keychain, and an encrypted file where there is none |
+| `session` | Session persistence across restarts |
+| `ssh` | Host list, credentials, network scanning and metric collection over SSH |
+| `store` | The durable SQLite store: metrics, events, alerts, retention and downsampling |
+| `telemetry` | The one ingest path both metric collectors write to |
+| `terminal` | PTY, ANSI parsing, the cell grid and the multiplexer |
+| `theme` | Colour themes and their persistence |
+| `ui` | Every widget. Presentation only — logic lives in the module it belongs to |
+| `updater` | Update checking and installation |
+
+Two binaries are built from these: `rat`, the application, and `rat-agent`, the
+metric reporter a fleet machine runs (`src/bin/rat-agent.rs`).
 
 ---
 
 ## Core Components
+
+### Panels and their state (`src/app/panel.rs`)
+
+Every list in the interface — references, code actions, symbols, diagnostics,
+hosts, containers, pods — used to carry three fields on `App`: the items, a
+selected index, and a scroll offset. Nineteen of them were the language server
+alone. Each was navigated by its own hand-written code, so a fix to one did not
+reach the others, and an index could outlive the list it pointed into.
+
+`ListPanel<T>` is that state once, with selection bounded by construction. A
+panel holding no items has no selection; replacing the items moves the
+selection into the new list rather than leaving it past the end. `None` items
+means closed, which is deliberately not the same as open-and-empty — "no
+references found" and "the references panel is not open" are different answers,
+and conflating them is why an empty result used to render as a blank box.
+
+A few panels draw more rows than they hold items: a references panel holds one
+item per file and draws one row per location. Those use the `_in(rows)` methods,
+which take the row count rather than inferring it.
+
+`Panel` is what the application asks of a panel — a title, whether it is open,
+what a key did, and how to draw itself — so `App` can treat them alike instead
+of naming each one in every match. `K8sManager` implements it.
+
+Three states group what used to be loose fields:
+
+| Type | File | Replaces |
+|---|---|---|
+| `LspUiState` | `src/app/lsp_state.rs` | 19 `lsp_*` fields |
+| `GitUiState` | `src/app/side_state.rs` | `git_gutter`, `git_blame_active`, `git_blame_data` |
+| `DebugUiState` | `src/app/side_state.rs` | `debug_session`, `breakpoint_store`, `debug_panel_visible` |
+
+`GitUiState` is the clearest case: blame was a flag and a vector that could
+disagree, so a failed load could leave the previous file's blame beside the
+current file's text. It is one `Option<Vec<BlameLine>>` now, and that state is
+unrepresentable.
 
 ### App (`src/app/mod.rs`)
 

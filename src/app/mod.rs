@@ -21,18 +21,23 @@ mod input_docker_logs;
 mod input_editor;
 mod input_git;
 mod input_health;
+pub mod input_k8s;
 mod input_lsp;
 mod input_mouse;
 mod input_ssh;
 mod input_terminal;
 pub mod input_traits;
+mod k8s_ops;
 mod key_filter;
 mod keymap;
 mod layout_ops;
 mod lsp_ops;
+pub mod lsp_state;
+pub mod panel;
 mod popup_ops;
 mod render;
 mod session_ops;
+pub mod side_state;
 pub mod snapshot;
 mod ssh_connect;
 mod ssh_ops;
@@ -57,21 +62,21 @@ use crate::completion::CompletionHandle;
 use crate::config::{Config, KeybindingMode};
 use crate::daemon::DaemonManager;
 use crate::debugger::breakpoints::BreakpointStore;
-use crate::debugger::session::DebugSession;
 use crate::docker::{DockerItemList, DockerStorage};
 use crate::editor::{Editor, EditorState};
 use crate::extension::ExtensionManager;
 use crate::filebrowser::FileBrowser;
-use crate::git::BlameLine;
 use crate::git::dashboard::GitDashboard;
-use crate::git::gutter::GutterMark;
 use crate::hosts::HostRegistry;
 use crate::remote::{RemoteFileBrowser, RemoteFileManager};
 use crate::ssh::{NetworkScanner, SSHStorage, StatusChecker};
 use crate::store::RetentionPolicy;
 use crate::telemetry::Telemetry;
 use crate::terminal::{BackgroundManager, TerminalMultiplexer, pty::PtyError};
+use self::lsp_state::LspUiState;
+use self::side_state::{DebugUiState, GitUiState};
 use crate::ui::health_dashboard::HealthDashboard;
+use crate::ui::k8s_manager::K8sManager;
 use crate::ui::{
     docker_manager::DockerManagerSelector,
     editor_tabs::EditorTabInfo,
@@ -242,6 +247,8 @@ pub struct App {
     pub(crate) remote_file_browser: Option<RemoteFileBrowser>,
     /// Docker manager selector state.
     pub(crate) docker_manager: Option<DockerManagerSelector>,
+    /// Kubernetes screens, which own the cluster connection while they are open.
+    pub(crate) k8s_manager: Option<K8sManager>,
     /// Docker storage for quick-connect settings.
     pub(crate) docker_storage: DockerStorage,
     /// Docker items (quick connect slots and settings).
@@ -275,12 +282,13 @@ pub struct App {
     pub(crate) telemetry: Telemetry,
     /// Whether --test-keys mode is active (F1/F2/F3 open palette/SSH/Docker).
     pub(crate) test_keys: bool,
-    /// Whether state came from a fixture directory.
+    /// The fixture directory, when the run was given one.
     ///
     /// While set, the application neither reads nor writes the user's real
     /// configuration, which is what makes a scripted run repeatable and keeps
-    /// it away from real machines.
-    pub(crate) fixture_mode: bool,
+    /// it away from real machines. The path is kept rather than only a flag so
+    /// a screen can look for its own fixture file in it.
+    pub(crate) fixture_dir: Option<PathBuf>,
     /// Hotkey help overlay (shown with `?` in dashboards).
     pub(crate) hotkey_overlay: Option<crate::ui::hotkey_overlay::HotkeyOverlay>,
     /// Active Docker log stream handle.
@@ -290,60 +298,21 @@ pub struct App {
         Option<tokio::sync::mpsc::Receiver<crate::docker_logs::types::LogEntry>>,
     /// Git dashboard state.
     pub(crate) git_dashboard: Option<GitDashboard>,
-    /// Git gutter indicators for the current file (line -> mark).
-    pub(crate) git_gutter: HashMap<usize, GutterMark>,
-    /// Whether git blame is active for the current file.
-    pub(crate) git_blame_active: bool,
-    /// Git blame data for the current file.
-    pub(crate) git_blame_data: Vec<BlameLine>,
-    /// Active debug session.
-    pub(crate) debug_session: Option<DebugSession>,
-    /// Breakpoint store (persisted across sessions).
-    pub(crate) breakpoint_store: BreakpointStore,
-    /// Whether the debug panel is visible.
-    pub(crate) debug_panel_visible: bool,
-    /// LSP diagnostic store for error/warning tracking.
-    pub(crate) diagnostic_store: crate::lsp::DiagnosticStore,
-    /// Active LSP hover result for display.
-    pub(crate) lsp_hover: Option<crate::lsp::hover::HoverResult>,
-    /// LSP hover cursor position for popup positioning.
-    pub(crate) lsp_hover_cursor: (u16, u16),
-    /// Active LSP references result.
-    pub(crate) lsp_references: Option<Vec<crate::lsp::references::ReferenceGroup>>,
-    /// Selected index in references panel.
-    pub(crate) lsp_references_selected: usize,
-    /// LSP references scroll offset.
-    pub(crate) lsp_references_scroll: usize,
-    /// Active LSP code actions.
-    pub(crate) lsp_code_actions: Option<Vec<crate::lsp::actions::CodeActionResult>>,
-    /// Selected code action index.
-    pub(crate) lsp_code_action_selected: usize,
-    /// Active LSP signature help.
-    pub(crate) lsp_signature_help: Option<crate::lsp::signature::SignatureHelpResult>,
-    /// Active document symbols for outline.
-    pub(crate) lsp_document_symbols: Option<Vec<crate::lsp::symbols::DocumentSymbolResult>>,
-    /// Selected document symbol index.
-    pub(crate) lsp_symbols_selected: usize,
-    /// LSP symbols scroll offset.
-    pub(crate) lsp_symbols_scroll: usize,
-    /// Active workspace symbols search results.
-    pub(crate) lsp_workspace_symbols: Option<Vec<crate::lsp::symbols::SymbolInfoResult>>,
-    /// Workspace symbols search query.
-    pub(crate) lsp_workspace_query: String,
-    /// Selected workspace symbol index.
-    pub(crate) lsp_workspace_selected: usize,
-    /// Whether the diagnostics panel is visible.
-    pub(crate) lsp_diagnostics_panel_visible: bool,
-    /// Selected diagnostic index.
-    pub(crate) lsp_diagnostics_selected: usize,
-    /// LSP diagnostics scroll offset.
-    pub(crate) lsp_diagnostics_scroll: usize,
-    /// LSP rename input state (new name being typed).
-    pub(crate) lsp_rename_input: Option<String>,
-    /// LSP rename range information.
-    pub(crate) lsp_rename_range: Option<crate::lsp::rename::RenameRange>,
-    /// Whether to format on save via LSP.
-    pub(crate) lsp_format_on_save: bool,
+    /// Gutter marks and blame for the file on screen.
+    ///
+    /// One value rather than three loose fields: blame used to be a flag and a
+    /// vector that could disagree, so a failed load could leave the previous
+    /// file's blame beside the current file's text.
+    pub(crate) git: GitUiState,
+    /// The debug session, its breakpoints and its panel.
+    pub(crate) debug: DebugUiState,
+    /// Everything the language-server screens keep between key presses.
+    ///
+    /// This was nineteen fields — five panels' worth of items, indices and
+    /// scroll offsets, plus hover, signature help and rename. They are one
+    /// value now, and the panels share one tested implementation of selection
+    /// and scrolling rather than five hand-written ones.
+    pub(crate) lsp: LspUiState,
 }
 
 /// Construction options for [`App`].
@@ -473,7 +442,8 @@ impl App {
         }
 
         let mut ssh_hosts = HostRegistry::new();
-        let fixture_mode = options.fixtures.is_some();
+        let fixture_dir = options.fixtures.clone();
+        let fixture_mode = fixture_dir.is_some();
         if let Some(dir) = options.fixtures.as_ref() {
             match crate::fixtures::Fixtures::load(dir) {
                 Ok(fixtures) => {
@@ -520,6 +490,10 @@ impl App {
 
         let telemetry = Self::build_telemetry(&config, fixture_mode);
 
+        // A setting that silently did nothing used to be invisible. Say so
+        // where the user is looking, not only in a log file.
+        let status = config.issue_summary().unwrap_or_default();
+
         Ok(Self {
             terminals,
             editor,
@@ -535,7 +509,7 @@ impl App {
             open_files: Vec::new(),
             current_file_idx: 0,
             running: true,
-            status: String::new(),
+            status,
             last_error: None,
             clipboard: Clipboard::new(),
             config,
@@ -556,6 +530,7 @@ impl App {
             remote_manager: RemoteFileManager::new(),
             remote_file_browser: None,
             docker_manager: None,
+            k8s_manager: None,
             docker_storage: DockerStorage::new(),
             docker_items: DockerItemList::new(),
             file_browser_context: FileBrowserContext::OpenFile,
@@ -569,38 +544,14 @@ impl App {
             host_statuses: HashMap::new(),
             telemetry,
             test_keys: false,
-            fixture_mode,
+            fixture_dir,
             hotkey_overlay: None,
             docker_log_stream: None,
             docker_log_rx: None,
             git_dashboard: None,
-            git_gutter: HashMap::new(),
-            git_blame_active: false,
-            git_blame_data: Vec::new(),
-            debug_session: None,
-            breakpoint_store: BreakpointStore::with_project_root(cwd),
-            debug_panel_visible: false,
-            diagnostic_store: crate::lsp::DiagnosticStore::new(),
-            lsp_hover: None,
-            lsp_hover_cursor: (0, 0),
-            lsp_references: None,
-            lsp_references_selected: 0,
-            lsp_references_scroll: 0,
-            lsp_code_actions: None,
-            lsp_code_action_selected: 0,
-            lsp_signature_help: None,
-            lsp_document_symbols: None,
-            lsp_symbols_selected: 0,
-            lsp_symbols_scroll: 0,
-            lsp_workspace_symbols: None,
-            lsp_workspace_query: String::new(),
-            lsp_workspace_selected: 0,
-            lsp_diagnostics_panel_visible: false,
-            lsp_diagnostics_selected: 0,
-            lsp_diagnostics_scroll: 0,
-            lsp_rename_input: None,
-            lsp_rename_range: None,
-            lsp_format_on_save,
+            git: GitUiState::new(),
+            debug: DebugUiState::new(BreakpointStore::with_project_root(cwd)),
+            lsp: LspUiState::new(lsp_format_on_save),
         })
     }
 
@@ -681,7 +632,13 @@ impl App {
     /// Returns true if this instance is running on fixture state.
     #[must_use]
     pub const fn is_fixture_mode(&self) -> bool {
-        self.fixture_mode
+        self.fixture_dir.is_some()
+    }
+
+    /// Returns the fixture directory, when the run was given one.
+    #[must_use]
+    pub fn fixture_dir(&self) -> Option<&Path> {
+        self.fixture_dir.as_deref()
     }
 
     /// Builds the telemetry layer this instance will use.

@@ -76,7 +76,7 @@ impl App {
     /// directory, and reading the user's file would replace it with whatever
     /// machines they actually have.
     pub(crate) fn load_ssh_hosts(&mut self) {
-        if self.fixture_mode {
+        if self.is_fixture_mode() {
             debug!("load_ssh_hosts: skipped, running on fixtures");
             return;
         }
@@ -200,7 +200,7 @@ impl App {
             );
         }
 
-        if self.fixture_mode {
+        if self.is_fixture_mode() {
             debug!("save_ssh_hosts: skipped, running on fixtures");
             return;
         }

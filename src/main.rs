@@ -157,6 +157,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
+    // Configuration commands: no terminal, no update check, no event loop.
+    if cli.check_config {
+        return check_config();
+    }
+    if cli.migrate_config {
+        return migrate_config();
+    }
+
     if cli.is_scenario_run() || cli.is_headless() {
         setup_logging(&Config::load().unwrap_or_default().log_config);
         return if cli.is_scenario_run() {
@@ -340,6 +348,56 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 fn restore_terminal() -> io::Result<()> {
     disable_raw_mode()?;
     execute!(io::stdout(), LeaveAlternateScreen, DisableMouseCapture)?;
+    Ok(())
+}
+
+/// Reports every problem in the settings file.
+///
+/// Exits non-zero when there are any, so a shell or a CI job can use it. This
+/// is the one place a configuration problem is fatal: everywhere else ratterm
+/// starts anyway, because an unrecognised key may belong to a newer build.
+fn check_config() -> Result<(), Box<dyn std::error::Error>> {
+    let config = Config::load()?;
+    let issues = config.issues();
+
+    if issues.is_empty() {
+        println!("{}: no problems found", config.config_path.display());
+        return Ok(());
+    }
+
+    eprintln!("{}:", config.config_path.display());
+    for issue in issues {
+        eprintln!("  {issue}");
+    }
+    eprintln!();
+    eprintln!(
+        "{} problem{} found.",
+        issues.len(),
+        if issues.len() == 1 { "" } else { "s" }
+    );
+    std::process::exit(1);
+}
+
+/// Writes the settings as `~/.ratterm/config.toml`.
+fn migrate_config() -> Result<(), Box<dyn std::error::Error>> {
+    let config = Config::load()?;
+    let written = config.migrate_to_toml()?;
+
+    println!("Wrote {}", written.display());
+    println!(
+        "{} is unchanged and still readable; the TOML file wins while it exists.",
+        config.config_path.display()
+    );
+
+    let issues = config.issues();
+    if !issues.is_empty() {
+        eprintln!();
+        eprintln!("Carried over {} unresolved problem(s):", issues.len());
+        for issue in issues {
+            eprintln!("  {issue}");
+        }
+    }
+
     Ok(())
 }
 

@@ -48,6 +48,13 @@ impl App {
             return;
         }
 
+        // The Kubernetes screens cover the whole pane, so they take keys
+        // before the mode router does; otherwise a key would reach the editor
+        // underneath a panel the user cannot see past.
+        if self.is_k8s_manager_open() && self.handle_k8s_key(key) {
+            return;
+        }
+
         match self.mode {
             AppMode::Normal => {
                 tracing::info!("KEY_ROUTE: -> handle_normal_key");
@@ -155,7 +162,24 @@ impl App {
                 self.new_editor_tab();
                 true
             }
-            // Test-keys mode: F1=Palette, F2=SSH, F3=Docker, F4=Health Dashboard
+            // Kubernetes. Ctrl+Shift+K rather than a bare letter because it
+            // opens a full-screen panel over whatever is being edited.
+            (m, KeyCode::Char('k') | KeyCode::Char('K'))
+                if m == KeyModifiers::CONTROL | KeyModifiers::SHIFT =>
+            {
+                if self.is_k8s_manager_open() {
+                    self.close_k8s_manager();
+                } else {
+                    self.open_k8s_manager();
+                }
+                true
+            }
+            // Test-keys mode: F1=Palette, F2=SSH, F3=Docker, F4=Health, F6=K8s.
+            // F5 is the debugger's "start", so it is not available here.
+            (KeyModifiers::NONE, KeyCode::F(6)) if self.test_keys => {
+                self.open_k8s_manager();
+                true
+            }
             (KeyModifiers::NONE, KeyCode::F(1)) if self.test_keys => {
                 self.show_popup(PopupKind::CommandPalette);
                 true

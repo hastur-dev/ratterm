@@ -13,6 +13,7 @@ use crate::ui::{
     file_picker::{FilePickerWidget, RemoteFilePickerWidget},
     git_dashboard::GitDashboardWidget,
     health_dashboard::HealthDashboardWidget,
+    k8s_manager::K8sManagerWidget,
     key_hint_bar::{KeyHintBar, hints_for},
     layout::FocusedPane,
     popup::{
@@ -94,9 +95,12 @@ impl App {
             }
         }
 
-        // Render terminal pane or health dashboard (with split support)
+        // Render terminal pane, or whichever full-pane screen is open over it.
         if areas.has_terminal() {
-            if self.is_health_dashboard_open() {
+            if self.is_k8s_manager_open() {
+                debug!("RENDER: kubernetes");
+                self.render_k8s_manager(frame, areas.terminal);
+            } else if self.is_health_dashboard_open() {
                 debug!("RENDER: health dashboard");
                 self.render_health_dashboard(frame, &areas);
             } else {
@@ -256,25 +260,25 @@ impl App {
     /// Renders LSP overlay widgets (hover, references, code actions, etc.).
     fn render_lsp_overlays(&self, frame: &mut ratatui::Frame, screen: ratatui::layout::Rect) {
         // Hover popup
-        if let Some(ref hover) = self.lsp_hover {
+        if let Some(ref hover) = self.lsp.hover {
             use crate::ui::lsp_hover::LspHoverWidget;
-            let (cx, cy) = self.lsp_hover_cursor;
+            let (cx, cy) = self.lsp.hover_cursor;
             let widget = LspHoverWidget::new(hover, cx, cy);
             let popup_area = widget.calculate_area(screen);
             widget.render_in_area(popup_area, frame.buffer_mut());
         }
 
         // Signature help
-        if let Some(ref sig) = self.lsp_signature_help {
+        if let Some(ref sig) = self.lsp.signature_help {
             use crate::ui::lsp_signature::LspSignatureWidget;
-            let (cx, cy) = self.lsp_hover_cursor;
+            let (cx, cy) = self.lsp.hover_cursor;
             let widget = LspSignatureWidget::new(sig, cx, cy);
             let popup_area = widget.calculate_area(screen);
             widget.render_in_area(popup_area, frame.buffer_mut());
         }
 
         // References panel (takes half the screen)
-        if let Some(ref groups) = self.lsp_references {
+        if let Some(groups) = self.lsp.references.opened() {
             use crate::ui::lsp_references::LspReferencesWidget;
             use ratatui::widgets::Widget as _;
             let panel_area = ratatui::layout::Rect::new(
@@ -285,23 +289,23 @@ impl App {
             );
             let widget = LspReferencesWidget::new(
                 groups,
-                self.lsp_references_selected,
-                self.lsp_references_scroll,
+                self.lsp.references.selected(),
+                self.lsp.references.scroll(),
             );
             widget.render(panel_area, frame.buffer_mut());
         }
 
         // Code actions popup
-        if let Some(ref actions) = self.lsp_code_actions {
+        if let Some(actions) = self.lsp.code_actions.opened() {
             use crate::ui::lsp_actions::LspActionsWidget;
-            let (cx, cy) = self.lsp_hover_cursor;
-            let widget = LspActionsWidget::new(actions, self.lsp_code_action_selected);
+            let (cx, cy) = self.lsp.hover_cursor;
+            let widget = LspActionsWidget::new(actions, self.lsp.code_actions.selected());
             let popup_area = widget.calculate_area(cx, cy, screen);
             widget.render_in_area(popup_area, frame.buffer_mut());
         }
 
         // Document symbols panel
-        if let Some(ref symbols) = self.lsp_document_symbols {
+        if let Some(symbols) = self.lsp.document_symbols.opened() {
             use crate::ui::lsp_symbols::LspDocumentSymbolsWidget;
             use ratatui::widgets::Widget as _;
             let panel_area = ratatui::layout::Rect::new(
@@ -312,14 +316,14 @@ impl App {
             );
             let widget = LspDocumentSymbolsWidget::new(
                 symbols,
-                self.lsp_symbols_selected,
-                self.lsp_symbols_scroll,
+                self.lsp.document_symbols.selected(),
+                self.lsp.document_symbols.scroll(),
             );
             widget.render(panel_area, frame.buffer_mut());
         }
 
         // Workspace symbols panel
-        if let Some(ref symbols) = self.lsp_workspace_symbols {
+        if let Some(symbols) = self.lsp.workspace_symbols.opened() {
             use crate::ui::lsp_symbols::LspWorkspaceSymbolsWidget;
             use ratatui::widgets::Widget as _;
             let panel_area = ratatui::layout::Rect::new(
@@ -330,18 +334,18 @@ impl App {
             );
             let widget = LspWorkspaceSymbolsWidget::new(
                 symbols,
-                self.lsp_workspace_selected,
+                self.lsp.workspace_symbols.selected(),
                 0,
-                &self.lsp_workspace_query,
+                &self.lsp.workspace_query,
             );
             widget.render(panel_area, frame.buffer_mut());
         }
 
         // Diagnostics panel (bottom quarter of screen)
-        if self.lsp_diagnostics_panel_visible {
+        if self.lsp.diagnostics_panel.is_open() {
             use crate::ui::lsp_diagnostics::LspDiagnosticsWidget;
             use ratatui::widgets::Widget as _;
-            let all_diags = self.diagnostic_store.all();
+            let all_diags = self.lsp.diagnostics.all();
             let panel_area = ratatui::layout::Rect::new(
                 0,
                 screen.height * 3 / 4,
@@ -350,14 +354,14 @@ impl App {
             );
             let widget = LspDiagnosticsWidget::new(
                 &all_diags,
-                self.lsp_diagnostics_selected,
-                self.lsp_diagnostics_scroll,
+                self.lsp.diagnostics_panel.selected(),
+                self.lsp.diagnostics_panel.scroll(),
             );
             widget.render(panel_area, frame.buffer_mut());
         }
 
         // Rename input popup
-        if let Some(ref rename_text) = self.lsp_rename_input {
+        if let Some(rename_text) = self.lsp.rename.as_ref().map(|r| &r.input) {
             use ratatui::widgets::{Block, Borders, Clear, Paragraph, Widget as _};
             let width = 40u16.min(screen.width);
             let height = 3u16;
@@ -527,6 +531,15 @@ impl App {
         ];
 
         frame.render_widget(Paragraph::new(body).block(block), area);
+    }
+
+    /// Renders the Kubernetes screens over the terminal pane.
+    fn render_k8s_manager(&self, frame: &mut ratatui::Frame, area: ratatui::layout::Rect) {
+        let Some(manager) = self.k8s_manager() else {
+            return;
+        };
+        let focused = self.layout.focused() == FocusedPane::Terminal;
+        frame.render_widget(K8sManagerWidget::new(manager).focused(focused), area);
     }
 
     /// Renders the health dashboard in the terminal pane area.
@@ -746,7 +759,7 @@ impl App {
             frame.render_widget(tab_bar, editor_chunks[0]);
 
             // Split editor area for debug panel if active
-            let show_debug_panel = self.debug_panel_visible && self.debug_session.is_some();
+            let show_debug_panel = self.debug.is_panel_visible() && self.debug.session().is_some();
             let bp_lines = self.current_file_breakpoints();
 
             if show_debug_panel {
@@ -760,12 +773,12 @@ impl App {
                     .focused(is_focused)
                     .theme(&self.config.theme_manager.current().editor)
                     .suggestion(self.completion_suggestion())
-                    .git_gutter(&self.git_gutter)
+                    .git_gutter(self.git.gutter())
                     .breakpoints(&bp_lines);
                 frame.render_widget(widget, split[0]);
 
                 // Render debug panel
-                if let Some(ref session) = self.debug_session {
+                if let Some(session) = self.debug.session() {
                     let debug_widget = DebugPanelWidget::new(session);
                     frame.render_widget(debug_widget, split[1]);
                 }
@@ -775,7 +788,7 @@ impl App {
                     .focused(is_focused)
                     .theme(&self.config.theme_manager.current().editor)
                     .suggestion(self.completion_suggestion())
-                    .git_gutter(&self.git_gutter)
+                    .git_gutter(self.git.gutter())
                     .breakpoints(&bp_lines);
                 frame.render_widget(widget, editor_chunks[1]);
             }

@@ -40,6 +40,10 @@ pub struct CliOptions {
     pub no_update: bool,
     /// Enable the F1/F2/F3 test keys.
     pub test_keys: bool,
+    /// Report configuration problems and exit.
+    pub check_config: bool,
+    /// Write the settings as `~/.ratterm/config.toml` and exit.
+    pub migrate_config: bool,
     /// File to open.
     pub file: Option<String>,
 }
@@ -112,6 +116,8 @@ pub fn parse(args: &[String]) -> Result<CliOptions, String> {
             }
             "--no-update" => options.no_update = true,
             "--test-keys" => options.test_keys = true,
+            "--check-config" => options.check_config = true,
+            "--migrate-config" => options.migrate_config = true,
             other if other.starts_with('-') => {
                 // Unknown flags are left alone: the entry point handles
                 // --version, --update and friends before this runs.
@@ -189,6 +195,12 @@ Automation options:
   --fixtures <dir>        Load hosts, Docker items and metrics from a fixture
                           directory instead of the real configuration, so a
                           run never touches real machines
+
+Configuration:
+  --check-config          Report every problem in the settings file and exit
+                          non-zero if there are any
+  --migrate-config        Write the settings as ~/.ratterm/config.toml and
+                          exit. The original file is left alone
 "
 }
 
