@@ -36,7 +36,7 @@ so `drop` blocked. One run measured 198.76 seconds inside `drop(pty)`.
 
 | Question | Baseline | Now |
 |---|---|---|
-| Does the test suite pass? | It did not finish. `test_pty_large_output` spent 198.76s inside `drop(pty)` and the run hung. | Full suite green. |
+| Does the test suite pass? | It did not finish. `test_pty_large_output` spent 198.76s inside `drop(pty)` and the run hung. | Full suite green. It was green on Windows first and nowhere else; see *It only built on Windows*. |
 | Do unsaved edits survive a tab switch? | No. Switching tabs re-read the file from disk, discarding the buffer and its undo history. | Yes. Each tab owns its document; switching swaps state. |
 | Where are SSH passwords kept? | Base64 in `~/.ratterm/ssh_hosts.toml`, under a "derivation" that ignored both the salt and the password. | OS keychain by default; an Argon2id + XChaCha20-Poly1305 file where there is no keychain; plaintext only if asked for. |
 | Can another local process drive the editor and the shell? | Yes. The IPC endpoint had no authentication at all. | No. A per-session token, `0600`, required on the first message. |
@@ -48,7 +48,7 @@ so `drop` blocked. One run measured 198.76 seconds inside `drop(pty)`.
 | Are containers on several hosts visible at once? | No, one host at a time through the `docker` CLI's text output. | The Engine API through bollard, several hosts at once, one fleet view. |
 | Is there any Kubernetes support? | None. | Contexts, five resource kinds, scale, rollout restart, delete, pod logs, port forward. |
 | Is a misspelled setting reported? | No. `metrics_hisory = true` left history off and said nothing. | `--check-config` reports it with a line number and a suggestion; start-up says so in the status bar. |
-| Does CI cover Linux, Windows and macOS? | Partly. | Nine jobs across ubuntu, windows, macos and arm64, including the scenario suite and a headless smoke test on each. |
+| Does CI cover Linux, Windows and macOS? | Partly. | Nine jobs across ubuntu, windows, macos and arm64, including the scenario suite and a headless smoke test on each. Ten of them failed on the first push; see *It only built on Windows*. |
 
 ## Counted
 
@@ -142,6 +142,94 @@ behind an `#[ignore]` with a misleading reason.
 **`.claude/CLAUDE.md` still says edition 2021 and MSRV 1.75**; the manifest says
 2024 and 1.89. That file is gitignored, so it could not be fixed on this
 branch — it needs a one-line edit in the working copy.
+
+## It only built on Windows
+
+Everything above was written and gated on Windows. The first CI run of this
+branch — run `33969937995` on `0febb8d` — failed ten of its eighteen jobs:
+Clippy, Test on `ubuntu-latest`, `ubuntu-24.04-arm` and `macos-latest`,
+Scenarios and Headless smoke on `ubuntu-latest` and `macos-latest`,
+Documentation, and the MSRV check. Every one of them failed at its first
+compile step. Format, Security Audit, the three install-script jobs and all
+three Windows jobs passed.
+
+One line did all of it. `src/ssh/collector.rs` had
+
+```rust
+#[cfg(windows)]
+#[cfg(windows)]
+use tracing::{debug, error, info, warn};
+```
+
+while `info!`, `debug!`, `warn!` and `error!` are called seventeen times in that
+file under no gate at all. Two `#[cfg]` attributes on one item mean *both* must
+hold: on Windows both are true and the import survives, and everywhere else it
+is removed and the file does not compile. A Windows-only gate cannot see that,
+and no Linux, macOS or ARM job had compiled this branch before that push — the
+last run that did was the baseline on `dev`.
+
+Two further failures were behind it, invisible while the crate would not build:
+
+**Clippy's `collapsible_if`, in two Unix-only functions.** `UnixServer::new`
+and `NetworkScanner::detect_unix_interfaces` each nested two `if`s that clippy
+wants written as one `let` chain. The matching Windows function had already
+been collapsed. The only job that runs clippy runs on Linux, and on Linux the
+crate did not compile, so nothing had ever linted the Unix arm.
+
+**Sixteen rustdoc errors.** Fourteen public doc comments linked to private
+items, one named `choose_transport` without saying it lives in
+`docker::transport`, one linked to an enum variant's field, and two repeated a
+path their label already resolved. `RUSTDOCFLAGS: -D warnings` makes each of
+them an error. They had been there since the modules were written; the
+Documentation job never got past the compile step to report them.
+
+### What now fails instead
+
+`tests/portability_tests.rs` reads the sources and the workflow, because a unit
+test cannot catch a compile error for a platform the host is not:
+
+- stacked `#[cfg]` attributes are a test failure, not a build that happens to
+  work on one target;
+- a platform-gated `use tracing::` import is a test failure, since the macros
+  are called unconditionally throughout the crate;
+- the four runners in the matrix, the six commands CI runs, and the three
+  places warnings are made fatal all have to still be there.
+
+`NetworkScanner`'s two parsers were split from the commands that feed them and
+are no longer `#[cfg]`-gated; the platform picks between them with `cfg!`, so
+the Windows parser is type-checked, linted and tested on Linux too. Ten tests
+cover both against real `ip addr`, `ifconfig` and `ipconfig` output, and five
+cover the Unix socket server that had one test before — the missing parent
+directory, the `0600` mode, a stale socket file and the file's removal on drop.
+
+### Verified where
+
+Everything below ran on `cthulhu-computer`, x86_64 Linux, with the commands and
+the `RUSTFLAGS: -D warnings` the workflow uses.
+
+| Command | Result |
+|---|---|
+| `cargo fmt --all -- --check` | exit 0 |
+| `cargo clippy --all-targets --all-features -- -D warnings` | exit 0, no diagnostics, 10.9s |
+| `cargo test --all-features --verbose` | 2908 passed, 0 failed, 7 ignored |
+| `cargo test --doc` | 3 passed, 0 failed, 1 ignored |
+| `cargo build --release` | exit 0, 4m 54s |
+| `./target/release/rat --verify` | `ratterm v0.2.2 verify-ok` |
+| `RUSTDOCFLAGS=-D warnings cargo doc --no-deps --all-features` | exit 0 |
+| `cargo +1.89 check --all-features` | exit 0 |
+| `rat --scenario-dir tests/scenarios --fixtures tests/fixtures/fleet` | 12 scenarios, 0 failed |
+| the headless control-API probe from the workflow | authenticated, 120x40 frame, fleet on screen, exit 0 |
+
+The seven ignored tests are the pre-existing ones that need a live SSH host or
+a released binary; the eleven `expectrl_*` files are `#![cfg(windows)]` and are
+not built here. Neither was changed.
+
+macOS and `ubuntu-24.04-arm` cannot be checked from here: no macOS SDK and no
+aarch64 cross toolchain. The macOS-only and arch-specific code — `libproc` in
+`terminal/pty.rs`, the shell tables in `config/shell.rs`, the `open -a Docker`
+call in `docker/ops.rs` — is unchanged since the baseline commit, whose CI run
+compiled and tested both targets. Everything this repair touches is either
+platform-independent or `cfg(unix)`, which the Linux runs above cover.
 
 ## What the evidence does not show
 
