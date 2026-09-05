@@ -10,8 +10,6 @@ use std::sync::mpsc;
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-#[cfg(windows)]
-#[cfg(windows)]
 use tracing::{debug, error, info, warn};
 
 use super::host::{SSHCredentials, SSHHost, SSHHostList};
