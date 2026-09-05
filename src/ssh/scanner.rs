@@ -188,12 +188,12 @@ impl NetworkScanner {
 
                 // Collect results
                 for (ip, handle) in chunk.iter().zip(handles) {
-                    if let Ok(is_open) = handle.join() {
-                        if is_open {
-                            let ip_str = ip.to_string();
-                            found_hosts.push(ip_str.clone());
-                            let _ = tx.send(ScanResult::HostFound(ip_str, 22));
-                        }
+                    if let Ok(is_open) = handle.join()
+                        && is_open
+                    {
+                        let ip_str = ip.to_string();
+                        found_hosts.push(ip_str.clone());
+                        let _ = tx.send(ScanResult::HostFound(ip_str, 22));
                     }
                     progress.fetch_add(1, Ordering::Relaxed);
                 }
@@ -385,33 +385,33 @@ impl NetworkScanner {
             }
 
             // Look for IPv4 addresses
-            if line.contains("IPv4") || line.contains("IP Address") {
-                if let Some(ip_str) = line.split(':').nth(1) {
-                    let ip_str = ip_str.trim();
-                    if let Ok(ip) = ip_str.parse::<Ipv4Addr>() {
-                        // Skip loopback and link-local
-                        if !ip.is_loopback() && !ip.is_link_local() {
-                            let octets = ip.octets();
-                            let subnet = format!("{}.{}.{}.0/24", octets[0], octets[1], octets[2]);
+            if (line.contains("IPv4") || line.contains("IP Address"))
+                && let Some(ip_str) = line.split(':').nth(1)
+            {
+                let ip_str = ip_str.trim();
+                if let Ok(ip) = ip_str.parse::<Ipv4Addr>() {
+                    // Skip loopback and link-local
+                    if !ip.is_loopback() && !ip.is_link_local() {
+                        let octets = ip.octets();
+                        let subnet = format!("{}.{}.{}.0/24", octets[0], octets[1], octets[2]);
 
-                            // Don't add duplicates
-                            if !interfaces.iter().any(|i| i.subnet == subnet) {
-                                let name = if current_adapter.contains("Wi-Fi")
-                                    || current_adapter.contains("Wireless")
-                                {
-                                    format!("WiFi ({})", ip_str)
-                                } else if current_adapter.contains("Ethernet") {
-                                    format!("Ethernet ({})", ip_str)
-                                } else {
-                                    format!("{} ({})", current_adapter, ip_str)
-                                };
+                        // Don't add duplicates
+                        if !interfaces.iter().any(|i| i.subnet == subnet) {
+                            let name = if current_adapter.contains("Wi-Fi")
+                                || current_adapter.contains("Wireless")
+                            {
+                                format!("WiFi ({})", ip_str)
+                            } else if current_adapter.contains("Ethernet") {
+                                format!("Ethernet ({})", ip_str)
+                            } else {
+                                format!("{} ({})", current_adapter, ip_str)
+                            };
 
-                                interfaces.push(NetworkInterface {
-                                    name,
-                                    subnet,
-                                    is_primary: false,
-                                });
-                            }
+                            interfaces.push(NetworkInterface {
+                                name,
+                                subnet,
+                                is_primary: false,
+                            });
                         }
                     }
                 }

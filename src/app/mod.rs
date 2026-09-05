@@ -50,7 +50,7 @@ use crossterm::event::{self, Event};
 use ratatui::layout::Rect;
 use tracing::{debug, info, warn};
 
-use crate::api::{ApiHandler, ApiServer, MAX_REQUESTS_PER_FRAME, RequestReceiver};
+use crate::api::{ApiHandler, ApiServer, ApiServerConfig, MAX_REQUESTS_PER_FRAME, RequestReceiver};
 use crate::clipboard::Clipboard;
 use crate::completion::CompletionHandle;
 use crate::config::{Config, KeybindingMode};
@@ -340,6 +340,9 @@ pub struct AppOptions {
     pub without_api: bool,
     /// Load configuration from disk (`false` uses built-in defaults).
     pub load_user_config: bool,
+    /// Explicit control-API configuration; `None` mints a token and listens on
+    /// the platform default endpoint.
+    pub api_config: Option<ApiServerConfig>,
 }
 
 impl AppOptions {
@@ -350,6 +353,7 @@ impl AppOptions {
             without_terminals: false,
             without_api: false,
             load_user_config: true,
+            api_config: None,
         }
     }
 
@@ -361,7 +365,16 @@ impl AppOptions {
             without_terminals: true,
             without_api: true,
             load_user_config: false,
+            api_config: None,
         }
+    }
+
+    /// Sets an explicit control-API configuration.
+    #[must_use]
+    pub fn with_api(mut self, config: ApiServerConfig) -> Self {
+        self.without_api = false;
+        self.api_config = Some(config);
+        self
     }
 }
 
@@ -423,12 +436,25 @@ impl App {
             SplitLayout::new()
         };
 
+        let mut ssh_storage = SSHStorage::new();
+        if let Err(e) = ssh_storage.set_mode(config.ssh_storage_mode) {
+            warn!("Falling back to the default secret backend: {}", e);
+        }
+
         let (api_server, api_request_rx) = if options.without_api {
             (None, None)
         } else {
-            match ApiServer::start(None) {
+            // The endpoint is authenticated by default: it can drive the editor
+            // and inject keystrokes into the shell, so an open one is a local
+            // privilege escalation.
+            let api_config = match options.api_config.clone() {
+                Some(config) => Ok(config),
+                None => ApiServerConfig::secure_default(),
+            };
+
+            match api_config.and_then(ApiServer::start_with) {
                 Ok((server, rx)) => {
-                    info!("API server started");
+                    info!("API server started on {}", server.endpoint());
                     (Some(server), Some(rx))
                 }
                 Err(e) => {
@@ -467,7 +493,7 @@ impl App {
             extension_approval_prompt: None,
             last_screen_size: (80, 24),
             ssh_manager: None,
-            ssh_storage: SSHStorage::new(),
+            ssh_storage,
             ssh_hosts: SSHHostList::new(),
             ssh_scanner: None,
             status_checker: None,
@@ -791,23 +817,23 @@ impl App {
             .layout
             .calculate(ratatui::layout::Rect::new(0, 0, cols, rows));
 
-        if let Some(ref mut terminals) = self.terminals {
-            if areas.has_terminal() {
-                let term_cols = areas.terminal.width.saturating_sub(2);
-                let term_rows = areas.terminal.height.saturating_sub(3);
-                tracing::debug!(
-                    "RESIZE_LAYOUT: screen={}x{}, terminal_area=({}, {}, {}x{}), resizing_grid_to={}x{}",
-                    cols,
-                    rows,
-                    areas.terminal.x,
-                    areas.terminal.y,
-                    areas.terminal.width,
-                    areas.terminal.height,
-                    term_cols,
-                    term_rows
-                );
-                let _ = terminals.resize(term_cols, term_rows);
-            }
+        if let Some(ref mut terminals) = self.terminals
+            && areas.has_terminal()
+        {
+            let term_cols = areas.terminal.width.saturating_sub(2);
+            let term_rows = areas.terminal.height.saturating_sub(3);
+            tracing::debug!(
+                "RESIZE_LAYOUT: screen={}x{}, terminal_area=({}, {}, {}x{}), resizing_grid_to={}x{}",
+                cols,
+                rows,
+                areas.terminal.x,
+                areas.terminal.y,
+                areas.terminal.width,
+                areas.terminal.height,
+                term_cols,
+                term_rows
+            );
+            let _ = terminals.resize(term_cols, term_rows);
         }
 
         if areas.has_editor() {
@@ -833,16 +859,17 @@ impl App {
         self.poll_docker_log_stream();
         self.update_completion_suggestion();
 
-        if !self.file_browser.is_visible() && !self.is_health_dashboard_open() {
-            if let Some(ref mut terminals) = self.terminals {
-                if let Err(e) = terminals.process_all() {
-                    self.last_error = Some(format!("Terminal error: {}", e));
-                }
-                // Check for clipboard content from OSC 52 (e.g., from SSH/vim/tmux)
-                if let Some(content) = terminals.take_pending_clipboard() {
-                    self.copy_to_clipboard(&content);
-                    self.set_status("Copied from remote");
-                }
+        if !self.file_browser.is_visible()
+            && !self.is_health_dashboard_open()
+            && let Some(ref mut terminals) = self.terminals
+        {
+            if let Err(e) = terminals.process_all() {
+                self.last_error = Some(format!("Terminal error: {}", e));
+            }
+            // Check for clipboard content from OSC 52 (e.g., from SSH/vim/tmux)
+            if let Some(content) = terminals.take_pending_clipboard() {
+                self.copy_to_clipboard(&content);
+                self.set_status("Copied from remote");
             }
         }
 

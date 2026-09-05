@@ -2,7 +2,9 @@
 name = "ratterm"
 version = "0.2.2"
 edition = "2024"
-rust-version = "1.85"
+# Raised from 1.85: the OS-keychain backend (`keyring` 4) requires 1.88 and the
+# Kubernetes client (`kube` 4) requires 1.89.
+rust-version = "1.89"
 description = "A split-terminal TUI with PTY terminal and code editor"
 license = "GPL-3.0-or-later"
 authors = ["Hastur-Dev"]
@@ -81,6 +83,12 @@ unicode-segmentation = "1.12"
 
 # SSH authentication testing
 ssh2 = "0.9"
+keyring = "4.2"
+argon2 = "0.6"
+chacha20poly1305 = "0.11"
+getrandom = "0.3"
+base64 = "0.23"
+zeroize = { version = "1.9", features = ["derive"] }
 
 [dev-dependencies]
 proptest = "1.6"

@@ -245,10 +245,10 @@ impl LspClient {
                         if line == "\r\n" || line == "\n" {
                             break;
                         }
-                        if line.to_lowercase().starts_with("content-length:") {
-                            if let Some(len_str) = line.split(':').nth(1) {
-                                content_length = len_str.trim().parse().unwrap_or(0);
-                            }
+                        if line.to_lowercase().starts_with("content-length:")
+                            && let Some(len_str) = line.split(':').nth(1)
+                        {
+                            content_length = len_str.trim().parse().unwrap_or(0);
                         }
                     }
                     Err(_) => return,

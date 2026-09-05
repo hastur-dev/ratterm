@@ -109,11 +109,11 @@ impl LspManager {
 
     /// Returns a client for the given language, starting if needed.
     pub async fn get_client(&mut self, language_id: &str) -> Option<&mut LspClient> {
-        if !self.clients.contains_key(language_id) {
-            if let Err(e) = self.start_server(language_id).await {
-                debug!("Could not start LSP server for {}: {}", language_id, e);
-                return None;
-            }
+        if !self.clients.contains_key(language_id)
+            && let Err(e) = self.start_server(language_id).await
+        {
+            debug!("Could not start LSP server for {}: {}", language_id, e);
+            return None;
         }
         self.clients.get_mut(language_id)
     }

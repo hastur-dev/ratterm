@@ -15,10 +15,10 @@ impl App {
         self.popup.set_kind(kind);
         self.popup.clear();
 
-        if matches!(kind, PopupKind::CreateFile) {
-            if let Some(ext) = self.file_browser.common_extension() {
-                self.popup.set_suggestion(Some(format!(".{}", ext)));
-            }
+        if matches!(kind, PopupKind::CreateFile)
+            && let Some(ext) = self.file_browser.common_extension()
+        {
+            self.popup.set_suggestion(Some(format!(".{}", ext)));
         }
 
         // Initialize command palette with all commands

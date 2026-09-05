@@ -72,34 +72,34 @@ impl App {
                 return;
             }
             (KeyModifiers::SHIFT, KeyCode::Left) => {
-                if let Some(ref mut terminals) = self.terminals {
-                    if let Some(terminal) = terminals.active_terminal_mut() {
-                        terminal.select_left();
-                    }
+                if let Some(ref mut terminals) = self.terminals
+                    && let Some(terminal) = terminals.active_terminal_mut()
+                {
+                    terminal.select_left();
                 }
                 return;
             }
             (KeyModifiers::SHIFT, KeyCode::Right) => {
-                if let Some(ref mut terminals) = self.terminals {
-                    if let Some(terminal) = terminals.active_terminal_mut() {
-                        terminal.select_right();
-                    }
+                if let Some(ref mut terminals) = self.terminals
+                    && let Some(terminal) = terminals.active_terminal_mut()
+                {
+                    terminal.select_right();
                 }
                 return;
             }
             (KeyModifiers::SHIFT, KeyCode::Up) => {
-                if let Some(ref mut terminals) = self.terminals {
-                    if let Some(terminal) = terminals.active_terminal_mut() {
-                        terminal.select_up();
-                    }
+                if let Some(ref mut terminals) = self.terminals
+                    && let Some(terminal) = terminals.active_terminal_mut()
+                {
+                    terminal.select_up();
                 }
                 return;
             }
             (KeyModifiers::SHIFT, KeyCode::Down) => {
-                if let Some(ref mut terminals) = self.terminals {
-                    if let Some(terminal) = terminals.active_terminal_mut() {
-                        terminal.select_down();
-                    }
+                if let Some(ref mut terminals) = self.terminals
+                    && let Some(terminal) = terminals.active_terminal_mut()
+                {
+                    terminal.select_down();
                 }
                 return;
             }
@@ -197,10 +197,10 @@ impl App {
             self.copy_to_clipboard(&text);
             if from_selection {
                 self.set_status("Copied selection");
-                if let Some(ref mut terminals) = self.terminals {
-                    if let Some(terminal) = terminals.active_terminal_mut() {
-                        terminal.clear_selection();
-                    }
+                if let Some(ref mut terminals) = self.terminals
+                    && let Some(terminal) = terminals.active_terminal_mut()
+                {
+                    terminal.clear_selection();
                 }
             } else {
                 self.set_status("Copied line");
@@ -210,13 +210,12 @@ impl App {
 
     /// Pastes clipboard content to terminal.
     pub(super) fn paste_to_terminal(&mut self) {
-        if let Some(text) = self.paste_from_clipboard() {
-            if let Some(ref mut terminals) = self.terminals {
-                if let Some(terminal) = terminals.active_terminal_mut() {
-                    let _ = terminal.write(text.as_bytes());
-                    self.set_status("Pasted");
-                }
-            }
+        if let Some(text) = self.paste_from_clipboard()
+            && let Some(ref mut terminals) = self.terminals
+            && let Some(terminal) = terminals.active_terminal_mut()
+        {
+            let _ = terminal.write(text.as_bytes());
+            self.set_status("Pasted");
         }
     }
 

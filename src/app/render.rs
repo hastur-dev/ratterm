@@ -108,18 +108,18 @@ impl App {
                     let mut boundary_info = Vec::new();
                     for x_offset in -3i16..6 {
                         let x = (boundary_x as i16 + x_offset) as u16;
-                        if x < area.width {
-                            if let Some(cell) = buf.cell((x, y)) {
-                                let symbol = cell.symbol();
-                                let first_char = symbol.chars().next().unwrap_or(' ');
-                                let char_code = first_char as u32;
-                                let display = if first_char.is_control() || char_code > 0x7F {
-                                    format!("x{:02}U+{:04X}", x, char_code)
-                                } else {
-                                    format!("x{}='{}'", x, first_char)
-                                };
-                                boundary_info.push(display);
-                            }
+                        if x < area.width
+                            && let Some(cell) = buf.cell((x, y))
+                        {
+                            let symbol = cell.symbol();
+                            let first_char = symbol.chars().next().unwrap_or(' ');
+                            let char_code = first_char as u32;
+                            let display = if first_char.is_control() || char_code > 0x7F {
+                                format!("x{:02}U+{:04X}", x, char_code)
+                            } else {
+                                format!("x{}='{}'", x, first_char)
+                            };
+                            boundary_info.push(display);
                         }
                     }
                     debug!(
@@ -163,18 +163,18 @@ impl App {
                     let mut boundary_info = Vec::new();
                     for x_offset in -3i16..6 {
                         let x = (boundary_x as i16 + x_offset) as u16;
-                        if x < area.width {
-                            if let Some(cell) = buf.cell((x, y)) {
-                                let symbol = cell.symbol();
-                                let first_char = symbol.chars().next().unwrap_or(' ');
-                                let char_code = first_char as u32;
-                                let display = if first_char.is_control() || char_code > 0x7F {
-                                    format!("x{:02}U+{:04X}", x, char_code)
-                                } else {
-                                    format!("x{}='{}'", x, first_char)
-                                };
-                                boundary_info.push(display);
-                            }
+                        if x < area.width
+                            && let Some(cell) = buf.cell((x, y))
+                        {
+                            let symbol = cell.symbol();
+                            let first_char = symbol.chars().next().unwrap_or(' ');
+                            let char_code = first_char as u32;
+                            let display = if first_char.is_control() || char_code > 0x7F {
+                                format!("x{:02}U+{:04X}", x, char_code)
+                            } else {
+                                format!("x{}='{}'", x, first_char)
+                            };
+                            boundary_info.push(display);
                         }
                     }
                     debug!("AFTER_EDITOR y={}: | {}", y, boundary_info.join(" "));
@@ -199,14 +199,14 @@ impl App {
         self.render_lsp_overlays(frame, area);
 
         // Render hotkey overlay on top of everything
-        if let Some(ref overlay) = self.hotkey_overlay {
-            if overlay.is_visible() {
-                use crate::ui::hotkey_overlay::HotkeyOverlayWidget;
-                use ratatui::widgets::Widget as _;
-                let pos = self.config.window_position("hotkey_overlay");
-                let widget = HotkeyOverlayWidget::new(overlay).position(pos);
-                widget.render(area, frame.buffer_mut());
-            }
+        if let Some(ref overlay) = self.hotkey_overlay
+            && overlay.is_visible()
+        {
+            use crate::ui::hotkey_overlay::HotkeyOverlayWidget;
+            use ratatui::widgets::Widget as _;
+            let pos = self.config.window_position("hotkey_overlay");
+            let widget = HotkeyOverlayWidget::new(overlay).position(pos);
+            widget.render(area, frame.buffer_mut());
         }
 
         // On first 5 frames, log FINAL buffer state AFTER all rendering
@@ -628,18 +628,18 @@ impl App {
                     let mut boundary_info = Vec::new();
                     for x_offset in -3i16..6 {
                         let x = (boundary_x as i16 + x_offset) as u16;
-                        if x < areas.editor.x + areas.editor.width + 3 {
-                            if let Some(cell) = buf.cell((x, y)) {
-                                let symbol = cell.symbol();
-                                let first_char = symbol.chars().next().unwrap_or(' ');
-                                let char_code = first_char as u32;
-                                let display = if first_char.is_control() || char_code > 0x7F {
-                                    format!("x{:02}U+{:04X}", x, char_code)
-                                } else {
-                                    format!("x{}='{}'", x, first_char)
-                                };
-                                boundary_info.push(display);
-                            }
+                        if x < areas.editor.x + areas.editor.width + 3
+                            && let Some(cell) = buf.cell((x, y))
+                        {
+                            let symbol = cell.symbol();
+                            let first_char = symbol.chars().next().unwrap_or(' ');
+                            let char_code = first_char as u32;
+                            let display = if first_char.is_control() || char_code > 0x7F {
+                                format!("x{:02}U+{:04X}", x, char_code)
+                            } else {
+                                format!("x{}='{}'", x, first_char)
+                            };
+                            boundary_info.push(display);
                         }
                     }
                     debug!("AFTER_CLEAR y={}: | {}", y, boundary_info.join(" "));

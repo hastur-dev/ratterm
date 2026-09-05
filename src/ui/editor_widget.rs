@@ -234,20 +234,20 @@ impl<'a> EditorWidget<'a> {
         let visible_start = view.scroll_top();
         for offset in 0..3 {
             let line_idx = visible_start + offset;
-            if line_idx < buffer.len_lines() {
-                if let Some(line) = buffer.line(line_idx) {
-                    let line_len = line.len();
-                    let preview: String = line
-                        .chars()
-                        .take(30)
-                        .map(|c| if c.is_control() { '?' } else { c })
-                        .collect();
-                    let has_special = line.chars().any(|c| c as u32 > 127);
-                    debug!(
-                        "VISIBLE_LINE {}: len={}, has_special={}, preview={:?}",
-                        line_idx, line_len, has_special, preview
-                    );
-                }
+            if line_idx < buffer.len_lines()
+                && let Some(line) = buffer.line(line_idx)
+            {
+                let line_len = line.len();
+                let preview: String = line
+                    .chars()
+                    .take(30)
+                    .map(|c| if c.is_control() { '?' } else { c })
+                    .collect();
+                let has_special = line.chars().any(|c| c as u32 > 127);
+                debug!(
+                    "VISIBLE_LINE {}: len={}, has_special={}, preview={:?}",
+                    line_idx, line_len, has_special, preview
+                );
             }
         }
 
@@ -339,30 +339,30 @@ impl<'a> EditorWidget<'a> {
                     // Render tab as spaces
                     for i in 0..char_width {
                         let x = text_x + (screen_col + i) as u16;
-                        if x < text_x + text_width {
-                            if let Some(cell) = buf.cell_mut((x, y)) {
-                                cell.set_char(' ');
-                                cell.set_style(style);
-                            }
+                        if x < text_x + text_width
+                            && let Some(cell) = buf.cell_mut((x, y))
+                        {
+                            cell.set_char(' ');
+                            cell.set_style(style);
                         }
                     }
                 } else if c != '\n' && c != '\r' {
                     let x = text_x + screen_col as u16;
-                    if x < text_x + text_width {
-                        if let Some(cell) = buf.cell_mut((x, y)) {
-                            cell.set_char(c);
-                            cell.set_style(style);
-                        }
+                    if x < text_x + text_width
+                        && let Some(cell) = buf.cell_mut((x, y))
+                    {
+                        cell.set_char(c);
+                        cell.set_style(style);
                     }
                     // For wide characters, fill the second cell with a space
                     if char_width > 1 {
                         for i in 1..char_width {
                             let x2 = text_x + (screen_col + i) as u16;
-                            if x2 < text_x + text_width {
-                                if let Some(cell) = buf.cell_mut((x2, y)) {
-                                    cell.set_char(' ');
-                                    cell.set_style(style);
-                                }
+                            if x2 < text_x + text_width
+                                && let Some(cell) = buf.cell_mut((x2, y))
+                            {
+                                cell.set_char(' ');
+                                cell.set_style(style);
                             }
                         }
                     }
@@ -404,17 +404,18 @@ impl<'a> EditorWidget<'a> {
             let x = area.x + screen_x;
             let y = area.y + screen_y;
 
-            if x < area.x + area.width && y < area.y + area.height {
-                if let Some(cell) = buf.cell_mut((x, y)) {
-                    let current_style = cell.style();
-                    let cursor_style = match self.editor.mode() {
-                        EditorMode::Insert => current_style.add_modifier(Modifier::REVERSED),
-                        EditorMode::Normal => current_style.add_modifier(Modifier::REVERSED),
-                        EditorMode::Visual => current_style.bg(Color::Magenta),
-                        EditorMode::Command => current_style.add_modifier(Modifier::UNDERLINED),
-                    };
-                    cell.set_style(cursor_style);
-                }
+            if x < area.x + area.width
+                && y < area.y + area.height
+                && let Some(cell) = buf.cell_mut((x, y))
+            {
+                let current_style = cell.style();
+                let cursor_style = match self.editor.mode() {
+                    EditorMode::Insert => current_style.add_modifier(Modifier::REVERSED),
+                    EditorMode::Normal => current_style.add_modifier(Modifier::REVERSED),
+                    EditorMode::Visual => current_style.bg(Color::Magenta),
+                    EditorMode::Command => current_style.add_modifier(Modifier::UNDERLINED),
+                };
+                cell.set_style(cursor_style);
             }
         }
     }
@@ -533,24 +534,25 @@ impl Widget for EditorWidget<'_> {
         self.render_content(inner_area, buf);
 
         // Render ghost text (completion suggestion) if present
-        if let Some(suggestion) = self.suggestion {
-            if !suggestion.is_empty() && self.focused {
-                let cursor_pos = self.editor.cursor_position();
-                let line_content = self
-                    .editor
-                    .buffer()
-                    .line(cursor_pos.line)
-                    .unwrap_or_default();
+        if let Some(suggestion) = self.suggestion
+            && !suggestion.is_empty()
+            && self.focused
+        {
+            let cursor_pos = self.editor.cursor_position();
+            let line_content = self
+                .editor
+                .buffer()
+                .line(cursor_pos.line)
+                .unwrap_or_default();
 
-                let ghost_widget = GhostTextWidget::new(
-                    Some(suggestion),
-                    cursor_pos.line,
-                    cursor_pos.col,
-                    self.editor.view(),
-                    &line_content,
-                );
-                ghost_widget.render(inner_area, buf);
-            }
+            let ghost_widget = GhostTextWidget::new(
+                Some(suggestion),
+                cursor_pos.line,
+                cursor_pos.col,
+                self.editor.view(),
+                &line_content,
+            );
+            ghost_widget.render(inner_area, buf);
         }
 
         if self.focused {

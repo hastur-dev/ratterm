@@ -463,16 +463,15 @@ fn collect_with_plink(host: &HostCollectionInfo, password: &str) -> DeviceMetric
         host.hostname, result.status, result.error
     );
 
-    if result.status == MetricStatus::Error {
-        if let Some(ref err) = result.error {
-            error!("plink failed for {}: {}", host.hostname, err);
-            if err.contains("host key") || err.contains("refused") || err.contains("Access denied")
-            {
-                warn!(
-                    "plink auth failed for {} - check credentials or use key-based auth",
-                    host.hostname
-                );
-            }
+    if result.status == MetricStatus::Error
+        && let Some(ref err) = result.error
+    {
+        error!("plink failed for {}: {}", host.hostname, err);
+        if err.contains("host key") || err.contains("refused") || err.contains("Access denied") {
+            warn!(
+                "plink auth failed for {} - check credentials or use key-based auth",
+                host.hostname
+            );
         }
     }
 
@@ -838,14 +837,14 @@ fn parse_cpu_section(data: &str, metrics: &mut DeviceMetrics) {
     }
 
     // Second line: nproc output (number of cores)
-    if let Some(nproc_line) = lines.get(1) {
-        if let Ok(cores) = nproc_line.trim().parse::<u16>() {
-            metrics.cpu_cores = cores;
+    if let Some(nproc_line) = lines.get(1)
+        && let Ok(cores) = nproc_line.trim().parse::<u16>()
+    {
+        metrics.cpu_cores = cores;
 
-            // Recalculate CPU usage with correct core count
-            let usage = (metrics.load_avg.0 / cores as f32) * 100.0;
-            metrics.cpu_usage_percent = usage.clamp(0.0, 100.0);
-        }
+        // Recalculate CPU usage with correct core count
+        let usage = (metrics.load_avg.0 / cores as f32) * 100.0;
+        metrics.cpu_usage_percent = usage.clamp(0.0, 100.0);
     }
 
     assert!(

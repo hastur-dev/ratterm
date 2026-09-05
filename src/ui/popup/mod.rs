@@ -436,10 +436,10 @@ impl Popup {
     pub fn final_input(&self) -> String {
         match self.kind {
             PopupKind::CreateFile | PopupKind::CreateFolder => {
-                if let Some(ref suggestion) = self.suggestion {
-                    if !self.input.contains('.') {
-                        return format!("{}{}", self.input, suggestion);
-                    }
+                if let Some(ref suggestion) = self.suggestion
+                    && !self.input.contains('.')
+                {
+                    return format!("{}{}", self.input, suggestion);
                 }
                 self.input.clone()
             }
@@ -561,10 +561,11 @@ impl Widget for PopupWidget<'_> {
 
         // Render cursor
         let cursor_x = chunks[0].x + prompt.len() as u16 + self.popup.cursor as u16;
-        if cursor_x < chunks[0].right() && chunks[0].y < buf.area.bottom() {
-            if let Some(cell) = buf.cell_mut((cursor_x, chunks[0].y)) {
-                cell.set_style(Style::default().bg(Color::White).fg(Color::Black));
-            }
+        if cursor_x < chunks[0].right()
+            && chunks[0].y < buf.area.bottom()
+            && let Some(cell) = buf.cell_mut((cursor_x, chunks[0].y))
+        {
+            cell.set_style(Style::default().bg(Color::White).fg(Color::Black));
         }
 
         // Render error if any

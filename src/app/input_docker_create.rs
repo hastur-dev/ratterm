@@ -352,10 +352,10 @@ impl App {
 
     /// Handles key events in creation error mode.
     fn handle_creation_error_key(&mut self, key: KeyEvent) {
-        if let (KeyModifiers::NONE, KeyCode::Esc | KeyCode::Enter) = (key.modifiers, key.code) {
-            if let Some(ref mut manager) = self.docker_manager {
-                manager.dismiss_creation_error();
-            }
+        if let (KeyModifiers::NONE, KeyCode::Esc | KeyCode::Enter) = (key.modifiers, key.code)
+            && let Some(ref mut manager) = self.docker_manager
+        {
+            manager.dismiss_creation_error();
         }
     }
 

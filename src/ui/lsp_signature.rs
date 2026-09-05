@@ -105,26 +105,27 @@ fn build_signature_spans<'a>(
     };
 
     // Try offset-based highlighting first
-    if let (Some(start), Some(end)) = (param.label_start, param.label_end) {
-        if start < sig.label.len() && end <= sig.label.len() {
-            return vec![
-                Span::styled(&sig.label[..start], normal_style),
-                Span::styled(&sig.label[start..end], highlight_style),
-                Span::styled(&sig.label[end..], normal_style),
-            ];
-        }
+    if let (Some(start), Some(end)) = (param.label_start, param.label_end)
+        && start < sig.label.len()
+        && end <= sig.label.len()
+    {
+        return vec![
+            Span::styled(&sig.label[..start], normal_style),
+            Span::styled(&sig.label[start..end], highlight_style),
+            Span::styled(&sig.label[end..], normal_style),
+        ];
     }
 
     // Fall back to text-based highlighting
-    if !param.label.is_empty() {
-        if let Some(pos) = sig.label.find(&param.label) {
-            let end = pos + param.label.len();
-            return vec![
-                Span::styled(&sig.label[..pos], normal_style),
-                Span::styled(&sig.label[pos..end], highlight_style),
-                Span::styled(&sig.label[end..], normal_style),
-            ];
-        }
+    if !param.label.is_empty()
+        && let Some(pos) = sig.label.find(&param.label)
+    {
+        let end = pos + param.label.len();
+        return vec![
+            Span::styled(&sig.label[..pos], normal_style),
+            Span::styled(&sig.label[pos..end], highlight_style),
+            Span::styled(&sig.label[end..], normal_style),
+        ];
     }
 
     vec![Span::styled(sig.label.as_str(), normal_style)]

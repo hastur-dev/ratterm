@@ -37,19 +37,19 @@ impl App {
             MouseEventKind::ScrollUp
                 if self.is_point_in_area(event.column, event.row, terminal_area) =>
             {
-                if let Some(ref mut terminals) = self.terminals {
-                    if let Some(terminal) = terminals.active_terminal_mut() {
-                        terminal.scroll_view_up(3);
-                    }
+                if let Some(ref mut terminals) = self.terminals
+                    && let Some(terminal) = terminals.active_terminal_mut()
+                {
+                    terminal.scroll_view_up(3);
                 }
             }
             MouseEventKind::ScrollDown
                 if self.is_point_in_area(event.column, event.row, terminal_area) =>
             {
-                if let Some(ref mut terminals) = self.terminals {
-                    if let Some(terminal) = terminals.active_terminal_mut() {
-                        terminal.scroll_view_down(3);
-                    }
+                if let Some(ref mut terminals) = self.terminals
+                    && let Some(terminal) = terminals.active_terminal_mut()
+                {
+                    terminal.scroll_view_down(3);
                 }
             }
             _ => {}
@@ -75,28 +75,28 @@ impl App {
 
     /// Starts a terminal text selection at the given position.
     fn start_terminal_selection(&mut self, col: u16, row: u16) {
-        if let Some(ref mut terminals) = self.terminals {
-            if let Some(terminal) = terminals.active_terminal_mut() {
-                terminal.start_selection(col, row);
-            }
+        if let Some(ref mut terminals) = self.terminals
+            && let Some(terminal) = terminals.active_terminal_mut()
+        {
+            terminal.start_selection(col, row);
         }
     }
 
     /// Updates a terminal text selection to the given position.
     fn update_terminal_selection(&mut self, col: u16, row: u16) {
-        if let Some(ref mut terminals) = self.terminals {
-            if let Some(terminal) = terminals.active_terminal_mut() {
-                terminal.update_selection(col, row);
-            }
+        if let Some(ref mut terminals) = self.terminals
+            && let Some(terminal) = terminals.active_terminal_mut()
+        {
+            terminal.update_selection(col, row);
         }
     }
 
     /// Finalizes a terminal text selection.
     fn finalize_terminal_selection(&mut self) {
-        if let Some(ref mut terminals) = self.terminals {
-            if let Some(terminal) = terminals.active_terminal_mut() {
-                terminal.finalize_selection();
-            }
+        if let Some(ref mut terminals) = self.terminals
+            && let Some(terminal) = terminals.active_terminal_mut()
+        {
+            terminal.finalize_selection();
         }
     }
 }

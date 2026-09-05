@@ -204,10 +204,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Open file if provided (overrides session restore for this file)
-    if let Some(path) = file_path {
-        if let Err(e) = app.open_file(&path) {
-            app.set_status(format!("Error opening {path}: {e}"));
-        }
+    if let Some(path) = file_path
+        && let Err(e) = app.open_file(&path)
+    {
+        app.set_status(format!("Error opening {path}: {e}"));
     }
 
     // Initialize extensions

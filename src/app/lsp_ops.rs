@@ -105,10 +105,10 @@ impl App {
 
     /// Navigates code actions down.
     pub fn code_actions_down(&mut self) {
-        if let Some(ref actions) = self.lsp_code_actions {
-            if self.lsp_code_action_selected + 1 < actions.len() {
-                self.lsp_code_action_selected += 1;
-            }
+        if let Some(ref actions) = self.lsp_code_actions
+            && self.lsp_code_action_selected + 1 < actions.len()
+        {
+            self.lsp_code_action_selected += 1;
         }
     }
 
@@ -138,10 +138,10 @@ impl App {
 
     /// Navigates workspace symbols down.
     pub fn workspace_symbols_down(&mut self) {
-        if let Some(ref symbols) = self.lsp_workspace_symbols {
-            if self.lsp_workspace_selected + 1 < symbols.len() {
-                self.lsp_workspace_selected += 1;
-            }
+        if let Some(ref symbols) = self.lsp_workspace_symbols
+            && self.lsp_workspace_selected + 1 < symbols.len()
+        {
+            self.lsp_workspace_selected += 1;
         }
     }
 

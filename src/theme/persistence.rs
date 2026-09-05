@@ -223,10 +223,10 @@ impl ThemeSettings {
     /// Applies settings to a theme manager.
     pub fn apply_to_manager(&self, manager: &mut ThemeManager) {
         // Set base theme from preset
-        if let Some(ref theme_name) = self.theme {
-            if let Some(preset) = ThemePreset::from_name(theme_name) {
-                manager.set_preset(preset);
-            }
+        if let Some(ref theme_name) = self.theme
+            && let Some(preset) = ThemePreset::from_name(theme_name)
+        {
+            manager.set_preset(preset);
         }
 
         // Apply color overrides
@@ -284,14 +284,13 @@ fn update_or_append_setting(content: &str, key: &str, value: &str) -> String {
     // Find and update existing setting
     for line in &mut lines {
         let trimmed = line.trim();
-        if !trimmed.starts_with('#') {
-            if let Some((existing_key, _)) = trimmed.split_once('=') {
-                if existing_key.trim() == key {
-                    *line = setting_line.clone();
-                    found = true;
-                    break;
-                }
-            }
+        if !trimmed.starts_with('#')
+            && let Some((existing_key, _)) = trimmed.split_once('=')
+            && existing_key.trim() == key
+        {
+            *line = setting_line.clone();
+            found = true;
+            break;
         }
     }
 

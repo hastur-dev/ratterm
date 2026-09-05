@@ -622,10 +622,11 @@ fn get_process_cwd(pid: u32) -> Option<PathBuf> {
             let mut path = PathBuf::from(os_string);
 
             // Clean up trailing backslash for non-root paths
-            if let Some(path_str) = path.to_str() {
-                if path_str.len() > 3 && path_str.ends_with('\\') {
-                    path = PathBuf::from(&path_str[..path_str.len() - 1]);
-                }
+            if let Some(path_str) = path.to_str()
+                && path_str.len() > 3
+                && path_str.ends_with('\\')
+            {
+                path = PathBuf::from(&path_str[..path_str.len() - 1]);
             }
 
             Some(path)

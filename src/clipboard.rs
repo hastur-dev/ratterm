@@ -58,10 +58,10 @@ impl Clipboard {
         // Try system clipboard first
         #[cfg(feature = "system-clipboard")]
         {
-            if let Ok(mut clipboard) = arboard::Clipboard::new() {
-                if let Ok(text) = clipboard.get_text() {
-                    return Ok(text);
-                }
+            if let Ok(mut clipboard) = arboard::Clipboard::new()
+                && let Ok(text) = clipboard.get_text()
+            {
+                return Ok(text);
             }
         }
 

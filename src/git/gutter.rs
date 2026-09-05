@@ -62,10 +62,11 @@ pub fn compute_gutter_indicators(diff: &DiffResult) -> HashMap<usize, GutterMark
 
         // If the hunk only had deletions (no additions), mark the line
         // after the deletion point.
-        if has_deletions && !hunk.lines.iter().any(|l| l.origin == '+') {
-            if let Some(line_idx) = last_new_lineno {
-                marks.entry(line_idx).or_insert(GutterMark::Deleted);
-            }
+        if has_deletions
+            && !hunk.lines.iter().any(|l| l.origin == '+')
+            && let Some(line_idx) = last_new_lineno
+        {
+            marks.entry(line_idx).or_insert(GutterMark::Deleted);
         }
     }
 

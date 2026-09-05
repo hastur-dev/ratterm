@@ -307,11 +307,11 @@ impl App {
             // Run with options
             (KeyModifiers::CONTROL, KeyCode::Char('o')) => {
                 // Switch to run options mode
-                if let Some(ref mut manager) = self.docker_manager {
-                    if let Some(target) = manager.confirm_target().map(String::from) {
-                        manager.cancel_confirm();
-                        manager.start_run_options(target);
-                    }
+                if let Some(ref mut manager) = self.docker_manager
+                    && let Some(target) = manager.confirm_target().map(String::from)
+                {
+                    manager.cancel_confirm();
+                    manager.start_run_options(target);
                 }
             }
 

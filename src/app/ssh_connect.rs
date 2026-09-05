@@ -476,10 +476,10 @@ impl App {
 
         if let Some(id) = id {
             // Set jump host if specified
-            if let Some(jump_id) = jump_host_id {
-                if !self.ssh_hosts.set_jump_host(id, Some(jump_id)) {
-                    warn!("Failed to set jump host {} for host {}", jump_id, id);
-                }
+            if let Some(jump_id) = jump_host_id
+                && !self.ssh_hosts.set_jump_host(id, Some(jump_id))
+            {
+                warn!("Failed to set jump host {} for host {}", jump_id, id);
             }
 
             if let Some(creds) = credentials {

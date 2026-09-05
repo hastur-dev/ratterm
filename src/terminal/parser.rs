@@ -329,10 +329,11 @@ impl ParserPerformer<'_> {
                 if data.len() >= 3 {
                     let base64_data = String::from_utf8_lossy(data[2]);
                     // Skip clipboard queries (data == "?")
-                    if base64_data != "?" && !base64_data.is_empty() {
-                        if let Some(decoded) = decode_base64(&base64_data) {
-                            self.actions.push(ParsedAction::SetClipboard(decoded));
-                        }
+                    if base64_data != "?"
+                        && !base64_data.is_empty()
+                        && let Some(decoded) = decode_base64(&base64_data)
+                    {
+                        self.actions.push(ParsedAction::SetClipboard(decoded));
                     }
                 } else if data.len() == 2 {
                     // Some implementations send: OSC 52 ; c;<base64> ST (no separator)
@@ -340,10 +341,11 @@ impl ParserPerformer<'_> {
                     let combined = String::from_utf8_lossy(data[1]);
                     if let Some(semicolon_pos) = combined.find(';') {
                         let base64_data = &combined[semicolon_pos + 1..];
-                        if base64_data != "?" && !base64_data.is_empty() {
-                            if let Some(decoded) = decode_base64(base64_data) {
-                                self.actions.push(ParsedAction::SetClipboard(decoded));
-                            }
+                        if base64_data != "?"
+                            && !base64_data.is_empty()
+                            && let Some(decoded) = decode_base64(base64_data)
+                        {
+                            self.actions.push(ParsedAction::SetClipboard(decoded));
                         }
                     }
                 }
@@ -469,11 +471,11 @@ fn url_decode(s: &str) -> String {
         if c == '%' {
             // Try to read two hex digits
             let hex: String = chars.by_ref().take(2).collect();
-            if hex.len() == 2 {
-                if let Ok(byte) = u8::from_str_radix(&hex, 16) {
-                    result.push(byte as char);
-                    continue;
-                }
+            if hex.len() == 2
+                && let Ok(byte) = u8::from_str_radix(&hex, 16)
+            {
+                result.push(byte as char);
+                continue;
             }
             // Invalid encoding, keep as-is
             result.push('%');

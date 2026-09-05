@@ -386,14 +386,14 @@ impl Widget for ShellInstallPromptWidget<'_> {
 
         // Render download URL if available
         let mut footer_idx = instruction_count + 1;
-        if let Some(ref url) = self.prompt.download_url {
-            if footer_idx < chunks.len() {
-                let url_text = format!("  URL: {}", url);
-                Paragraph::new(url_text)
-                    .style(Style::default().fg(Color::Cyan).bg(bg_color))
-                    .render(chunks[footer_idx], buf);
-                footer_idx += 1;
-            }
+        if let Some(ref url) = self.prompt.download_url
+            && footer_idx < chunks.len()
+        {
+            let url_text = format!("  URL: {}", url);
+            Paragraph::new(url_text)
+                .style(Style::default().fg(Color::Cyan).bg(bg_color))
+                .render(chunks[footer_idx], buf);
+            footer_idx += 1;
         }
 
         // Render footer instructions with explicit backgrounds

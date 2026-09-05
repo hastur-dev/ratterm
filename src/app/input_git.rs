@@ -128,10 +128,11 @@ impl App {
             }
             // Checkout branch (Enter in branch view)
             _ => {
-                if let Some(ref dashboard) = self.git_dashboard {
-                    if dashboard.view == GitDashboardView::Branches && key.code == KeyCode::Enter {
-                        self.git_checkout_selected_branch();
-                    }
+                if let Some(ref dashboard) = self.git_dashboard
+                    && dashboard.view == GitDashboardView::Branches
+                    && key.code == KeyCode::Enter
+                {
+                    self.git_checkout_selected_branch();
                 }
             }
         }

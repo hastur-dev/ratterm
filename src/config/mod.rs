@@ -219,7 +219,8 @@ impl Default for Config {
             auto_close_tabs_on_shell_change: false,
             theme_manager: ThemeManager::default(),
             ide_always: false, // Terminal-first by default
-            ssh_storage_mode: StorageMode::Plaintext,
+            // The OS keychain, not the host file. Plaintext is now opt-in.
+            ssh_storage_mode: StorageMode::default(),
             set_ssh_tab: "ctrl".to_string(),
             ssh_number_setting: true,
             addon_commands: HashMap::new(),
@@ -302,12 +303,11 @@ impl Config {
                 let value = value.split('#').next().unwrap_or(value).trim();
 
                 // Only apply keybinding settings (not mode)
-                if key != "mode" {
-                    if let Some(action) = KeyAction::parse_action(key) {
-                        if let Some(binding) = KeyBinding::parse(value) {
-                            self.keybindings.set(action, binding);
-                        }
-                    }
+                if key != "mode"
+                    && let Some(action) = KeyAction::parse_action(key)
+                    && let Some(binding) = KeyBinding::parse(value)
+                {
+                    self.keybindings.set(action, binding);
                 }
             }
         }

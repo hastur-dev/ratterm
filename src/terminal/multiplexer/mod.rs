@@ -318,11 +318,11 @@ impl TerminalMultiplexer {
         )?;
 
         // Set password for SSH auto-login if provided
-        if let Some(pwd) = password {
-            if let Some(terminal) = grid.focused_mut() {
-                terminal.set_pending_password(pwd.to_string());
-                terminal.set_ssh_password(pwd.to_string());
-            }
+        if let Some(pwd) = password
+            && let Some(terminal) = grid.focused_mut()
+        {
+            terminal.set_pending_password(pwd.to_string());
+            terminal.set_ssh_password(pwd.to_string());
         }
 
         let index = self.tabs.len();
@@ -359,11 +359,11 @@ impl TerminalMultiplexer {
         )?;
 
         // Set password for SSH auto-login if provided
-        if let Some(pwd) = password {
-            if let Some(terminal) = grid.focused_mut() {
-                terminal.set_pending_password(pwd.to_string());
-                terminal.set_ssh_password(pwd.to_string());
-            }
+        if let Some(pwd) = password
+            && let Some(terminal) = grid.focused_mut()
+        {
+            terminal.set_pending_password(pwd.to_string());
+            terminal.set_ssh_password(pwd.to_string());
         }
 
         let index = self.tabs.len();

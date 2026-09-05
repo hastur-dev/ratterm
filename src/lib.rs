@@ -50,6 +50,7 @@ pub mod git;
 pub mod logging;
 pub mod lsp;
 pub mod remote;
+pub mod secrets;
 pub mod session;
 pub mod ssh;
 pub mod terminal;

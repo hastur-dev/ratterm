@@ -199,10 +199,10 @@ impl DebugSession {
 
     /// Toggles expansion of the currently selected variable.
     pub fn toggle_variable_expand(&mut self) {
-        if let Some(var) = self.variables.get_mut(self.selected_variable) {
-            if var.is_expandable() {
-                var.expanded = !var.expanded;
-            }
+        if let Some(var) = self.variables.get_mut(self.selected_variable)
+            && var.is_expandable()
+        {
+            var.expanded = !var.expanded;
         }
     }
 

@@ -29,14 +29,15 @@ impl App {
         };
 
         // A "save as" changes the document's path; keep the tab label honest.
-        if let Some(new_path) = state.path.clone() {
-            if new_path != file.path && !file.name.starts_with("[SSH]") {
-                file.name = new_path
-                    .file_name()
-                    .map(|n| n.to_string_lossy().to_string())
-                    .unwrap_or_else(|| new_path.to_string_lossy().to_string());
-                file.path = new_path;
-            }
+        if let Some(new_path) = state.path.clone()
+            && new_path != file.path
+            && !file.name.starts_with("[SSH]")
+        {
+            file.name = new_path
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_else(|| new_path.to_string_lossy().to_string());
+            file.path = new_path;
         }
 
         file.saved_state = Some(state);
@@ -112,17 +113,17 @@ impl App {
         );
 
         // DIAGNOSTIC: Log terminal grid dimensions BEFORE file open
-        if let Some(ref terminals) = self.terminals {
-            if let Some(terminal) = terminals.active_terminal() {
-                let grid = terminal.grid();
-                debug!(
-                    "OPEN_FILE_TERM_BEFORE: grid_cols={}, grid_rows={}, last_screen=({}, {})",
-                    grid.cols(),
-                    grid.rows(),
-                    self.last_screen_size.0,
-                    self.last_screen_size.1
-                );
-            }
+        if let Some(ref terminals) = self.terminals
+            && let Some(terminal) = terminals.active_terminal()
+        {
+            let grid = terminal.grid();
+            debug!(
+                "OPEN_FILE_TERM_BEFORE: grid_cols={}, grid_rows={}, last_screen=({}, {})",
+                grid.cols(),
+                grid.rows(),
+                self.last_screen_size.0,
+                self.last_screen_size.1
+            );
         }
 
         if let Some(idx) = self.open_files.iter().position(|f| f.path == path) {
@@ -167,17 +168,17 @@ impl App {
         );
 
         // DIAGNOSTIC: Log terminal grid dimensions AFTER file open and resize
-        if let Some(ref terminals) = self.terminals {
-            if let Some(terminal) = terminals.active_terminal() {
-                let grid = terminal.grid();
-                debug!(
-                    "OPEN_FILE_TERM_AFTER: grid_cols={}, grid_rows={}, last_screen=({}, {})",
-                    grid.cols(),
-                    grid.rows(),
-                    self.last_screen_size.0,
-                    self.last_screen_size.1
-                );
-            }
+        if let Some(ref terminals) = self.terminals
+            && let Some(terminal) = terminals.active_terminal()
+        {
+            let grid = terminal.grid();
+            debug!(
+                "OPEN_FILE_TERM_AFTER: grid_cols={}, grid_rows={}, last_screen=({}, {})",
+                grid.cols(),
+                grid.rows(),
+                self.last_screen_size.0,
+                self.last_screen_size.1
+            );
         }
 
         // Log first few lines of the file content to verify buffer is correct
@@ -346,12 +347,12 @@ impl App {
             self.mode
         );
 
-        if let Some(ref mut terminals) = self.terminals {
-            if let Some(terminal) = terminals.active_terminal_mut() {
-                let cwd = terminal.current_working_dir();
-                if cwd.is_dir() && cwd != self.file_browser.path() {
-                    let _ = self.file_browser.change_dir(&cwd);
-                }
+        if let Some(ref mut terminals) = self.terminals
+            && let Some(terminal) = terminals.active_terminal_mut()
+        {
+            let cwd = terminal.current_working_dir();
+            if cwd.is_dir() && cwd != self.file_browser.path() {
+                let _ = self.file_browser.change_dir(&cwd);
             }
         }
 

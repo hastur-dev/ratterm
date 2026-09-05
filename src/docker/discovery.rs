@@ -504,10 +504,10 @@ impl DockerDiscovery {
         assert!(host.is_remote(), "host must be remote");
 
         // Check if SSH authentication tools are available when password is needed
-        if host.password().is_some() {
-            if let Err(tool_error) = Self::check_ssh_auth_tools() {
-                return DockerDiscoveryResult::daemon_error(tool_error);
-            }
+        if host.password().is_some()
+            && let Err(tool_error) = Self::check_ssh_auth_tools()
+        {
+            return DockerDiscoveryResult::daemon_error(tool_error);
         }
 
         // Check availability first
@@ -1033,11 +1033,11 @@ impl DockerDiscovery {
                 continue;
             }
 
-            if let Some(container) = Self::parse_container_line(line) {
-                if !running_only || container.status.is_running() {
-                    containers.push(container);
-                    parse_count += 1;
-                }
+            if let Some(container) = Self::parse_container_line(line)
+                && (!running_only || container.status.is_running())
+            {
+                containers.push(container);
+                parse_count += 1;
             }
         }
 
