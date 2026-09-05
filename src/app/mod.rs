@@ -136,11 +136,10 @@ pub enum DockerBackgroundResult {
 
 /// Open file tab.
 ///
-/// A tab owns its document. `saved_state` holds the parked
-/// [`EditorState`](crate::editor::EditorState) for every tab except the active
-/// one, whose state lives in [`App::editor`] while it is on screen. Switching
-/// tabs swaps states instead of re-reading the file, so unsaved edits and undo
-/// history survive.
+/// A tab owns its document. `saved_state` holds the parked [`EditorState`]
+/// for every tab except the active one, whose state lives in [`App::editor`]
+/// while it is on screen. Switching tabs swaps states instead of re-reading
+/// the file, so unsaved edits and undo history survive.
 #[derive(Debug)]
 pub struct OpenFile {
     /// File path.

@@ -1,7 +1,7 @@
 //! Key handling for the Kubernetes screens.
 //!
 //! Translation only: each key names an operation in
-//! [`crate::app::k8s_ops`] or a state change on the manager. Nothing here
+//! `crate::app::k8s_ops` or a state change on the manager. Nothing here
 //! decides anything, so a key binding can be changed without touching
 //! behaviour, and behaviour can be tested without pressing a key.
 

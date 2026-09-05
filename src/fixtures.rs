@@ -34,7 +34,7 @@ pub const DOCKER_FILE: &str = "docker_items.toml";
 pub const METRICS_FILE: &str = "metrics.json";
 
 /// Largest fixture file that will be read.
-const MAX_FIXTURE_BYTES: u64 = 4 * 1024 * 1024;
+pub const MAX_FIXTURE_BYTES: u64 = 4 * 1024 * 1024;
 
 /// Errors raised while loading fixtures.
 #[derive(Debug, Error)]

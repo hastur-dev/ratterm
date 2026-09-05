@@ -10,7 +10,7 @@ use super::error::StoreError;
 use super::types::{HostRow, MetricSample};
 
 /// Column order shared by every read and write of `metric_samples`.
-pub(super) const SAMPLE_COLUMNS: &str = "host_id, ts, resolution, cpu_load1, cpu_percent, \
+pub const SAMPLE_COLUMNS: &str = "host_id, ts, resolution, cpu_load1, cpu_percent, \
      mem_used_bytes, mem_total_bytes, disk_used_bytes, disk_total_bytes, \
      gpu_util_percent, gpu_mem_used_bytes, temperature_c, uptime_secs";
 

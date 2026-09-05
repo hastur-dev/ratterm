@@ -14,7 +14,7 @@
 //! timestamps switched on, and dropping lines already delivered. The entries
 //! that reach the buffer are the same ones a stream would deliver, with up to
 //! [`POLL_INTERVAL`] of extra latency. Replacing the poll with a real stream is
-//! a change confined to [`follow_loop`].
+//! a change confined to `follow_loop`.
 
 mod line;
 mod options;

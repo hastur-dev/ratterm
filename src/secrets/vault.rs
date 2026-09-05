@@ -39,7 +39,7 @@ const SALT_LEN: usize = 32;
 /// XChaCha20-Poly1305 nonce length in bytes.
 const NONCE_LEN: usize = 24;
 /// Largest vault file we will read (1 MiB is far beyond any real vault).
-const MAX_VAULT_BYTES: u64 = 1024 * 1024;
+pub const MAX_VAULT_BYTES: u64 = 1024 * 1024;
 
 /// Entry id used for the passphrase verifier.
 const VERIFIER_ID: &str = "\u{0}verifier";
@@ -207,7 +207,7 @@ pub fn b64_decode_public(text: &str) -> Result<Vec<u8>, VaultError> {
     b64_decode(text, "value")
 }
 
-/// Restricts a file to its owner; see [`restrict_permissions`].
+/// Restricts a file to its owner; see the crate-internal `restrict_permissions`.
 ///
 /// # Errors
 /// Returns an error if the permissions cannot be changed.

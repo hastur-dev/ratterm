@@ -185,7 +185,7 @@ fn resolve_palette(
 
 /// Every colour key a theme file may set, in `component.part` form.
 ///
-/// The one list: [`apply_color_to_theme`] matches on it, the settings schema
+/// The one list: `apply_color_to_theme` matches on it, the settings schema
 /// validates against it, and the documentation is checked against it. Before
 /// this existed the three disagreed — `~/.ratrc` accepted a smaller set than
 /// the documentation described, and a documented key such as

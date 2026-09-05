@@ -16,10 +16,10 @@ pub(super) const API_TIMEOUT_SECS: u64 = 20;
 
 /// Whether the platform's local Docker endpoint exists.
 ///
-/// Kept out of [`choose_transport`] so the decision stays pure. On Windows a
-/// named pipe does not always answer `metadata`, so the pipe directory is
-/// listed as a fallback; that is the reliable way to see whether Docker
-/// Desktop is up.
+/// Kept out of [`choose_transport`](crate::docker::transport::choose_transport)
+/// so the decision stays pure. On Windows a named pipe does not always answer
+/// `metadata`, so the pipe directory is listed as a fallback; that is the
+/// reliable way to see whether Docker Desktop is up.
 #[must_use]
 pub fn local_endpoint_present(path: &str) -> bool {
     if Path::new(path).exists() {

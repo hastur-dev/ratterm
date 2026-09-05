@@ -14,7 +14,8 @@ use serde::{Deserialize, Serialize};
 /// Connection details are resolved from the host registry at call time.
 ///
 /// Files written by earlier versions still load: serde ignores the fields that
-/// are gone, and the old `display_name` is read into [`DockerHost::cached_label`].
+/// are gone, and the old `display_name` is read into the `Remote` variant's
+/// `cached_label` field.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum DockerHost {

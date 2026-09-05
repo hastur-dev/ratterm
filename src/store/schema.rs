@@ -10,7 +10,8 @@ use super::error::StoreError;
 
 /// Schema version this build writes and reads.
 ///
-/// Bump this and add an arm to [`migrate`] when the shape of a table changes.
+/// Bump this and add an arm to the module's `migrate` when the shape of a
+/// table changes.
 pub const SCHEMA_VERSION: i64 = 1;
 
 /// Every `CREATE` statement, in dependency order.

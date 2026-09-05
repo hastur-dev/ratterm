@@ -7,9 +7,9 @@
 //! make: the existing harness spawned a real PTY and was compiled only on
 //! Windows.
 //!
-//! Steps run against an [`App`] in this process rather than over IPC. That
-//! keeps a failure's stack in the same binary as the code under test, and it
-//! means a scenario needs no port, socket or token.
+//! Steps run against an [`App`](crate::app::App) in this process rather than
+//! over IPC. That keeps a failure's stack in the same binary as the code under
+//! test, and it means a scenario needs no port, socket or token.
 
 pub mod runner;
 pub mod step;

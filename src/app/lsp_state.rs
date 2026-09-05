@@ -6,10 +6,10 @@
 //! written again from scratch, so an off-by-one fixed in one was still present
 //! in the others.
 //!
-//! This is that state in one place, with the panels sharing
-//! [`ListPanel`](super::panel::ListPanel). The behaviour is unchanged; what
-//! changes is that there is one implementation of "move down without falling
-//! off the end", and it is tested.
+//! This is that state in one place, with the panels sharing [`ListPanel`].
+//! The behaviour is unchanged; what changes is that there is one
+//! implementation of "move down without falling off the end", and it is
+//! tested.
 
 use crate::lsp::DiagnosticStore;
 use crate::lsp::actions::CodeActionResult;

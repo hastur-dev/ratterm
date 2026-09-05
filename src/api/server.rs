@@ -39,7 +39,7 @@ const POLL_INTERVAL_MS: u64 = 10;
 /// A transport whose accept or read blocks with no way to cancel it (the
 /// Windows named pipe) would otherwise hang the caller; the thread dies with
 /// the process instead.
-const JOIN_TIMEOUT_MS: u64 = 2000;
+pub const JOIN_TIMEOUT_MS: u64 = 2000;
 
 /// JSON-RPC error code returned when a token is required or wrong.
 pub const ERROR_UNAUTHENTICATED: i32 = -32_001;

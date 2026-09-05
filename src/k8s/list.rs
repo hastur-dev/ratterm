@@ -44,7 +44,7 @@ const MAX_WATCH_EVENTS: u64 = 5_000_000;
 const WATCH_ERROR_BACKOFF: Duration = Duration::from_secs(2);
 
 /// How many updates [`WatchHandle::drain`] will take in one call by default.
-const DEFAULT_DRAIN_LIMIT: usize = 512;
+pub const DEFAULT_DRAIN_LIMIT: usize = 512;
 
 /// One change reported by a watch.
 #[derive(Debug, Clone, PartialEq, Eq)]

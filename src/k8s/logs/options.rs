@@ -22,7 +22,7 @@ pub struct PodLogOptions {
 }
 
 impl PodLogOptions {
-    /// Options for a one-shot read of the last [`DEFAULT_TAIL_LINES`] lines.
+    /// Options for a one-shot read of the last `DEFAULT_TAIL_LINES` lines.
     #[must_use]
     pub fn tail() -> Self {
         Self {
