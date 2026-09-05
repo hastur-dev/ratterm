@@ -380,11 +380,11 @@ impl CompletionEngine {
             &context.language_id,
         );
 
-        if let Some(cached) = self.cache.get(&cache_key) {
-            if let Some(item) = cached.first().cloned() {
-                let _ = request.response_tx.send(Some(item));
-                return;
-            }
+        if let Some(cached) = self.cache.get(&cache_key)
+            && let Some(item) = cached.first().cloned()
+        {
+            let _ = request.response_tx.send(Some(item));
+            return;
         }
 
         // Query all providers

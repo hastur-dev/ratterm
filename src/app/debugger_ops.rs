@@ -26,7 +26,7 @@ impl App {
         let line = self.editor.cursor_position().line + 1; // 1-based
         let file_str = path.display().to_string();
 
-        let added = self.breakpoint_store.toggle(&file_str, line as u32);
+        let added = self.debug.breakpoints_mut().toggle(&file_str, line as u32);
         if added {
             self.set_status(format!("Breakpoint set at {}:{}", file_str, line));
         } else {
@@ -47,7 +47,8 @@ impl App {
         };
 
         let file_str = path.display().to_string();
-        self.breakpoint_store
+        self.debug
+            .breakpoints()
             .get(&file_str)
             .iter()
             .map(|&line| (line as usize).saturating_sub(1))
@@ -60,7 +61,7 @@ impl App {
 
     /// Continues execution or starts a new debug session.
     pub fn debug_continue_or_start(&mut self) {
-        if let Some(ref mut session) = self.debug_session {
+        if let Some(session) = self.debug.session_mut() {
             if session.is_paused() {
                 info!("Continuing debug session");
                 session.set_state(DebugState::Running);
@@ -95,28 +96,28 @@ impl App {
         info!("Starting debug session: program={}", config.program);
 
         let session = DebugSession::new(config, cwd);
-        self.debug_session = Some(session);
-        self.debug_panel_visible = true;
+        self.debug.start(session);
         self.set_status("Debug: Session started (adapter not connected)");
     }
 
     /// Stops the current debug session.
     pub fn debug_stop(&mut self) {
-        if let Some(ref mut session) = self.debug_session {
+        if let Some(session) = self.debug.session_mut() {
             info!("Stopping debug session");
             session.set_state(DebugState::Stopped);
         }
-        self.debug_session = None;
-        self.debug_panel_visible = false;
+        self.debug.stop();
+        self.debug.set_panel_visible(false);
         self.set_status("Debug: Session stopped");
     }
 
     /// Restarts the current debug session.
     pub fn debug_restart(&mut self) {
         info!("Restarting debug session");
-        let config = self.debug_session.as_ref().map(|s| s.config().clone());
+        let config = self.debug.session().map(|s| s.config().clone());
         let cwd = self
-            .debug_session
+            .debug
+            .session_mut()
             .as_ref()
             .map(|s| s.cwd().clone())
             .unwrap_or_else(|| self.file_browser.path().to_path_buf());
@@ -125,8 +126,7 @@ impl App {
 
         if let Some(config) = config {
             let session = DebugSession::new(config, cwd);
-            self.debug_session = Some(session);
-            self.debug_panel_visible = true;
+            self.debug.start(session);
             self.set_status("Debug: Session restarted");
         } else {
             self.debug_start();
@@ -139,7 +139,7 @@ impl App {
 
     /// Steps over the current line.
     pub fn debug_step_over(&mut self) {
-        if let Some(ref mut session) = self.debug_session {
+        if let Some(session) = self.debug.session_mut() {
             if session.is_paused() {
                 info!("Debug: Step over");
                 session.set_state(DebugState::Running);
@@ -154,7 +154,7 @@ impl App {
 
     /// Steps into the current function call.
     pub fn debug_step_in(&mut self) {
-        if let Some(ref mut session) = self.debug_session {
+        if let Some(session) = self.debug.session_mut() {
             if session.is_paused() {
                 info!("Debug: Step in");
                 session.set_state(DebugState::Running);
@@ -169,7 +169,7 @@ impl App {
 
     /// Steps out of the current function.
     pub fn debug_step_out(&mut self) {
-        if let Some(ref mut session) = self.debug_session {
+        if let Some(session) = self.debug.session_mut() {
             if session.is_paused() {
                 info!("Debug: Step out");
                 session.set_state(DebugState::Running);
@@ -189,25 +189,25 @@ impl App {
     /// Returns whether a debug session is active.
     #[must_use]
     pub fn is_debugging(&self) -> bool {
-        self.debug_session.as_ref().is_some_and(|s| s.is_active())
+        self.debug.session().is_some_and(|s| s.is_active())
     }
 
     /// Returns the current debug state as a display string (for status bar).
     #[must_use]
     pub fn debug_status_text(&self) -> Option<String> {
-        let session = self.debug_session.as_ref()?;
+        let session = self.debug.session()?;
         Some(format!("[DEBUG: {}]", session.state()))
     }
 
     /// Returns a reference to the debug session.
     #[must_use]
     pub fn debug_session(&self) -> Option<&DebugSession> {
-        self.debug_session.as_ref()
+        self.debug.session()
     }
 
     /// Returns a mutable reference to the debug session.
     pub fn debug_session_mut(&mut self) -> Option<&mut DebugSession> {
-        self.debug_session.as_mut()
+        self.debug.session_mut()
     }
 }
 
@@ -236,7 +236,7 @@ mod tests {
         };
         app.debug_continue_or_start();
         assert!(app.debug_session().is_some());
-        assert!(app.debug_panel_visible);
+        assert!(app.debug.is_panel_visible());
     }
 
     #[test]
@@ -249,7 +249,7 @@ mod tests {
 
         app.debug_stop();
         assert!(app.debug_session().is_none());
-        assert!(!app.debug_panel_visible);
+        assert!(!app.debug.is_panel_visible());
     }
 
     #[test]
@@ -260,7 +260,7 @@ mod tests {
         app.debug_continue_or_start();
         app.debug_restart();
         assert!(app.debug_session().is_some());
-        assert!(app.debug_panel_visible);
+        assert!(app.debug.is_panel_visible());
     }
 
     #[test]

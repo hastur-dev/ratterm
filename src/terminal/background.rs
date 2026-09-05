@@ -228,13 +228,12 @@ impl BackgroundManager {
                     if stop_flag_stdout.load(Ordering::Relaxed) {
                         break;
                     }
-                    if let Ok(line) = line {
-                        if let Ok(mut output) = stdout_output_clone.lock() {
-                            if output.len() < MAX_OUTPUT_BUFFER {
-                                output.push_str(&line);
-                                output.push('\n');
-                            }
-                        }
+                    if let Ok(line) = line
+                        && let Ok(mut output) = stdout_output_clone.lock()
+                        && output.len() < MAX_OUTPUT_BUFFER
+                    {
+                        output.push_str(&line);
+                        output.push('\n');
                     }
                 }
             })
@@ -252,13 +251,12 @@ impl BackgroundManager {
                     if stop_flag_stderr.load(Ordering::Relaxed) {
                         break;
                     }
-                    if let Ok(line) = line {
-                        if let Ok(mut output) = stderr_output_clone.lock() {
-                            if output.len() < MAX_OUTPUT_BUFFER {
-                                output.push_str(&line);
-                                output.push('\n');
-                            }
-                        }
+                    if let Ok(line) = line
+                        && let Ok(mut output) = stderr_output_clone.lock()
+                        && output.len() < MAX_OUTPUT_BUFFER
+                    {
+                        output.push_str(&line);
+                        output.push('\n');
                     }
                 }
             })
@@ -363,10 +361,10 @@ impl BackgroundManager {
             proc.stop_flag.store(true, Ordering::SeqCst);
 
             // Kill the child process
-            if let Some(ref mut child) = proc.child {
-                if let Err(e) = child.kill() {
-                    return Err(format!("Failed to kill process: {}", e));
-                }
+            if let Some(ref mut child) = proc.child
+                && let Err(e) = child.kill()
+            {
+                return Err(format!("Failed to kill process: {}", e));
             }
 
             proc.info.status = ProcessStatus::Killed;

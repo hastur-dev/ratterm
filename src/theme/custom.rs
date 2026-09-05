@@ -183,8 +183,67 @@ fn resolve_palette(
     Ok(resolved)
 }
 
+/// Every colour key a theme file may set, in `component.part` form.
+///
+/// The one list: `apply_color_to_theme` matches on it, the settings schema
+/// validates against it, and the documentation is checked against it. Before
+/// this existed the three disagreed — `~/.ratrc` accepted a smaller set than
+/// the documentation described, and a documented key such as
+/// `popup.background` did nothing there.
+pub const COLOR_KEYS: &[&str] = &[
+    "terminal.foreground",
+    "terminal.background",
+    "terminal.cursor",
+    "terminal.selection",
+    "terminal.border",
+    "terminal.border_focused",
+    "editor.foreground",
+    "editor.background",
+    "editor.cursor",
+    "editor.selection",
+    "editor.line_numbers",
+    "editor.line_numbers_fg",
+    "editor.line_numbers_bg",
+    "editor.current_line",
+    "editor.border",
+    "editor.border_focused",
+    "statusbar.foreground",
+    "statusbar.background",
+    "statusbar.mode_normal",
+    "statusbar.mode_insert",
+    "statusbar.mode_visual",
+    "statusbar.mode_command",
+    "tab.active_bg",
+    "tab.active_fg",
+    "tab.inactive_bg",
+    "tab.inactive_fg",
+    "tabs.active_bg",
+    "tabs.active_fg",
+    "tabs.inactive_bg",
+    "tabs.inactive_fg",
+    "popup.foreground",
+    "popup.background",
+    "popup.border",
+    "popup.selected_bg",
+    "popup.selected_fg",
+    "popup.input_bg",
+    "filebrowser.foreground",
+    "filebrowser.background",
+    "filebrowser.directory",
+    "filebrowser.file",
+    "filebrowser.selected_bg",
+    "filebrowser.selected_fg",
+    "filebrowser.border",
+];
+
+/// True if `key` names a colour.
+#[must_use]
+pub fn is_color_key(key: &str) -> bool {
+    COLOR_KEYS.contains(&key)
+}
+
 /// Applies a color to the appropriate theme field.
-fn apply_color_to_theme(theme: &mut Theme, key: &str, color: ratatui::style::Color) {
+pub(crate) fn apply_color_to_theme(theme: &mut Theme, key: &str, color: ratatui::style::Color) {
     match key {
         // Terminal
         "terminal.foreground" => theme.terminal.foreground = color,
@@ -199,7 +258,9 @@ fn apply_color_to_theme(theme: &mut Theme, key: &str, color: ratatui::style::Col
         "editor.background" => theme.editor.background = color,
         "editor.cursor" => theme.editor.cursor = color,
         "editor.selection" => theme.editor.selection = color,
-        "editor.line_numbers_fg" => theme.editor.line_numbers_fg = color,
+        // Both spellings: `.ratrc` documents the short one, custom theme
+        // files the long one, and a user should not have to know which.
+        "editor.line_numbers" | "editor.line_numbers_fg" => theme.editor.line_numbers_fg = color,
         "editor.line_numbers_bg" => theme.editor.line_numbers_bg = color,
         "editor.current_line" => theme.editor.current_line = color,
         "editor.border" => theme.editor.border = color,
@@ -214,10 +275,12 @@ fn apply_color_to_theme(theme: &mut Theme, key: &str, color: ratatui::style::Col
         "statusbar.mode_command" => theme.statusbar.mode_command = color,
 
         // Tabs
-        "tabs.active_bg" => theme.tabs.active_bg = color,
-        "tabs.active_fg" => theme.tabs.active_fg = color,
-        "tabs.inactive_bg" => theme.tabs.inactive_bg = color,
-        "tabs.inactive_fg" => theme.tabs.inactive_fg = color,
+        // `tab.` and `tabs.` both appear in the documentation and in themes
+        // people have already written, so both are accepted.
+        "tabs.active_bg" | "tab.active_bg" => theme.tabs.active_bg = color,
+        "tabs.active_fg" | "tab.active_fg" => theme.tabs.active_fg = color,
+        "tabs.inactive_bg" | "tab.inactive_bg" => theme.tabs.inactive_bg = color,
+        "tabs.inactive_fg" | "tab.inactive_fg" => theme.tabs.inactive_fg = color,
 
         // Popup
         "popup.foreground" => theme.popup.foreground = color,

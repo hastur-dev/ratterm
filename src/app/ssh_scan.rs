@@ -90,16 +90,16 @@ impl App {
                     }
                 }
                 ScanResult::HostFound(ip, _port) => {
-                    if !self.ssh_hosts.contains_hostname(&ip) {
-                        if let Some(id) = self.ssh_hosts.add_host(ip.clone(), 22) {
-                            debug!("Found SSH host: {} (id={})", ip, id);
-                            self.host_statuses.insert(id, ConnectionStatus::Reachable);
-                            if let Some(ref mut manager) = self.ssh_manager {
-                                manager.update_from_list(&self.ssh_hosts);
-                                manager.set_host_status(id, ConnectionStatus::Reachable);
-                            }
-                            self.set_status(format!("Found SSH host: {}", ip));
+                    if !self.ssh_hosts.contains_hostname(&ip)
+                        && let Some(id) = self.ssh_hosts.add_host(ip.clone(), 22)
+                    {
+                        debug!("Found SSH host: {} (id={})", ip, id);
+                        self.host_statuses.insert(id, ConnectionStatus::Reachable);
+                        if let Some(ref mut manager) = self.ssh_manager {
+                            manager.update_from_list(&self.ssh_hosts);
+                            manager.set_host_status(id, ConnectionStatus::Reachable);
                         }
+                        self.set_status(format!("Found SSH host: {}", ip));
                     }
                 }
                 ScanResult::Complete(hosts) => {

@@ -17,26 +17,24 @@ impl App {
     pub fn save_session(&self) -> io::Result<()> {
         let mut session = Session::default();
 
-        // Save open files with cursor positions
+        // Save open files with their own cursor positions. Background tabs
+        // carry parked state, so they no longer all report line 0.
         for (idx, file) in self.open_files.iter().enumerate() {
-            let (cursor_line, cursor_col) = if idx == self.current_file_idx {
+            let (cursor_line, cursor_col, scroll_offset) = if idx == self.current_file_idx {
                 let pos = self.editor.cursor_position();
-                (pos.line, pos.col)
+                (pos.line, pos.col, self.editor.view().scroll_top())
+            } else if let Some(state) = file.saved_state.as_ref() {
+                let pos = state.cursor_position();
+                (pos.line, pos.col, state.view.scroll_top())
             } else {
-                (0, 0)
-            };
-
-            let scroll_offset = if idx == self.current_file_idx {
-                self.editor.view().scroll_top()
-            } else {
-                0
+                (0, 0, 0)
             };
 
             session.open_files.push(PersistedFile {
                 path: file.path.clone(),
                 cursor_line,
                 cursor_col,
-                modified: idx == self.current_file_idx && self.editor.is_modified(),
+                modified: self.tab_is_modified(idx),
                 scroll_offset,
             });
         }
@@ -83,10 +81,7 @@ impl App {
 
         // Restore active file
         if session.active_file_idx < self.open_files.len() {
-            self.current_file_idx = session.active_file_idx;
-            if let Some(file) = self.open_files.get(self.current_file_idx) {
-                let _ = self.editor.open(&file.path);
-            }
+            self.activate_tab(session.active_file_idx);
         }
 
         // Restore cursor position for active file if we have one

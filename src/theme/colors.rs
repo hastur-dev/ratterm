@@ -50,10 +50,10 @@ pub fn parse_color(s: &str) -> Option<Color> {
         "reset" | "default" => Some(Color::Reset),
         _ => {
             // Try ANSI indexed color (color0-color255)
-            if let Some(idx) = s.strip_prefix("color") {
-                if let Ok(n) = idx.parse::<u8>() {
-                    return Some(Color::Indexed(n));
-                }
+            if let Some(idx) = s.strip_prefix("color")
+                && let Ok(n) = idx.parse::<u8>()
+            {
+                return Some(Color::Indexed(n));
             }
             None
         }

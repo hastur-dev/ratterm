@@ -366,10 +366,16 @@ const MAX_JUMP_CHAIN_DEPTH: usize = 10;
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SSHHostList {
     /// List of saved hosts.
+    #[serde(default)]
     hosts: Vec<SSHHost>,
     /// Credentials mapped by host ID (as string for TOML compatibility).
+    ///
+    /// Defaulted: a host list where nothing has been given credentials yet is
+    /// valid, and a file without the table used to fail to load entirely.
+    #[serde(default)]
     credentials: HashMap<String, SSHCredentials>,
     /// Next available host ID.
+    #[serde(default)]
     next_id: u32,
 }
 

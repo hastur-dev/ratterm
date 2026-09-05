@@ -1,155 +1,12 @@
 //! Docker container and image data structures.
 //!
-//! This module defines the core types for representing Docker containers,
-//! images, run options, and quick-connect assignments.
+//! This module holds the two things a Docker screen lists — a container and an
+//! image — plus the small enums that classify them. The host type, the
+//! quick-connect slots and the container-creation form used to live here too;
+//! they are now in [`super::host`], [`super::items`] and [`super::create`],
+//! which keeps every file in this module inside the project's size limit.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-
-/// Maximum number of Docker items to track (for bounded iteration).
-#[allow(dead_code)]
-const MAX_DOCKER_ITEMS: usize = 100;
-
-/// Maximum quick-connect slots (Ctrl+Alt+1-9).
-pub const MAX_QUICK_CONNECT: usize = 9;
-
-/// Represents where Docker commands should be executed.
-#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum DockerHost {
-    /// Local Docker daemon on this machine.
-    #[default]
-    Local,
-    /// Remote Docker daemon accessible via SSH.
-    Remote {
-        /// SSH host ID from the SSH manager.
-        host_id: u32,
-        /// Hostname or IP address.
-        hostname: String,
-        /// SSH port.
-        port: u16,
-        /// Username for SSH connection.
-        username: String,
-        /// Optional display name.
-        display_name: Option<String>,
-        /// Optional password for SSH (not serialized for security).
-        #[serde(skip)]
-        password: Option<String>,
-    },
-}
-
-impl DockerHost {
-    /// Creates a new remote Docker host without password.
-    #[must_use]
-    pub fn remote(
-        host_id: u32,
-        hostname: String,
-        port: u16,
-        username: String,
-        display_name: Option<String>,
-    ) -> Self {
-        Self::remote_with_password(host_id, hostname, port, username, display_name, None)
-    }
-
-    /// Creates a new remote Docker host with optional password.
-    #[must_use]
-    pub fn remote_with_password(
-        host_id: u32,
-        hostname: String,
-        port: u16,
-        username: String,
-        display_name: Option<String>,
-        password: Option<String>,
-    ) -> Self {
-        assert!(!hostname.is_empty(), "hostname must not be empty");
-        assert!(!username.is_empty(), "username must not be empty");
-        assert!(port > 0, "port must be greater than 0");
-
-        Self::Remote {
-            host_id,
-            hostname,
-            port,
-            username,
-            display_name,
-            password,
-        }
-    }
-
-    /// Returns the password for remote hosts, None for local.
-    #[must_use]
-    pub fn password(&self) -> Option<&str> {
-        match self {
-            Self::Local => None,
-            Self::Remote { password, .. } => password.as_deref(),
-        }
-    }
-
-    /// Returns true if this is the local host.
-    #[must_use]
-    pub fn is_local(&self) -> bool {
-        matches!(self, Self::Local)
-    }
-
-    /// Returns true if this is a remote host.
-    #[must_use]
-    pub fn is_remote(&self) -> bool {
-        matches!(self, Self::Remote { .. })
-    }
-
-    /// Returns the host ID for remote hosts, None for local.
-    #[must_use]
-    pub fn host_id(&self) -> Option<u32> {
-        match self {
-            Self::Local => None,
-            Self::Remote { host_id, .. } => Some(*host_id),
-        }
-    }
-
-    /// Returns a display name for the host.
-    #[must_use]
-    pub fn display_name(&self) -> String {
-        match self {
-            Self::Local => "Local".to_string(),
-            Self::Remote {
-                display_name: Some(name),
-                ..
-            } => name.clone(),
-            Self::Remote { hostname, .. } => hostname.clone(),
-        }
-    }
-
-    /// Returns the storage key for per-host quick-connect.
-    #[must_use]
-    pub fn storage_key(&self) -> String {
-        match self {
-            Self::Local => "local".to_string(),
-            Self::Remote { host_id, .. } => format!("remote:{}", host_id),
-        }
-    }
-
-    /// Builds SSH command arguments for remote execution.
-    /// Returns None for local host.
-    #[must_use]
-    pub fn ssh_args(&self) -> Option<Vec<String>> {
-        match self {
-            Self::Local => None,
-            Self::Remote {
-                hostname,
-                port,
-                username,
-                ..
-            } => {
-                let mut args = Vec::with_capacity(4);
-                if *port != 22 {
-                    args.push("-p".to_string());
-                    args.push(port.to_string());
-                }
-                args.push(format!("{}@{}", username, hostname));
-                Some(args)
-            }
-        }
-    }
-}
 
 /// Docker item type for quick-connect assignments.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -209,7 +66,7 @@ pub enum DockerStatus {
 }
 
 impl DockerStatus {
-    /// Parses status from Docker CLI output.
+    /// Parses status from Docker CLI output or the API's `State` field.
     #[must_use]
     pub fn parse(s: &str) -> Self {
         let lower = s.to_lowercase();
@@ -312,6 +169,12 @@ impl DockerContainer {
     #[must_use]
     pub fn display(&self) -> &str {
         self.display_name.as_deref().unwrap_or(&self.name)
+    }
+
+    /// Returns the first twelve characters of the id, as Docker prints it.
+    #[must_use]
+    pub fn short_id(&self) -> String {
+        self.id.chars().take(12).collect()
     }
 
     /// Returns a short summary for list display.
@@ -433,577 +296,8 @@ impl DockerImage {
     }
 }
 
-// ============================================================================
-// Docker Hub Search and Container Creation Types
-// ============================================================================
-
-/// Maximum number of search results to display.
-pub const MAX_SEARCH_RESULTS: usize = 25;
-
-/// Represents a Docker Hub search result.
-#[derive(Debug, Clone, Default)]
-pub struct DockerSearchResult {
-    /// Image name (e.g., "nginx", "ubuntu").
-    pub name: String,
-    /// Description from Docker Hub.
-    pub description: String,
-    /// Number of stars.
-    pub stars: u32,
-    /// Whether it's an official image.
-    pub official: bool,
-}
-
-impl DockerSearchResult {
-    /// Creates a new search result.
-    ///
-    /// # Panics
-    /// Panics if `name` is empty.
-    #[must_use]
-    pub fn new(name: String, description: String, stars: u32, official: bool) -> Self {
-        assert!(!name.is_empty(), "search result name must not be empty");
-        Self {
-            name,
-            description,
-            stars,
-            official,
-        }
-    }
-
-    /// Returns a formatted display string for the search result.
-    #[must_use]
-    pub fn display(&self) -> String {
-        let official_badge = if self.official { " [OFFICIAL]" } else { "" };
-        let desc = if self.description.len() > 50 {
-            format!("{}...", &self.description[..47])
-        } else {
-            self.description.clone()
-        };
-        format!(
-            "{}{} - {} ({}★)",
-            self.name, official_badge, desc, self.stars
-        )
-    }
-}
-
-/// Volume mount configuration for container creation.
-#[derive(Debug, Clone, Default)]
-pub struct VolumeMountConfig {
-    /// Host path (on the remote SSH host or local machine).
-    pub host_path: String,
-    /// Container path (mount point inside container).
-    pub container_path: String,
-}
-
-impl VolumeMountConfig {
-    /// Creates a new volume mount configuration.
-    ///
-    /// # Panics
-    /// Panics if either path is empty.
-    #[must_use]
-    pub fn new(host_path: String, container_path: String) -> Self {
-        assert!(!host_path.is_empty(), "host_path must not be empty");
-        assert!(
-            !container_path.is_empty(),
-            "container_path must not be empty"
-        );
-        Self {
-            host_path,
-            container_path,
-        }
-    }
-
-    /// Formats the mount as a docker -v argument.
-    #[must_use]
-    pub fn to_docker_arg(&self) -> String {
-        format!("{}:{}", self.host_path, self.container_path)
-    }
-}
-
-/// State for the container creation workflow.
-#[derive(Debug, Clone, Default)]
-pub struct ContainerCreationState {
-    /// Search term for Docker Hub.
-    pub search_term: String,
-    /// Search results from Docker Hub.
-    pub search_results: Vec<DockerSearchResult>,
-    /// Selected search result index.
-    pub selected_result_idx: usize,
-    /// Selected image name (after search or from existing images).
-    pub selected_image: Option<String>,
-    /// Whether the selected image exists on the remote host.
-    pub image_exists: bool,
-    /// Whether image is currently downloading.
-    pub downloading: bool,
-    /// Download status message.
-    pub download_status: Option<String>,
-    /// Volume mounts to apply.
-    pub volume_mounts: Vec<VolumeMountConfig>,
-    /// Current host path input (during volume configuration).
-    pub current_host_path: String,
-    /// Current container path input (during volume configuration).
-    pub current_container_path: String,
-    /// Startup command to append to docker run.
-    pub startup_command: String,
-    /// Error message (if any).
-    pub error: Option<String>,
-    /// Whether to suggest checking log file for full error.
-    pub suggest_log_file: bool,
-}
-
-impl ContainerCreationState {
-    /// Creates a new empty creation state.
-    #[must_use]
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Creates a creation state with a pre-selected image.
-    #[must_use]
-    pub fn with_image(image_name: String) -> Self {
-        assert!(!image_name.is_empty(), "image_name must not be empty");
-        Self {
-            selected_image: Some(image_name),
-            ..Default::default()
-        }
-    }
-
-    /// Resets the state for a new creation workflow.
-    pub fn reset(&mut self) {
-        *self = Self::default();
-    }
-
-    /// Sets the search results.
-    pub fn set_search_results(&mut self, results: Vec<DockerSearchResult>) {
-        self.search_results = results;
-        self.selected_result_idx = 0;
-    }
-
-    /// Selects the next search result.
-    pub fn select_next_result(&mut self) {
-        if !self.search_results.is_empty() {
-            self.selected_result_idx = (self.selected_result_idx + 1) % self.search_results.len();
-        }
-    }
-
-    /// Selects the previous search result.
-    pub fn select_prev_result(&mut self) {
-        if !self.search_results.is_empty() {
-            if self.selected_result_idx == 0 {
-                self.selected_result_idx = self.search_results.len() - 1;
-            } else {
-                self.selected_result_idx -= 1;
-            }
-        }
-    }
-
-    /// Returns the currently selected search result.
-    #[must_use]
-    pub fn selected_result(&self) -> Option<&DockerSearchResult> {
-        self.search_results.get(self.selected_result_idx)
-    }
-
-    /// Confirms the current search result selection.
-    pub fn confirm_selection(&mut self) {
-        if let Some(result) = self.selected_result() {
-            self.selected_image = Some(result.name.clone());
-        }
-    }
-
-    /// Adds a volume mount from the current inputs.
-    ///
-    /// # Returns
-    /// `true` if mount was added, `false` if inputs are empty.
-    pub fn add_current_volume_mount(&mut self) -> bool {
-        if self.current_host_path.is_empty() || self.current_container_path.is_empty() {
-            return false;
-        }
-
-        let mount = VolumeMountConfig::new(
-            self.current_host_path.clone(),
-            self.current_container_path.clone(),
-        );
-        self.volume_mounts.push(mount);
-        self.current_host_path.clear();
-        self.current_container_path.clear();
-        true
-    }
-
-    /// Clears all volume mounts.
-    pub fn clear_volume_mounts(&mut self) {
-        self.volume_mounts.clear();
-    }
-
-    /// Sets an error with optional log file suggestion.
-    pub fn set_error(&mut self, error: String, suggest_log: bool) {
-        self.suggest_log_file = suggest_log || error.len() > 200;
-        self.error = Some(error);
-    }
-
-    /// Clears any error.
-    pub fn clear_error(&mut self) {
-        self.error = None;
-        self.suggest_log_file = false;
-    }
-
-    /// Builds the complete docker run command.
-    #[must_use]
-    pub fn build_run_command(&self) -> Option<String> {
-        let image = self.selected_image.as_ref()?;
-
-        let mut parts = vec![
-            "docker".to_string(),
-            "run".to_string(),
-            "-it".to_string(),
-            "--rm".to_string(),
-        ];
-
-        // Add volume mounts
-        for mount in &self.volume_mounts {
-            parts.push("-v".to_string());
-            parts.push(mount.to_docker_arg());
-        }
-
-        // Add image name
-        parts.push(image.clone());
-
-        // Add startup command if provided
-        if !self.startup_command.trim().is_empty() {
-            for arg in self.startup_command.split_whitespace() {
-                parts.push(arg.to_string());
-            }
-        }
-
-        Some(parts.join(" "))
-    }
-
-    /// Returns the number of volume mounts configured.
-    #[must_use]
-    pub fn volume_mount_count(&self) -> usize {
-        self.volume_mounts.len()
-    }
-}
-
-/// Run options for starting a container from an image.
-#[derive(Debug, Clone, Default)]
-pub struct DockerRunOptions {
-    /// Container name (--name).
-    pub name: Option<String>,
-    /// Port mappings (host:container, -p).
-    pub port_mappings: Vec<String>,
-    /// Volume mounts (host:container, -v).
-    pub volume_mounts: Vec<String>,
-    /// Environment variables (KEY=VALUE, -e).
-    pub env_vars: Vec<String>,
-    /// Run in detached mode (-d). Default false for interactive.
-    pub detached: bool,
-    /// Remove container on exit (--rm).
-    pub remove_on_exit: bool,
-    /// Shell to exec into (/bin/sh or /bin/bash).
-    pub shell: String,
-    /// Additional docker run arguments.
-    pub extra_args: Vec<String>,
-}
-
-impl DockerRunOptions {
-    /// Creates new run options with default shell.
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            shell: "/bin/sh".to_string(),
-            remove_on_exit: true,
-            ..Default::default()
-        }
-    }
-
-    /// Builds the docker run command arguments.
-    #[must_use]
-    pub fn build_args(&self, image: &str) -> Vec<String> {
-        let mut args = Vec::with_capacity(20);
-
-        // Always interactive with TTY for exec
-        args.push("-it".to_string());
-
-        // Container name
-        if let Some(ref name) = self.name {
-            args.push("--name".to_string());
-            args.push(name.clone());
-        }
-
-        // Remove on exit
-        if self.remove_on_exit {
-            args.push("--rm".to_string());
-        }
-
-        // Port mappings
-        for port in &self.port_mappings {
-            args.push("-p".to_string());
-            args.push(port.clone());
-        }
-
-        // Volume mounts
-        for vol in &self.volume_mounts {
-            args.push("-v".to_string());
-            args.push(vol.clone());
-        }
-
-        // Environment variables
-        for env in &self.env_vars {
-            args.push("-e".to_string());
-            args.push(env.clone());
-        }
-
-        // Extra args
-        for extra in &self.extra_args {
-            args.push(extra.clone());
-        }
-
-        // Image name
-        args.push(image.to_string());
-
-        // Shell command
-        args.push(self.shell.clone());
-
-        args
-    }
-
-    /// Validates the options.
-    ///
-    /// # Returns
-    /// Ok(()) if valid, Err with message if invalid.
-    pub fn validate(&self) -> Result<(), String> {
-        // Validate port mappings format
-        for port in &self.port_mappings {
-            if !port.contains(':') {
-                return Err(format!(
-                    "Invalid port mapping: {} (expected host:container)",
-                    port
-                ));
-            }
-        }
-
-        // Validate volume mount format
-        for vol in &self.volume_mounts {
-            if !vol.contains(':') {
-                return Err(format!(
-                    "Invalid volume mount: {} (expected host:container)",
-                    vol
-                ));
-            }
-        }
-
-        // Validate env var format
-        for env in &self.env_vars {
-            if !env.contains('=') {
-                return Err(format!("Invalid env var: {} (expected KEY=VALUE)", env));
-            }
-        }
-
-        Ok(())
-    }
-}
-
-/// Quick-connect item reference.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DockerQuickConnectItem {
-    /// Item type.
-    pub item_type: DockerItemType,
-    /// Container ID or Image ID.
-    pub id: String,
-    /// Display name for the item.
-    pub name: String,
-}
-
-impl DockerQuickConnectItem {
-    /// Creates a new quick-connect item from a container.
-    #[must_use]
-    pub fn from_container(container: &DockerContainer) -> Self {
-        Self {
-            item_type: container.item_type(),
-            id: container.id.clone(),
-            name: container.display().to_string(),
-        }
-    }
-
-    /// Creates a new quick-connect item from an image.
-    #[must_use]
-    pub fn from_image(image: &DockerImage) -> Self {
-        Self {
-            item_type: DockerItemType::Image,
-            id: image.id.clone(),
-            name: image.display(),
-        }
-    }
-}
-
-/// Quick-connect slots for a single host.
-/// Uses HashMap with String keys for TOML serialization compatibility.
-/// Keys are slot indices as strings ("0" through "8").
-pub type QuickConnectSlots = HashMap<String, DockerQuickConnectItem>;
-
-/// Collection of Docker containers and images with quick-connect assignments.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct DockerItemList {
-    /// Per-host quick-connect assignments.
-    /// Keys are "local" or "remote:{host_id}".
-    #[serde(default)]
-    pub host_quick_connect: HashMap<String, QuickConnectSlots>,
-    /// Legacy quick-connect (for backwards compatibility, migrated to host_quick_connect).
-    #[serde(default, skip_serializing)]
-    quick_connect: [Option<DockerQuickConnectItem>; MAX_QUICK_CONNECT],
-    /// Default shell for docker exec/run.
-    #[serde(default = "default_shell")]
-    pub default_shell: String,
-    /// Whether to show stopped containers in the list.
-    #[serde(default = "default_show_stopped")]
-    pub show_stopped: bool,
-    /// Currently selected Docker host.
-    #[serde(default)]
-    pub selected_host: DockerHost,
-}
-
-fn default_shell() -> String {
-    "/bin/sh".to_string()
-}
-
-fn default_show_stopped() -> bool {
-    true
-}
-
-impl DockerItemList {
-    /// Creates a new empty item list.
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            host_quick_connect: HashMap::new(),
-            quick_connect: Default::default(),
-            default_shell: default_shell(),
-            show_stopped: true,
-            selected_host: DockerHost::Local,
-        }
-    }
-
-    /// Migrates legacy quick_connect array to host_quick_connect HashMap.
-    /// Call this after deserialization to handle old config files.
-    pub fn migrate_legacy_quick_connect(&mut self) {
-        // Check if there are any legacy quick-connect items
-        let has_legacy = self.quick_connect.iter().any(Option::is_some);
-
-        if has_legacy && !self.host_quick_connect.contains_key("local") {
-            // Migrate legacy items to local host (convert array to HashMap with String keys)
-            let mut migrated: QuickConnectSlots = HashMap::new();
-            for (idx, item) in self.quick_connect.iter().enumerate() {
-                if let Some(qc) = item {
-                    migrated.insert(idx.to_string(), qc.clone());
-                }
-            }
-            self.host_quick_connect
-                .insert("local".to_string(), migrated);
-            // Clear legacy array
-            self.quick_connect = Default::default();
-        }
-    }
-
-    /// Returns the quick-connect slots for the currently selected host.
-    fn current_host_slots(&self) -> Option<&QuickConnectSlots> {
-        let key = self.selected_host.storage_key();
-        self.host_quick_connect.get(&key)
-    }
-
-    /// Returns mutable quick-connect slots for the currently selected host.
-    /// Creates empty slots if none exist.
-    fn current_host_slots_mut(&mut self) -> &mut QuickConnectSlots {
-        let key = self.selected_host.storage_key();
-        self.host_quick_connect.entry(key).or_default()
-    }
-
-    /// Returns the quick-connect item at the given index (0-8) for the current host.
-    #[must_use]
-    pub fn get_quick_connect(&self, index: usize) -> Option<&DockerQuickConnectItem> {
-        if index < MAX_QUICK_CONNECT {
-            let key = index.to_string();
-            self.current_host_slots().and_then(|slots| slots.get(&key))
-        } else {
-            None
-        }
-    }
-
-    /// Returns the quick-connect item for a specific host.
-    #[must_use]
-    pub fn get_quick_connect_for_host(
-        &self,
-        host: &DockerHost,
-        index: usize,
-    ) -> Option<&DockerQuickConnectItem> {
-        if index < MAX_QUICK_CONNECT {
-            let host_key = host.storage_key();
-            let slot_key = index.to_string();
-            self.host_quick_connect
-                .get(&host_key)
-                .and_then(|slots| slots.get(&slot_key))
-        } else {
-            None
-        }
-    }
-
-    /// Sets a quick-connect item at the given index (0-8) for the current host.
-    ///
-    /// Returns true if successful, false if index out of range.
-    pub fn set_quick_connect(&mut self, index: usize, item: DockerQuickConnectItem) -> bool {
-        if index < MAX_QUICK_CONNECT {
-            let key = index.to_string();
-            let slots = self.current_host_slots_mut();
-            slots.insert(key, item);
-            true
-        } else {
-            false
-        }
-    }
-
-    /// Removes the quick-connect item at the given index for the current host.
-    pub fn remove_quick_connect(&mut self, index: usize) -> bool {
-        if index < MAX_QUICK_CONNECT {
-            let key = index.to_string();
-            let slots = self.current_host_slots_mut();
-            slots.remove(&key);
-            true
-        } else {
-            false
-        }
-    }
-
-    /// Returns the number of assigned quick-connect slots for the current host.
-    #[must_use]
-    pub fn quick_connect_count(&self) -> usize {
-        self.current_host_slots()
-            .map(|slots| slots.len())
-            .unwrap_or(0)
-    }
-
-    /// Finds the quick-connect slot for a container ID on the current host.
-    #[must_use]
-    pub fn find_quick_connect_for_id(&self, id: &str) -> Option<usize> {
-        self.current_host_slots().and_then(|slots| {
-            slots
-                .iter()
-                .find(|(_, item)| item.id == id)
-                .and_then(|(key, _)| key.parse().ok())
-        })
-    }
-
-    /// Sets the selected Docker host.
-    pub fn set_selected_host(&mut self, host: DockerHost) {
-        self.selected_host = host;
-    }
-
-    /// Returns the currently selected Docker host.
-    #[must_use]
-    pub fn selected_host(&self) -> &DockerHost {
-        &self.selected_host
-    }
-}
-
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
 
@@ -1019,6 +313,33 @@ mod tests {
     }
 
     #[test]
+    fn every_api_state_word_maps_to_a_status() {
+        // These are the strings the Docker API puts in `ContainerSummary.state`.
+        assert_eq!(DockerStatus::parse("running"), DockerStatus::Running);
+        assert_eq!(DockerStatus::parse("exited"), DockerStatus::Exited);
+        assert_eq!(DockerStatus::parse("created"), DockerStatus::Created);
+        assert_eq!(DockerStatus::parse("restarting"), DockerStatus::Restarting);
+        assert_eq!(DockerStatus::parse("dead"), DockerStatus::Dead);
+        assert_eq!(DockerStatus::parse(""), DockerStatus::Unknown);
+    }
+
+    #[test]
+    fn stopped_states_are_grouped() {
+        assert!(DockerStatus::Exited.is_stopped());
+        assert!(DockerStatus::Dead.is_stopped());
+        assert!(DockerStatus::Stopped.is_stopped());
+        assert!(!DockerStatus::Running.is_stopped());
+        assert!(!DockerStatus::Unknown.is_stopped());
+    }
+
+    #[test]
+    fn item_types_carry_a_label_and_a_name() {
+        assert_eq!(DockerItemType::RunningContainer.label(), "[R]");
+        assert_eq!(DockerItemType::StoppedContainer.as_str(), "Stopped");
+        assert_eq!(DockerItemType::Image.label(), "[I]");
+    }
+
+    #[test]
     fn test_container_creation() {
         let container = DockerContainer::new(
             "abc123".to_string(),
@@ -1031,6 +352,74 @@ mod tests {
         assert_eq!(container.name, "my-nginx");
         assert!(container.is_running());
         assert_eq!(container.item_type(), DockerItemType::RunningContainer);
+    }
+
+    #[test]
+    fn a_stopped_container_reports_the_stopped_item_type() {
+        let container = DockerContainer::new(
+            "abc".to_string(),
+            "app".to_string(),
+            "img".to_string(),
+            "Exited (137) 1 hour ago".to_string(),
+        );
+        assert_eq!(container.item_type(), DockerItemType::StoppedContainer);
+        assert!(!container.is_running());
+    }
+
+    #[test]
+    fn a_summary_lists_ports_when_there_are_any() {
+        let mut container = DockerContainer::new(
+            "abc".to_string(),
+            "web".to_string(),
+            "nginx".to_string(),
+            "Up".to_string(),
+        );
+        assert_eq!(container.summary(), "web (nginx)");
+        container.ports = vec!["0.0.0.0:8080->80/tcp".to_string()];
+        assert_eq!(container.summary(), "web (nginx) [0.0.0.0:8080->80/tcp]");
+    }
+
+    #[test]
+    fn a_display_name_overrides_the_container_name() {
+        let mut container = DockerContainer::new(
+            "abc".to_string(),
+            "raw".to_string(),
+            "img".to_string(),
+            "Up".to_string(),
+        );
+        assert_eq!(container.display(), "raw");
+        container.display_name = Some("friendly".to_string());
+        assert_eq!(container.display(), "friendly");
+    }
+
+    #[test]
+    fn a_long_id_is_shortened_the_way_docker_prints_it() {
+        let container = DockerContainer::new(
+            "0123456789abcdef0123".to_string(),
+            "app".to_string(),
+            "img".to_string(),
+            "Up".to_string(),
+        );
+        assert_eq!(container.short_id(), "0123456789ab");
+
+        let short = DockerContainer::new(
+            "abc".to_string(),
+            "app".to_string(),
+            "img".to_string(),
+            "Up".to_string(),
+        );
+        assert_eq!(short.short_id(), "abc");
+    }
+
+    #[test]
+    #[should_panic(expected = "container id must not be empty")]
+    fn a_container_without_an_id_is_refused() {
+        let _ = DockerContainer::new(
+            String::new(),
+            "n".to_string(),
+            "i".to_string(),
+            "Up".to_string(),
+        );
     }
 
     #[test]
@@ -1051,155 +440,22 @@ mod tests {
     }
 
     #[test]
-    fn test_run_options_build_args() {
-        let mut opts = DockerRunOptions::new();
-        opts.name = Some("test-container".to_string());
-        opts.port_mappings.push("8080:80".to_string());
-        opts.env_vars.push("DEBUG=true".to_string());
-
-        let args = opts.build_args("nginx:latest");
-
-        assert!(args.contains(&"-it".to_string()));
-        assert!(args.contains(&"--name".to_string()));
-        assert!(args.contains(&"test-container".to_string()));
-        assert!(args.contains(&"-p".to_string()));
-        assert!(args.contains(&"8080:80".to_string()));
-        assert!(args.contains(&"nginx:latest".to_string()));
-    }
-
-    #[test]
-    fn test_run_options_validate() {
-        let mut opts = DockerRunOptions::new();
-        assert!(opts.validate().is_ok());
-
-        opts.port_mappings.push("invalid".to_string());
-        assert!(opts.validate().is_err());
-
-        opts.port_mappings.clear();
-        opts.volume_mounts.push("no-colon".to_string());
-        assert!(opts.validate().is_err());
-    }
-
-    #[test]
-    fn test_quick_connect() {
-        let mut list = DockerItemList::new();
-
-        let container = DockerContainer::new(
-            "abc123".to_string(),
-            "my-app".to_string(),
-            "myimage".to_string(),
-            "Up".to_string(),
+    fn an_image_summary_includes_the_size_when_known() {
+        let mut image = DockerImage::new(
+            "sha256:abc".to_string(),
+            "nginx".to_string(),
+            "latest".to_string(),
         );
-
-        let item = DockerQuickConnectItem::from_container(&container);
-        assert!(list.set_quick_connect(0, item.clone()));
-        assert_eq!(list.quick_connect_count(), 1);
-
-        let retrieved = list.get_quick_connect(0);
-        assert!(retrieved.is_some());
-        assert_eq!(retrieved.unwrap().id, "abc123");
-
-        assert_eq!(list.find_quick_connect_for_id("abc123"), Some(0));
-        assert_eq!(list.find_quick_connect_for_id("xyz"), None);
+        assert_eq!(image.summary(), "nginx:latest");
+        image.size = "150MB".to_string();
+        assert_eq!(image.summary(), "nginx:latest (150MB)");
+        image.display_name = Some("the web server".to_string());
+        assert_eq!(image.display(), "the web server");
     }
 
     #[test]
-    fn test_docker_host_local() {
-        let host = DockerHost::Local;
-        assert!(host.is_local());
-        assert!(!host.is_remote());
-        assert_eq!(host.host_id(), None);
-        assert_eq!(host.display_name(), "Local");
-        assert_eq!(host.storage_key(), "local");
-        assert!(host.ssh_args().is_none());
-    }
-
-    #[test]
-    fn test_docker_host_remote() {
-        let host = DockerHost::remote(
-            1,
-            "server.example.com".to_string(),
-            22,
-            "admin".to_string(),
-            Some("My Server".to_string()),
-        );
-
-        assert!(!host.is_local());
-        assert!(host.is_remote());
-        assert_eq!(host.host_id(), Some(1));
-        assert_eq!(host.display_name(), "My Server");
-        assert_eq!(host.storage_key(), "remote:1");
-
-        let args = host.ssh_args().unwrap();
-        assert_eq!(args.len(), 1);
-        assert_eq!(args[0], "admin@server.example.com");
-    }
-
-    #[test]
-    fn test_docker_host_remote_custom_port() {
-        let host = DockerHost::remote(
-            2,
-            "192.168.1.100".to_string(),
-            2222,
-            "user".to_string(),
-            None,
-        );
-
-        assert_eq!(host.display_name(), "192.168.1.100");
-
-        let args = host.ssh_args().unwrap();
-        assert_eq!(args.len(), 3);
-        assert_eq!(args[0], "-p");
-        assert_eq!(args[1], "2222");
-        assert_eq!(args[2], "user@192.168.1.100");
-    }
-
-    #[test]
-    fn test_per_host_quick_connect() {
-        let mut list = DockerItemList::new();
-
-        let container1 = DockerContainer::new(
-            "local123".to_string(),
-            "local-app".to_string(),
-            "myimage".to_string(),
-            "Up".to_string(),
-        );
-
-        let container2 = DockerContainer::new(
-            "remote456".to_string(),
-            "remote-app".to_string(),
-            "myimage".to_string(),
-            "Up".to_string(),
-        );
-
-        // Set quick-connect on local host
-        list.set_selected_host(DockerHost::Local);
-        let item1 = DockerQuickConnectItem::from_container(&container1);
-        list.set_quick_connect(0, item1);
-        assert_eq!(list.quick_connect_count(), 1);
-        assert_eq!(list.get_quick_connect(0).unwrap().id, "local123");
-
-        // Switch to remote host
-        let remote_host =
-            DockerHost::remote(1, "server.com".to_string(), 22, "user".to_string(), None);
-        list.set_selected_host(remote_host.clone());
-
-        // Remote should have no quick-connect yet
-        assert_eq!(list.quick_connect_count(), 0);
-        assert!(list.get_quick_connect(0).is_none());
-
-        // Set quick-connect on remote host
-        let item2 = DockerQuickConnectItem::from_container(&container2);
-        list.set_quick_connect(0, item2);
-        assert_eq!(list.quick_connect_count(), 1);
-        assert_eq!(list.get_quick_connect(0).unwrap().id, "remote456");
-
-        // Switch back to local - should still have local container
-        list.set_selected_host(DockerHost::Local);
-        assert_eq!(list.get_quick_connect(0).unwrap().id, "local123");
-
-        // Switch back to remote - should still have remote container
-        list.set_selected_host(remote_host);
-        assert_eq!(list.get_quick_connect(0).unwrap().id, "remote456");
+    #[should_panic(expected = "image id must not be empty")]
+    fn an_image_without_an_id_is_refused() {
+        let _ = DockerImage::new(String::new(), "repo".to_string(), "tag".to_string());
     }
 }

@@ -25,51 +25,50 @@ impl App {
         match action {
             LogAction::None => {}
             LogAction::NavigateUp => {
-                if let Some(ref mut manager) = self.docker_manager {
-                    if let Some(ref mut state) = manager.docker_logs_state {
-                        state.select_prev();
-                    }
+                if let Some(ref mut manager) = self.docker_manager
+                    && let Some(ref mut state) = manager.docker_logs_state
+                {
+                    state.select_prev();
                 }
             }
             LogAction::NavigateDown => {
-                if let Some(ref mut manager) = self.docker_manager {
-                    if let Some(ref mut state) = manager.docker_logs_state {
-                        state.select_next();
-                    }
+                if let Some(ref mut manager) = self.docker_manager
+                    && let Some(ref mut state) = manager.docker_logs_state
+                {
+                    state.select_next();
                 }
             }
             LogAction::NavigateFirst => {
-                if let Some(ref mut manager) = self.docker_manager {
-                    if let Some(ref mut state) = manager.docker_logs_state {
-                        state.select_first();
-                    }
+                if let Some(ref mut manager) = self.docker_manager
+                    && let Some(ref mut state) = manager.docker_logs_state
+                {
+                    state.select_first();
                 }
             }
             LogAction::NavigateLast => {
-                if let Some(ref mut manager) = self.docker_manager {
-                    if let Some(ref mut state) = manager.docker_logs_state {
-                        state.select_last();
-                    }
+                if let Some(ref mut manager) = self.docker_manager
+                    && let Some(ref mut state) = manager.docker_logs_state
+                {
+                    state.select_last();
                 }
             }
             LogAction::PageUp => {
-                if let Some(ref mut manager) = self.docker_manager {
-                    if let Some(ref mut state) = manager.docker_logs_state {
-                        state.log_buffer_mut().scroll_up(20);
-                        if state.mode() == LogViewMode::Streaming {
-                            state.pause();
-                        }
+                if let Some(ref mut manager) = self.docker_manager
+                    && let Some(ref mut state) = manager.docker_logs_state
+                {
+                    state.log_buffer_mut().scroll_up(20);
+                    if state.mode() == LogViewMode::Streaming {
+                        state.pause();
                     }
                 }
             }
             LogAction::PageDown => {
-                if let Some(ref mut manager) = self.docker_manager {
-                    if let Some(ref mut state) = manager.docker_logs_state {
-                        state.log_buffer_mut().scroll_down(20);
-                        if state.log_buffer().is_at_bottom() && state.mode() == LogViewMode::Paused
-                        {
-                            state.resume();
-                        }
+                if let Some(ref mut manager) = self.docker_manager
+                    && let Some(ref mut state) = manager.docker_logs_state
+                {
+                    state.log_buffer_mut().scroll_down(20);
+                    if state.log_buffer().is_at_bottom() && state.mode() == LogViewMode::Paused {
+                        state.resume();
                     }
                 }
             }
@@ -80,53 +79,53 @@ impl App {
                 self.docker_logs_close();
             }
             LogAction::TogglePause => {
-                if let Some(ref mut manager) = self.docker_manager {
-                    if let Some(ref mut state) = manager.docker_logs_state {
-                        state.toggle_pause();
-                    }
+                if let Some(ref mut manager) = self.docker_manager
+                    && let Some(ref mut state) = manager.docker_logs_state
+                {
+                    state.toggle_pause();
                 }
             }
             LogAction::StartSearch => {
-                if let Some(ref mut manager) = self.docker_manager {
-                    if let Some(ref mut state) = manager.docker_logs_state {
-                        state.enter_search();
-                    }
+                if let Some(ref mut manager) = self.docker_manager
+                    && let Some(ref mut state) = manager.docker_logs_state
+                {
+                    state.enter_search();
                 }
             }
             LogAction::ApplySearch => {
-                if let Some(ref mut manager) = self.docker_manager {
-                    if let Some(ref mut state) = manager.docker_logs_state {
-                        state.exit_search();
-                    }
+                if let Some(ref mut manager) = self.docker_manager
+                    && let Some(ref mut state) = manager.docker_logs_state
+                {
+                    state.exit_search();
                 }
             }
             LogAction::CancelSearch => {
-                if let Some(ref mut manager) = self.docker_manager {
-                    if let Some(ref mut state) = manager.docker_logs_state {
-                        state.cancel_search();
-                    }
+                if let Some(ref mut manager) = self.docker_manager
+                    && let Some(ref mut state) = manager.docker_logs_state
+                {
+                    state.cancel_search();
                 }
             }
             LogAction::InsertChar(c) => {
-                if let Some(ref mut manager) = self.docker_manager {
-                    if let Some(ref mut state) = manager.docker_logs_state {
-                        state.search_insert_char(c);
-                    }
+                if let Some(ref mut manager) = self.docker_manager
+                    && let Some(ref mut state) = manager.docker_logs_state
+                {
+                    state.search_insert_char(c);
                 }
             }
             LogAction::SearchBackspace => {
-                if let Some(ref mut manager) = self.docker_manager {
-                    if let Some(ref mut state) = manager.docker_logs_state {
-                        state.search_backspace();
-                    }
+                if let Some(ref mut manager) = self.docker_manager
+                    && let Some(ref mut state) = manager.docker_logs_state
+                {
+                    state.search_backspace();
                 }
             }
             LogAction::ClearLogs => {
-                if let Some(ref mut manager) = self.docker_manager {
-                    if let Some(ref mut state) = manager.docker_logs_state {
-                        state.log_buffer_mut().clear();
-                        self.set_status("Logs cleared");
-                    }
+                if let Some(ref mut manager) = self.docker_manager
+                    && let Some(ref mut state) = manager.docker_logs_state
+                {
+                    state.log_buffer_mut().clear();
+                    self.set_status("Logs cleared");
                 }
             }
             LogAction::ToggleTimestamps => {
@@ -134,32 +133,32 @@ impl App {
                 self.set_status("Timestamps toggled");
             }
             LogAction::ShowSavedSearches => {
-                if let Some(ref mut manager) = self.docker_manager {
-                    if let Some(ref mut state) = manager.docker_logs_state {
-                        state.enter_saved_searches();
-                    }
+                if let Some(ref mut manager) = self.docker_manager
+                    && let Some(ref mut state) = manager.docker_logs_state
+                {
+                    state.enter_saved_searches();
                 }
             }
             LogAction::SaveSearch => {
-                if let Some(ref mut manager) = self.docker_manager {
-                    if let Some(ref mut state) = manager.docker_logs_state {
-                        let input = state.search_input().to_string();
-                        if !input.is_empty() {
-                            state.save_current_search(input.clone());
-                            let _ = state.search_manager_mut().save();
-                            self.set_status(format!("Search saved: {}", input));
-                        }
+                if let Some(ref mut manager) = self.docker_manager
+                    && let Some(ref mut state) = manager.docker_logs_state
+                {
+                    let input = state.search_input().to_string();
+                    if !input.is_empty() {
+                        state.save_current_search(input.clone());
+                        let _ = state.search_manager_mut().save();
+                        self.set_status(format!("Search saved: {}", input));
                     }
                 }
             }
             LogAction::DeleteSavedSearch => {
-                if let Some(ref mut manager) = self.docker_manager {
-                    if let Some(ref mut state) = manager.docker_logs_state {
-                        let idx = state.saved_search_idx();
-                        if state.search_manager_mut().remove(idx) {
-                            let _ = state.search_manager_mut().save();
-                            self.set_status("Saved search deleted");
-                        }
+                if let Some(ref mut manager) = self.docker_manager
+                    && let Some(ref mut state) = manager.docker_logs_state
+                {
+                    let idx = state.saved_search_idx();
+                    if state.search_manager_mut().remove(idx) {
+                        let _ = state.search_manager_mut().save();
+                        self.set_status("Saved search deleted");
                     }
                 }
             }
@@ -212,10 +211,10 @@ impl App {
 
         if should_go_to_list {
             self.docker_stop_log_stream();
-            if let Some(ref mut manager) = self.docker_manager {
-                if let Some(ref mut state) = manager.docker_logs_state {
-                    state.back_to_list();
-                }
+            if let Some(ref mut manager) = self.docker_manager
+                && let Some(ref mut state) = manager.docker_logs_state
+            {
+                state.back_to_list();
             }
         } else {
             // From container list or saved searches, go back to Docker Manager list
@@ -236,13 +235,12 @@ impl App {
             state.search_manager().get(idx).map(|s| s.pattern.clone())
         };
 
-        if let Some(pattern) = pattern {
-            if let Some(ref mut manager) = self.docker_manager {
-                if let Some(ref mut state) = manager.docker_logs_state {
-                    state.log_buffer_mut().set_filter(pattern);
-                    state.exit_saved_searches();
-                }
-            }
+        if let Some(pattern) = pattern
+            && let Some(ref mut manager) = self.docker_manager
+            && let Some(ref mut state) = manager.docker_logs_state
+        {
+            state.log_buffer_mut().set_filter(pattern);
+            state.exit_saved_searches();
         }
     }
 

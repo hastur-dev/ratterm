@@ -43,21 +43,21 @@ impl App {
     /// Starts streaming logs for a specific container.
     pub fn docker_start_log_stream(&mut self, container_id: &str, container_name: &str) {
         // Enter streaming mode in state
-        if let Some(ref mut manager) = self.docker_manager {
-            if let Some(ref mut state) = manager.docker_logs_state {
-                state.enter_streaming(container_id.to_string(), container_name.to_string());
-                state.set_status(format!("Connecting to {}...", container_name));
-            }
+        if let Some(ref mut manager) = self.docker_manager
+            && let Some(ref mut state) = manager.docker_logs_state
+        {
+            state.enter_streaming(container_id.to_string(), container_name.to_string());
+            state.set_status(format!("Connecting to {}...", container_name));
         }
 
         // Try to connect to Docker and start the stream
         let docker = match bollard::Docker::connect_with_local_defaults() {
             Ok(d) => d,
             Err(e) => {
-                if let Some(ref mut manager) = self.docker_manager {
-                    if let Some(ref mut state) = manager.docker_logs_state {
-                        state.set_error(format!("Failed to connect to Docker: {}", e));
-                    }
+                if let Some(ref mut manager) = self.docker_manager
+                    && let Some(ref mut state) = manager.docker_logs_state
+                {
+                    state.set_error(format!("Failed to connect to Docker: {}", e));
                 }
                 return;
             }
@@ -77,10 +77,10 @@ impl App {
                 self.set_status(format!("Streaming logs from {}", container_name));
             }
             Err(e) => {
-                if let Some(ref mut manager) = self.docker_manager {
-                    if let Some(ref mut state) = manager.docker_logs_state {
-                        state.set_error(format!("Failed to start stream: {}", e));
-                    }
+                if let Some(ref mut manager) = self.docker_manager
+                    && let Some(ref mut state) = manager.docker_logs_state
+                {
+                    state.set_error(format!("Failed to start stream: {}", e));
                 }
             }
         }
@@ -123,10 +123,10 @@ impl App {
 
             match rx.try_recv() {
                 Ok(entry) => {
-                    if let Some(ref mut manager) = self.docker_manager {
-                        if let Some(ref mut state) = manager.docker_logs_state {
-                            state.log_buffer_mut().push(entry);
-                        }
+                    if let Some(ref mut manager) = self.docker_manager
+                        && let Some(ref mut state) = manager.docker_logs_state
+                    {
+                        state.log_buffer_mut().push(entry);
                     }
                     count += 1;
                 }
@@ -134,10 +134,10 @@ impl App {
                 Err(mpsc::error::TryRecvError::Disconnected) => {
                     // Stream ended
                     self.docker_log_rx = None;
-                    if let Some(ref mut manager) = self.docker_manager {
-                        if let Some(ref mut state) = manager.docker_logs_state {
-                            state.set_status("Stream ended".to_string());
-                        }
+                    if let Some(ref mut manager) = self.docker_manager
+                        && let Some(ref mut state) = manager.docker_logs_state
+                    {
+                        state.set_status("Stream ended".to_string());
                     }
                     break;
                 }

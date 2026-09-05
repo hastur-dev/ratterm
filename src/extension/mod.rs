@@ -173,10 +173,10 @@ impl ExtensionManager {
 
         for entry in entries.filter_map(Result::ok) {
             let path = entry.path();
-            if path.is_dir() {
-                if let Err(e) = self.load_extension(&path) {
-                    tracing::warn!("Failed to load extension at {:?}: {}", path, e);
-                }
+            if path.is_dir()
+                && let Err(e) = self.load_extension(&path)
+            {
+                tracing::warn!("Failed to load extension at {:?}: {}", path, e);
             }
         }
 

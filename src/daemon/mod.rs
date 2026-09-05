@@ -182,10 +182,10 @@ impl DaemonManager {
         self.active.store(false, Ordering::Relaxed);
 
         // Stop the receiver (non-blocking: skip if lock is contended).
-        if let Ok(mut guard) = self.receiver.try_lock() {
-            if let Some(mut recv) = guard.take() {
-                recv.stop();
-            }
+        if let Ok(mut guard) = self.receiver.try_lock()
+            && let Some(mut recv) = guard.take()
+        {
+            recv.stop();
         }
 
         // Drop the thread handle without joining — the thread will exit
@@ -269,10 +269,10 @@ impl DaemonManager {
         }
 
         // Clear cached metrics
-        if let Ok(guard) = self.receiver.lock() {
-            if let Some(ref receiver) = *guard {
-                receiver.remove(host_id);
-            }
+        if let Ok(guard) = self.receiver.lock()
+            && let Some(ref receiver) = *guard
+        {
+            receiver.remove(host_id);
         }
 
         info!("Daemon stopped for host_id={}", host_id);

@@ -138,11 +138,11 @@ impl<'a> GhostTextWidget<'a> {
                 // Handle wide characters
                 for i in 1..char_width {
                     let x2 = text_x + (current_col + i) as u16;
-                    if x2 < text_x + text_width {
-                        if let Some(cell) = buf.cell_mut((x2, y)) {
-                            cell.set_char(' ');
-                            cell.set_style(self.style);
-                        }
+                    if x2 < text_x + text_width
+                        && let Some(cell) = buf.cell_mut((x2, y))
+                    {
+                        cell.set_char(' ');
+                        cell.set_style(self.style);
                     }
                 }
             }

@@ -310,10 +310,10 @@ pub fn render_host_selection_list(selector: &DockerManagerSelector, area: Rect, 
         }
     }
 
-    if scroll_offset + max_visible < hosts.len() {
-        if let Some(last) = lines.last_mut() {
-            *last = Line::styled("  ▼ more below", Style::default().fg(Color::DarkGray));
-        }
+    if scroll_offset + max_visible < hosts.len()
+        && let Some(last) = lines.last_mut()
+    {
+        *last = Line::styled("  ▼ more below", Style::default().fg(Color::DarkGray));
     }
 
     let para = Paragraph::new(lines);

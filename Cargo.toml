@@ -2,7 +2,9 @@
 name = "ratterm"
 version = "0.2.3"
 edition = "2024"
-rust-version = "1.85"
+# Raised from 1.85: the OS-keychain backend (`keyring` 4) requires 1.88 and the
+# Kubernetes client (`kube` 4) requires 1.89.
+rust-version = "1.89"
 description = "A split-terminal TUI with PTY terminal and code editor"
 license = "GPL-3.0-or-later"
 authors = ["Hastur-Dev"]
@@ -10,6 +12,12 @@ authors = ["Hastur-Dev"]
 [[bin]]
 name = "rat"
 path = "src/main.rs"
+
+# The fleet metric reporter. Built from the same sources as the TUI, so it
+# runs anywhere ratterm builds rather than only on Linux hosts with curl.
+[[bin]]
+name = "rat-agent"
+path = "src/bin/rat-agent.rs"
 
 [features]
 default = []
@@ -81,6 +89,17 @@ unicode-segmentation = "1.12"
 
 # SSH authentication testing
 ssh2 = "0.9"
+keyring = "4.2"
+argon2 = "0.6"
+chacha20poly1305 = "0.11"
+getrandom = "0.3"
+base64 = "0.23"
+zeroize = { version = "1.9", features = ["derive"] }
+sha2 = "0.11.0"
+rusqlite = { version = "0.40", features = ["bundled"] }
+kube = { version = "4.2", features = ["client", "rustls-tls", "runtime", "ws"] }
+k8s-openapi = { version = "0.28", features = ["v1_33"] }
+sysinfo = { version = "0.37", default-features = false, features = ["system", "disk"] }
 
 [dev-dependencies]
 proptest = "1.6"

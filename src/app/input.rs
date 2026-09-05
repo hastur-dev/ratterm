@@ -48,6 +48,18 @@ impl App {
             return;
         }
 
+        // The Kubernetes screens cover the whole pane, so they take keys
+        // before the mode router does; otherwise a key would reach the editor
+        // underneath a panel the user cannot see past.
+        if self.is_k8s_manager_open() && self.handle_k8s_key(key) {
+            return;
+        }
+
+        // Same for the Docker fleet view.
+        if self.is_docker_fleet_open() && self.handle_docker_fleet_key(key) {
+            return;
+        }
+
         match self.mode {
             AppMode::Normal => {
                 tracing::info!("KEY_ROUTE: -> handle_normal_key");
@@ -147,7 +159,47 @@ impl App {
                 self.show_file_browser();
                 true
             }
-            // Test-keys mode: F1=Palette, F2=SSH, F3=Docker, F4=Health Dashboard
+            // The hint bar advertises Ctrl+T globally, so it has to work
+            // globally. It used to live behind the editor-focused handler,
+            // which the user cannot reach while the IDE pane is hidden:
+            // focus is refused to a hidden pane, so the key did nothing.
+            (KeyModifiers::CONTROL, KeyCode::Char('t')) => {
+                self.new_editor_tab();
+                true
+            }
+            // Kubernetes. Ctrl+Shift+K rather than a bare letter because it
+            // opens a full-screen panel over whatever is being edited.
+            (m, KeyCode::Char('k') | KeyCode::Char('K'))
+                if m == KeyModifiers::CONTROL | KeyModifiers::SHIFT =>
+            {
+                if self.is_k8s_manager_open() {
+                    self.close_k8s_manager();
+                } else {
+                    self.open_k8s_manager();
+                }
+                true
+            }
+            // The Docker fleet: every container on every host, one screen.
+            (m, KeyCode::Char('m') | KeyCode::Char('M'))
+                if m == KeyModifiers::CONTROL | KeyModifiers::SHIFT =>
+            {
+                if self.is_docker_fleet_open() {
+                    self.close_docker_fleet();
+                } else {
+                    self.open_docker_fleet();
+                }
+                true
+            }
+            (KeyModifiers::NONE, KeyCode::F(7)) if self.test_keys => {
+                self.open_docker_fleet();
+                true
+            }
+            // Test-keys mode: F1=Palette, F2=SSH, F3=Docker, F4=Health, F6=K8s,
+            // F7=Docker fleet. F5 is the debugger's "start".
+            (KeyModifiers::NONE, KeyCode::F(6)) if self.test_keys => {
+                self.open_k8s_manager();
+                true
+            }
             (KeyModifiers::NONE, KeyCode::F(1)) if self.test_keys => {
                 self.show_popup(PopupKind::CommandPalette);
                 true
@@ -294,16 +346,19 @@ impl App {
     /// Handles editor-specific global keybindings. Returns true if handled.
     fn handle_editor_global_key(&mut self, key: KeyEvent) -> bool {
         match (key.modifiers, key.code) {
-            (KeyModifiers::CONTROL, KeyCode::Char('t')) => {
-                self.new_editor_tab();
-                true
-            }
             (KeyModifiers::CONTROL, KeyCode::Char('w')) => {
                 self.close_editor_tab();
                 true
             }
+            // Find within the file happens in the editor's own bar, beside
+            // the text, with live match highlighting and a match count. The
+            // popup this used to open covered the thing being searched.
             (KeyModifiers::CONTROL, KeyCode::Char('f')) => {
-                self.show_popup(PopupKind::SearchInFile);
+                self.editor.open_search(false);
+                true
+            }
+            (KeyModifiers::CONTROL, KeyCode::Char('h')) => {
+                self.editor.open_search(true);
                 true
             }
             (m, KeyCode::Char('f') | KeyCode::Char('F'))

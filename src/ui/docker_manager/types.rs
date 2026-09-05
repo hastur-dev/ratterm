@@ -209,11 +209,14 @@ impl DockerHostDisplay {
     }
 
     /// Creates a display item for a remote SSH host.
+    ///
+    /// The port is no longer part of the item: connection details are resolved
+    /// from the host registry when a command runs, so keeping a copy here could
+    /// only ever go stale.
     #[must_use]
     pub fn remote(
         host_id: u32,
         hostname: String,
-        port: u16,
         username: String,
         display_name: Option<String>,
         has_credentials: bool,
@@ -224,10 +227,10 @@ impl DockerHostDisplay {
 
         Self {
             host_id: Some(host_id),
-            hostname: hostname.clone(),
-            display_name: name,
+            hostname,
+            display_name: name.clone(),
             has_credentials,
-            host: DockerHost::remote(host_id, hostname, port, username, display_name),
+            host: DockerHost::remote_labelled(host_id, name),
         }
     }
 

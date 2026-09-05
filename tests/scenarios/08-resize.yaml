@@ -1,0 +1,10 @@
+# The interface redraws at a different size.
+name: interface follows the terminal size
+width: 100
+height: 30
+steps:
+  - expect_text: "No terminal"
+  - snapshot: wide
+  - resize: 60x20
+  - expect_text: "No terminal"
+  - snapshot: narrow

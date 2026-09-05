@@ -1,0 +1,244 @@
+# Is it better than the baseline?
+
+The work in this branch implements the recommendations in
+`docs/improvement_recommendations.md`. This is the evidence for whether that
+made the system better, and where it did not.
+
+Baseline is commit `5f90fc3` ("fix: install scripts resolve the actual released
+version"), the state of the branch before this work started.
+
+## The headline
+
+Yes, with two qualifications stated in full below: the file-size rule is still
+broken in 35 files, and several new subsystems have no test that talks to the
+real thing they wrap.
+
+The strongest single piece of evidence is not a count. It is that at baseline
+`cargo test` did not finish, and now it does.
+
+At baseline, `cargo fmt --check` and `cargo clippy --all-targets
+--all-features -- -D warnings` were both clean, and the test command exited
+101:
+
+```
+test test_pty_kill has been running for over 60 seconds
+test test_pty_large_output has been running for over 60 seconds
+test test_pty_read has been running for over 60 seconds
+test test_pty_shutdown has been running for over 60 seconds
+error: test failed, to rerun pass `--test terminal_pty_tests`
+```
+
+Four PTY tests hung. The cause was that `Pty` dropped its `Child` without
+killing it: on Windows the ConPTY handle stayed open as long as the child did,
+so `drop` blocked. One run measured 198.76 seconds inside `drop(pty)`.
+
+## What could not be done before, and can be now
+
+| Question | Baseline | Now |
+|---|---|---|
+| Does the test suite pass? | It did not finish. `test_pty_large_output` spent 198.76s inside `drop(pty)` and the run hung. | Full suite green. It was green on Windows first and nowhere else; see *It only built on Windows*. |
+| Do unsaved edits survive a tab switch? | No. Switching tabs re-read the file from disk, discarding the buffer and its undo history. | Yes. Each tab owns its document; switching swaps state. |
+| Where are SSH passwords kept? | Base64 in `~/.ratterm/ssh_hosts.toml`, under a "derivation" that ignored both the salt and the password. | OS keychain by default; an Argon2id + XChaCha20-Poly1305 file where there is no keychain; plaintext only if asked for. |
+| Can another local process drive the editor and the shell? | Yes. The IPC endpoint had no authentication at all. | No. A per-session token, `0600`, required on the first message. |
+| Does an SSH command reuse a connection? | No. Every call spawned `plink`/`ssh` afresh. | A pooled, persistent session per host, with known-hosts verification and ProxyJump. |
+| Can an agent see the interface? | No. The API could drive the PTY and the buffer and could not read a single popup, dashboard or status line. | `app.snapshot` renders a frame off-screen and returns it as text or as styled cells; `app.send_key` and `app.send_mouse` drive it. |
+| Can it run without a terminal? | No. | `--headless WxH`, and `--scenario` files that assert on frames. |
+| Does a metric survive a restart? | No. Two collectors each kept the latest sample in a `HashMap`. | One ingest path, a SQLite history with retention and downsampling, and alert rules evaluated on every sample. |
+| Can a Windows or macOS host report metrics? | No. The reporter was a Bash script needing `/proc` and `curl`. | `rat-agent`, built from the same sources, on every platform ratterm builds for. |
+| Are containers on several hosts visible at once? | No, one host at a time through the `docker` CLI's text output. | The Engine API through bollard, several hosts at once, one fleet view. |
+| Is there any Kubernetes support? | None. | Contexts, five resource kinds, scale, rollout restart, delete, pod logs, port forward. |
+| Is a misspelled setting reported? | No. `metrics_hisory = true` left history off and said nothing. | `--check-config` reports it with a line number and a suggestion; start-up says so in the status bar. |
+| Does CI cover Linux, Windows and macOS? | Partly. | Nine jobs across ubuntu, windows, macos and arm64, including the scenario suite and a headless smoke test on each. Ten of them failed on the first push; see *It only built on Windows*. |
+
+## Counted
+
+Measured from git for the baseline and from the working tree for the current
+state; the script is reproducible from `docs/improvement_evidence.md` history.
+
+| Measure | Baseline | Now |
+|---|---|---|
+| Source files | 222 | 376 |
+| Source lines | 80,006 | 130,003 |
+| `#[test]` attributes | 1,259 | 3,004 (2,477 unit + 527 integration) |
+| Integration test files | 21 | 32 |
+| Interface scenarios | 0 | 12 |
+| Files over 500 lines (including tests) | 47 | 53 |
+| Files whose *code* exceeds 500 lines | — | 35 |
+
+The test count is 2.4x, and that ratio understates the change: the baseline's
+tests were concentrated in the parser, the grid and the host list, while the
+new ones cover the parts that had none — credentials, sessions, ingest,
+validation, key maps and rendering.
+
+## Where it is not better
+
+**The 500-line rule is still broken, in 35 files.** The project's own
+instructions cap a file at 500 lines. The baseline broke it in 47 files; this
+branch leaves 35 over the limit in code alone, excluding tests.
+
+Most of that is inherited and untouched here: `completion/keyword.rs` at 1,345
+lines of code, `terminal/mod.rs` at 1,160, `lsp/client.rs` at 1,046. Files this
+work introduced were split until they fit — `docker/discovery.rs` (1,782) and
+`docker/container.rs` (1,205) into eleven files, `telemetry/mod.rs`,
+`ui/k8s_manager/mod.rs` and `ui/editor_widget.rs` into modules of their own.
+
+What is not fixed is the two orchestrators: `app/mod.rs` grew from 775 to 1,062
+lines and `app/render.rs` from 258 to 943 as five screens were added to them.
+Both are `impl App` dispatch, so splitting them means deciding where App's
+responsibilities divide — a design question, not a mechanical move, and it was
+not answered here.
+
+**Several new subsystems have no test against the real thing.** Kubernetes
+listing, watching, exec, port forwarding and log streaming need a live API
+server. Docker's typed client needs a daemon. The SSH session layer needs a
+host. In each case the logic underneath is pure and tested, and the wrapper is
+deliberately thin — but "the patch body is exactly right" is not the same
+claim as "scaling a deployment works", and this branch only establishes the
+first.
+
+**The Docker fleet refreshes on the calling thread.** Each host is connected
+and listed in turn, so a fleet with several unreachable hosts pauses the
+interface for the length of the connect timeouts. `DockerFleet::record_snapshot`
+exists to do this on a worker thread; nothing calls it yet.
+
+**Pod log following polls rather than streams.** `kube`'s log stream needs the
+`futures-io` traits, and no `futures` dependency was added. The follower asks
+for the last few seconds once a second and drops what it has already shown:
+the same lines, up to a second later.
+
+**`lsp-format-on-save` still does nothing.** It parses, validates and round-
+trips through TOML, and the formatting request exists in
+`src/lsp/formatting.rs` — but the application holds `completion::lsp`, a
+smaller duplicate client that cannot send it, and consolidating the two LSP
+modules was not done. The setting now says so in the status bar on every save
+rather than being a documented feature that silently does not happen. Making it
+work needs the consolidation, which is the largest single item left undone.
+
+**Remote Docker needs a TCP listener.** An SSH `direct-tcpip` channel cannot
+reach a Unix socket, so a remote daemon must listen on `127.0.0.1:2375`. Hosts
+without it fall back to the CLI path.
+
+**93 `#[ignore]`d tests do not pass when you run them.** They are the
+`tests/expectrl_*` suites, which spawn the real binary in a Windows ConPTY.
+They were ignored with the reason "requires `cargo build --release` first", and
+the harness hardcoded the release path — which is why nobody noticed. The path
+now falls back to the debug build, so they can be run with an ordinary build,
+and when run they fail:
+
+```
+$ cargo test --test expectrl_smoke_tests -- --ignored --test-threads=1
+test result: FAILED. 1 passed; 3 failed
+  Timed out waiting for 'ratterm v' after 5s. Buffer: 0 bytes, stripped: 0 chars.
+```
+
+Zero bytes come back from the ConPTY, while the same binary run directly
+prints `ratterm v0.2.2` immediately. The harness is broken on this machine, not
+the application. It was left broken: the scenario runner added in this branch
+covers the same ground deterministically, on three platforms, without a PTY,
+and repairing a Windows-only harness to duplicate that is not obviously worth
+doing. Whoever disagrees now has the failure in front of them rather than
+behind an `#[ignore]` with a misleading reason.
+
+**`.claude/CLAUDE.md` still says edition 2021 and MSRV 1.75**; the manifest says
+2024 and 1.89. That file is gitignored, so it could not be fixed on this
+branch — it needs a one-line edit in the working copy.
+
+## It only built on Windows
+
+Everything above was written and gated on Windows. The first CI run of this
+branch — run `33969937995` on `0febb8d` — failed ten of its eighteen jobs:
+Clippy, Test on `ubuntu-latest`, `ubuntu-24.04-arm` and `macos-latest`,
+Scenarios and Headless smoke on `ubuntu-latest` and `macos-latest`,
+Documentation, and the MSRV check. Every one of them failed at its first
+compile step. Format, Security Audit, the three install-script jobs and all
+three Windows jobs passed.
+
+One line did all of it. `src/ssh/collector.rs` had
+
+```rust
+#[cfg(windows)]
+#[cfg(windows)]
+use tracing::{debug, error, info, warn};
+```
+
+while `info!`, `debug!`, `warn!` and `error!` are called seventeen times in that
+file under no gate at all. Two `#[cfg]` attributes on one item mean *both* must
+hold: on Windows both are true and the import survives, and everywhere else it
+is removed and the file does not compile. A Windows-only gate cannot see that,
+and no Linux, macOS or ARM job had compiled this branch before that push — the
+last run that did was the baseline on `dev`.
+
+Two further failures were behind it, invisible while the crate would not build:
+
+**Clippy's `collapsible_if`, in two Unix-only functions.** `UnixServer::new`
+and `NetworkScanner::detect_unix_interfaces` each nested two `if`s that clippy
+wants written as one `let` chain. The matching Windows function had already
+been collapsed. The only job that runs clippy runs on Linux, and on Linux the
+crate did not compile, so nothing had ever linted the Unix arm.
+
+**Sixteen rustdoc errors.** Fourteen public doc comments linked to private
+items, one named `choose_transport` without saying it lives in
+`docker::transport`, one linked to an enum variant's field, and two repeated a
+path their label already resolved. `RUSTDOCFLAGS: -D warnings` makes each of
+them an error. They had been there since the modules were written; the
+Documentation job never got past the compile step to report them.
+
+### What now fails instead
+
+`tests/portability_tests.rs` reads the sources and the workflow, because a unit
+test cannot catch a compile error for a platform the host is not:
+
+- stacked `#[cfg]` attributes are a test failure, not a build that happens to
+  work on one target;
+- a platform-gated `use tracing::` import is a test failure, since the macros
+  are called unconditionally throughout the crate;
+- the four runners in the matrix, the six commands CI runs, and the three
+  places warnings are made fatal all have to still be there.
+
+`NetworkScanner`'s two parsers were split from the commands that feed them and
+are no longer `#[cfg]`-gated; the platform picks between them with `cfg!`, so
+the Windows parser is type-checked, linted and tested on Linux too. Ten tests
+cover both against real `ip addr`, `ifconfig` and `ipconfig` output, and five
+cover the Unix socket server that had one test before — the missing parent
+directory, the `0600` mode, a stale socket file and the file's removal on drop.
+
+### Verified where
+
+Everything below ran on `cthulhu-computer`, x86_64 Linux, with the commands and
+the `RUSTFLAGS: -D warnings` the workflow uses.
+
+| Command | Result |
+|---|---|
+| `cargo fmt --all -- --check` | exit 0 |
+| `cargo clippy --all-targets --all-features -- -D warnings` | exit 0, no diagnostics, 10.9s |
+| `cargo test --all-features --verbose` | 2908 passed, 0 failed, 7 ignored |
+| `cargo test --doc` | 3 passed, 0 failed, 1 ignored |
+| `cargo build --release` | exit 0, 4m 54s |
+| `./target/release/rat --verify` | `ratterm v0.2.2 verify-ok` |
+| `RUSTDOCFLAGS=-D warnings cargo doc --no-deps --all-features` | exit 0 |
+| `cargo +1.89 check --all-features` | exit 0 |
+| `rat --scenario-dir tests/scenarios --fixtures tests/fixtures/fleet` | 12 scenarios, 0 failed |
+| the headless control-API probe from the workflow | authenticated, 120x40 frame, fleet on screen, exit 0 |
+
+The seven ignored tests are the pre-existing ones that need a live SSH host or
+a released binary; the eleven `expectrl_*` files are `#![cfg(windows)]` and are
+not built here. Neither was changed.
+
+macOS and `ubuntu-24.04-arm` cannot be checked from here: no macOS SDK and no
+aarch64 cross toolchain. The macOS-only and arch-specific code — `libproc` in
+`terminal/pty.rs`, the shell tables in `config/shell.rs`, the `open -a Docker`
+call in `docker/ops.rs` — is unchanged since the baseline commit, whose CI run
+compiled and tested both targets. Everything this repair touches is either
+platform-independent or `cfg(unix)`, which the Linux runs above cover.
+
+## What the evidence does not show
+
+Nothing here measures whether the application is *pleasant to use*. The
+scenarios assert that a screen opens, contains what it should, and closes;
+they say nothing about whether the fleet view is the right shape or whether
+anyone wants a Kubernetes client in their terminal. Seven interface defects
+were found by writing those scenarios — a command palette that rendered
+nothing after visiting the Docker manager, a `Ctrl+T` binding advertised
+globally and reachable only when the IDE pane was already visible — which
+suggests the interface had more of them than anyone had counted, and that the
+twelve scenarios now in the tree are a floor rather than a ceiling.

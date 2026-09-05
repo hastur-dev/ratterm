@@ -219,45 +219,40 @@ impl App {
 
     /// Toggles git blame for the current file.
     pub(crate) fn toggle_git_blame(&mut self) {
-        self.git_blame_active = !self.git_blame_active;
-
-        if self.git_blame_active {
-            self.load_git_blame();
-        } else {
-            self.git_blame_data.clear();
+        if self.git.is_blaming() {
+            self.git.hide_blame();
             self.set_status("Blame view off");
+        } else {
+            self.load_git_blame();
         }
     }
 
     /// Loads blame data for the current editor file.
     fn load_git_blame(&mut self) {
+        // Nothing sets "blaming" until there is blame to show, so a failed
+        // load cannot leave the view on with the previous file's data in it.
         let Some(file_path) = self.editor.path().cloned() else {
             self.set_status("No file open for blame");
-            self.git_blame_active = false;
             return;
         };
 
         let Some(repo_path) = self.current_repo_path() else {
             self.set_status("Not in a git repository");
-            self.git_blame_active = false;
             return;
         };
 
         match api::git_blame(Path::new(&repo_path), &file_path) {
             Ok(blame) => {
-                self.git_blame_data = blame;
+                self.git.show_blame(blame);
                 self.set_status("Blame view on");
             }
-            Err(e) => {
-                self.set_status(format!("Blame failed: {}", e));
-                self.git_blame_active = false;
-            }
+            Err(e) => self.set_status(format!("Blame failed: {}", e)),
         }
     }
 
     /// Updates git gutter indicators for the current file.
     pub(crate) fn update_git_gutter(&mut self) {
-        self.git_gutter.clear();
+        self.git.clear_gutter();
 
         if !self.config.git_gutter {
             return;
@@ -272,7 +267,7 @@ impl App {
         };
 
         if let Ok(diff) = api::git_diff(Path::new(&repo_path), Some(&file_path)) {
-            self.git_gutter = compute_gutter_indicators(&diff);
+            self.git.set_gutter(compute_gutter_indicators(&diff));
         }
     }
 

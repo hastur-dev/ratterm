@@ -4,6 +4,8 @@
 //! - Windows: Named Pipes
 //! - Unix: Domain Sockets
 
+pub mod tcp;
+
 #[cfg(windows)]
 pub mod windows;
 
@@ -39,10 +41,16 @@ pub trait Connection: Send {
 }
 
 /// Generic buffered connection wrapper.
+///
+/// Holds a partial line across calls. A transport with a read timeout — which
+/// is how the server stays responsive to shutdown — returns from `read_line`
+/// mid-message; without somewhere to keep those bytes they would be dropped
+/// and every following message would be misframed.
 pub struct BufferedConnection<R: BufRead, W: Write> {
     reader: R,
     writer: W,
     open: bool,
+    pending: String,
 }
 
 impl<R: BufRead + Send, W: Write + Send> BufferedConnection<R, W> {
@@ -52,8 +60,26 @@ impl<R: BufRead + Send, W: Write + Send> BufferedConnection<R, W> {
             reader,
             writer,
             open: true,
+            pending: String::new(),
         }
     }
+
+    /// Removes and returns the first complete line held in `pending`.
+    fn take_pending_line(&mut self) -> Option<String> {
+        let idx = self.pending.find('\n')?;
+        let line: String = self.pending.drain(..=idx).collect();
+        Some(line.trim_end().to_string())
+    }
+}
+
+/// Returns true for the error kinds that mean "no data yet", not "broken".
+fn is_would_block(kind: std::io::ErrorKind) -> bool {
+    matches!(
+        kind,
+        std::io::ErrorKind::WouldBlock
+            | std::io::ErrorKind::TimedOut
+            | std::io::ErrorKind::Interrupted
+    )
 }
 
 impl<R: BufRead + Send, W: Write + Send> Connection for BufferedConnection<R, W> {
@@ -62,26 +88,32 @@ impl<R: BufRead + Send, W: Write + Send> Connection for BufferedConnection<R, W>
             return Ok(None);
         }
 
-        let mut line = String::new();
-        match self.reader.read_line(&mut line) {
-            Ok(0) => {
-                self.open = false;
-                Ok(None)
+        // Bounded so a stream of blank lines cannot spin forever.
+        const MAX_BLANK_LINES: usize = 1024;
+
+        for _ in 0..MAX_BLANK_LINES {
+            if let Some(line) = self.take_pending_line() {
+                if line.is_empty() {
+                    continue;
+                }
+                return Ok(Some(line));
             }
-            Ok(_) => {
-                let trimmed = line.trim_end();
-                if trimmed.is_empty() {
-                    Ok(None)
-                } else {
-                    Ok(Some(trimmed.to_string()))
+
+            match self.reader.read_line(&mut self.pending) {
+                Ok(0) => {
+                    self.open = false;
+                    return Ok(None);
+                }
+                Ok(_) => {}
+                Err(e) if is_would_block(e.kind()) => return Ok(None),
+                Err(e) => {
+                    self.open = false;
+                    return Err(ApiError::Transport(e));
                 }
             }
-            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => Ok(None),
-            Err(e) => {
-                self.open = false;
-                Err(ApiError::Transport(e))
-            }
         }
+
+        Ok(None)
     }
 
     fn write_message(&mut self, msg: &str) -> Result<(), ApiError> {

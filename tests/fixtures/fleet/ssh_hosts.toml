@@ -1,0 +1,60 @@
+# Fixture host list for scripted runs.
+#
+# These addresses are in the documentation range reserved by RFC 5737 and
+# resolve to nothing, and a fixture run clears the remote executor anyway, so
+# nothing here can reach a real machine. The passwords are obvious placeholders
+# for the same reason.
+
+next_id = 5
+
+[settings]
+storage_mode = "plaintext"
+
+[[hosts]]
+id = 1
+hostname = "192.0.2.10"
+port = 22
+display_name = "fixture-gpu"
+connection_count = 3
+
+[[hosts]]
+id = 2
+hostname = "192.0.2.11"
+port = 22
+display_name = "fixture-rock5c"
+connection_count = 1
+
+[[hosts]]
+id = 3
+hostname = "192.0.2.12"
+port = 2222
+display_name = "fixture-pi"
+connection_count = 0
+
+[[hosts]]
+id = 4
+hostname = "192.0.2.13"
+port = 22
+display_name = "fixture-behind-jump"
+connection_count = 0
+jump_host_id = 1
+
+[credentials.1]
+username = "fixture"
+password = "fixture-not-a-real-password"
+save = true
+
+[credentials.2]
+username = "fixture"
+password = "fixture-not-a-real-password"
+save = true
+
+[credentials.3]
+username = "fixture"
+key_path = "/nonexistent/fixture_key"
+save = true
+
+[credentials.4]
+username = "fixture"
+password = "fixture-not-a-real-password"
+save = true

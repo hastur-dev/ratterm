@@ -25,10 +25,10 @@ impl UnixServer {
         }
 
         // Create parent directory if needed
-        if let Some(parent) = path.parent() {
-            if !parent.exists() {
-                std::fs::create_dir_all(parent)?;
-            }
+        if let Some(parent) = path.parent()
+            && !parent.exists()
+        {
+            std::fs::create_dir_all(parent)?;
         }
 
         // Bind the listener
@@ -150,6 +150,78 @@ mod tests {
     use super::*;
     use std::thread;
     use std::time::Duration;
+
+    #[test]
+    fn new_creates_a_missing_parent_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        // Two levels that do not exist yet: `dirs::runtime_dir()` can name a
+        // directory that has never been created on a headless machine.
+        let socket_path = dir.path().join("run").join("ratterm").join("api.sock");
+
+        let server = UnixServer::new(Some(socket_path.clone())).unwrap();
+
+        assert!(socket_path.exists(), "the socket was not bound");
+        assert_eq!(server.socket_path(), &socket_path);
+    }
+
+    #[test]
+    fn new_restricts_the_socket_to_its_owner() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempfile::tempdir().unwrap();
+        let socket_path = dir.path().join("api.sock");
+
+        let _server = UnixServer::new(Some(socket_path.clone())).unwrap();
+
+        let mode = std::fs::metadata(&socket_path)
+            .unwrap()
+            .permissions()
+            .mode();
+        assert_eq!(
+            mode & 0o777,
+            0o600,
+            "another local account could drive this instance"
+        );
+    }
+
+    #[test]
+    fn new_replaces_a_stale_socket_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let socket_path = dir.path().join("api.sock");
+        // A crashed instance leaves the file behind; bind fails on it.
+        std::fs::write(&socket_path, b"left over").unwrap();
+
+        let server = UnixServer::new(Some(socket_path.clone())).unwrap();
+
+        assert!(UnixClient::connect(server.socket_path()).is_ok());
+    }
+
+    #[test]
+    fn drop_removes_the_socket_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let socket_path = dir.path().join("api.sock");
+
+        {
+            let _server = UnixServer::new(Some(socket_path.clone())).unwrap();
+            assert!(socket_path.exists());
+        }
+
+        assert!(!socket_path.exists(), "the socket file outlived the server");
+    }
+
+    #[test]
+    fn default_socket_path_is_absolute_and_named() {
+        let path = default_socket_path();
+        assert!(path.is_absolute(), "{} is not absolute", path.display());
+        assert_eq!(path.file_name().unwrap(), "ratterm-api.sock");
+        // macOS caps a socket path at 104 bytes, which is the shortest limit
+        // of the platforms this runs on.
+        assert!(
+            path.as_os_str().len() < 104,
+            "{} is too long to bind on macOS",
+            path.display()
+        );
+    }
 
     #[test]
     fn test_server_client_communication() {

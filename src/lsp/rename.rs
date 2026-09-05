@@ -77,16 +77,14 @@ pub fn parse_workspace_edit(result: JsonValue) -> Option<WorkspaceEditResult> {
     // Handle "documentChanges" field: TextDocumentEdit[]
     if let Some(doc_changes) = result.get("documentChanges").and_then(|d| d.as_array()) {
         for doc_change in doc_changes {
-            if let Some(text_doc) = doc_change.get("textDocument") {
-                if let Some(uri) = text_doc.get("uri").and_then(|u| u.as_str()) {
-                    if let Some(path) = uri_to_path(uri) {
-                        if let Some(edits_val) = doc_change.get("edits") {
-                            let edits = parse_text_edits(edits_val);
-                            if !edits.is_empty() {
-                                changes.entry(path).or_default().extend(edits);
-                            }
-                        }
-                    }
+            if let Some(text_doc) = doc_change.get("textDocument")
+                && let Some(uri) = text_doc.get("uri").and_then(|u| u.as_str())
+                && let Some(path) = uri_to_path(uri)
+                && let Some(edits_val) = doc_change.get("edits")
+            {
+                let edits = parse_text_edits(edits_val);
+                if !edits.is_empty() {
+                    changes.entry(path).or_default().extend(edits);
                 }
             }
         }

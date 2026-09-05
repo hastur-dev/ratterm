@@ -2,6 +2,7 @@
 //!
 //! Handles reading and writing theme configuration to the .ratrc file.
 
+use std::collections::BTreeMap;
 use std::fs;
 use std::io;
 use std::path::Path;
@@ -18,6 +19,14 @@ use super::{
 /// Theme settings that can be persisted to .ratrc.
 #[derive(Debug, Clone, Default)]
 pub struct ThemeSettings {
+    /// Every colour the file set, by its `component.part` name.
+    ///
+    /// The named fields below cover the colours this type has always had.
+    /// This holds the rest — `popup.background`, `filebrowser.directory` and
+    /// the others — which were documented and accepted by a custom theme file
+    /// but silently dropped here. They are applied through the same function
+    /// a theme file uses, so the two cannot diverge again.
+    pub colors: BTreeMap<String, Color>,
     /// Global theme preset name.
     pub theme: Option<String>,
     /// Terminal foreground color.
@@ -136,6 +145,11 @@ impl ThemeSettings {
             "tab.inactive_bg" => self.tab_inactive_bg = parse_color(value),
             "tab.inactive_fg" => self.tab_inactive_fg = parse_color(value),
             "tab_theme_pattern" => self.tab_theme_pattern = TabThemePattern::from_name(value),
+            other if super::custom::is_color_key(other) => {
+                if let Some(color) = parse_color(value) {
+                    self.colors.insert(other.to_string(), color);
+                }
+            }
             "tab_themes" => {
                 self.tab_themes = value
                     .split(',')
@@ -151,6 +165,12 @@ impl ThemeSettings {
     #[must_use]
     pub fn apply_to_theme(&self, base: &Theme) -> Theme {
         let mut theme = base.clone();
+
+        // Applied first, so a colour that also has a named field below keeps
+        // the named field's value and the two cannot disagree.
+        for (key, color) in &self.colors {
+            super::custom::apply_color_to_theme(&mut theme, key, *color);
+        }
 
         // Terminal settings
         if let Some(color) = self.terminal_foreground {
@@ -223,10 +243,10 @@ impl ThemeSettings {
     /// Applies settings to a theme manager.
     pub fn apply_to_manager(&self, manager: &mut ThemeManager) {
         // Set base theme from preset
-        if let Some(ref theme_name) = self.theme {
-            if let Some(preset) = ThemePreset::from_name(theme_name) {
-                manager.set_preset(preset);
-            }
+        if let Some(ref theme_name) = self.theme
+            && let Some(preset) = ThemePreset::from_name(theme_name)
+        {
+            manager.set_preset(preset);
         }
 
         // Apply color overrides
@@ -284,14 +304,13 @@ fn update_or_append_setting(content: &str, key: &str, value: &str) -> String {
     // Find and update existing setting
     for line in &mut lines {
         let trimmed = line.trim();
-        if !trimmed.starts_with('#') {
-            if let Some((existing_key, _)) = trimmed.split_once('=') {
-                if existing_key.trim() == key {
-                    *line = setting_line.clone();
-                    found = true;
-                    break;
-                }
-            }
+        if !trimmed.starts_with('#')
+            && let Some((existing_key, _)) = trimmed.split_once('=')
+            && existing_key.trim() == key
+        {
+            *line = setting_line.clone();
+            found = true;
+            break;
         }
     }
 

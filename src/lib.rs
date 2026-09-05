@@ -36,6 +36,7 @@
 
 pub mod api;
 pub mod app;
+pub mod cli;
 pub mod clipboard;
 pub mod completion;
 pub mod config;
@@ -46,12 +47,19 @@ pub mod docker_logs;
 pub mod editor;
 pub mod extension;
 pub mod filebrowser;
+pub mod fixtures;
 pub mod git;
+pub mod hosts;
+pub mod k8s;
 pub mod logging;
 pub mod lsp;
 pub mod remote;
+pub mod scenario;
+pub mod secrets;
 pub mod session;
 pub mod ssh;
+pub mod store;
+pub mod telemetry;
 pub mod terminal;
 pub mod theme;
 pub mod ui;

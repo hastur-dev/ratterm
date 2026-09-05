@@ -15,7 +15,10 @@ These hotkeys work regardless of which pane is focused or what mode you're in.
 | `Ctrl+Shift+P` | Open Command Palette (non-Windows 11) |
 | `Ctrl+Shift+Tab` | Switch Editor Mode (cycles Vim/Emacs/Default) |
 | `Ctrl+G` | Open Git Dashboard |
+| `Ctrl+Shift+K` | Open or close the Kubernetes screens |
+| `Ctrl+Shift+M` | Open or close the Docker fleet view (every container on every host) |
 | `Ctrl+O` | Open File Browser |
+| `Ctrl+T` | New editor tab (works whether or not the IDE pane is showing) |
 | `Ctrl+Shift+C` | Copy selection |
 | `Ctrl+V` | Paste from clipboard |
 | `Alt+Left` | Focus Terminal pane |
@@ -901,3 +904,99 @@ When running an image with options (`Ctrl+O`):
 - `Enter` - Run image with default settings (shows confirm dialog)
 - `Ctrl+O` - Run image with custom options
 - `d` - Remove image
+
+## Deterministic keys for scripted runs
+
+`--test-keys`, and every scenario unless it sets `test_keys: false`, enable six
+extra keys:
+
+| Hotkey | Action |
+|--------|--------|
+| `F1` | Command palette |
+| `F2` | SSH manager |
+| `F3` | Docker manager |
+| `F4` | SSH health dashboard |
+| `F6` | Kubernetes (F5 is the debugger) |
+| `F7` | Docker fleet view |
+
+They exist because the real shortcut for the command palette differs between
+Windows 11 and every other platform, so a scenario written against it would not
+be the same test everywhere. See `docs/automation.md`.
+
+---
+
+## Editor: folding, find, and multiple cursors
+
+These work in the editor pane in every keybinding mode — Vim, Emacs and Default
+alike. They sit on `Ctrl+Alt` because that is the one modifier pair the global
+handler leaves alone apart from `Ctrl+Alt+1`–`9` (Docker quick connect). See
+`docs/editor.md` for what each feature does.
+
+### Code folding
+
+| Hotkey | Action |
+|--------|--------|
+| `Ctrl+Alt+[` | Collapse the region under the cursor |
+| `Ctrl+Alt+]` | Expand the region under the cursor |
+| `Ctrl+Alt+K` | Collapse every region in the file |
+| `Ctrl+Alt+J` | Expand every region |
+
+A collapsed region draws as a single line ending in `⋯ N lines`, and the gutter
+shows `▾` beside a region that can be collapsed and `▸` beside one that is. The
+cursor cannot stand inside a collapsed region; arrow keys step over it.
+
+### Find and replace
+
+| Hotkey | Action |
+|--------|--------|
+| `Ctrl+Alt+F` | Open the find bar |
+| `Ctrl+Alt+H` | Open the find bar with the replace field |
+| `F3` | Next match |
+| `Shift+F3` | Previous match |
+
+`Ctrl+F` still opens the older search-in-file popup; the bar above is the
+in-pane one, with live match highlighting and a count.
+
+While the find bar has focus:
+
+| Hotkey | Action |
+|--------|--------|
+| `Enter` / `Down` | Next match, wrapping at the end of the file |
+| `Shift+Enter` / `Up` | Previous match, wrapping at the start |
+| `Tab` | Switch between the find and replace fields |
+| `Ctrl+Enter` | Replace the current match |
+| `Alt+Enter` | Replace every match (one undo step) |
+| `Alt+C` | Toggle case sensitivity |
+| `Esc` | Close the bar |
+
+The bar shows `3/12` for the current match and total, says `wrapped` when
+navigation has just come round an end, and `Aa` while case-sensitive.
+
+### Multiple cursors
+
+| Hotkey | Action |
+|--------|--------|
+| `Ctrl+Alt+Down` | Add a cursor on the line below |
+| `Ctrl+Alt+Up` | Add a cursor on the line above |
+| `Ctrl+Alt+D` | Add a cursor at the next occurrence of the word under the cursor |
+| `Ctrl+Alt+L` | Add a cursor at every occurrence |
+| `Esc` (Default mode) | Drop back to one cursor |
+| `Esc` (Vim insert mode) | Leave insert mode and drop back to one cursor |
+| `Ctrl+G` (Emacs) | Drop back to one cursor, clear the mark, close the find bar |
+
+Typing, `Backspace` and `Enter` reach every cursor, and the whole fan-out is a
+single undo step. Auto-pairing is skipped while more than one cursor is active.
+
+### Editing behaviour that has no hotkey
+
+- **Enter** re-indents: one level deeper after `{`, `(`, `[` or a Python `:`,
+  one level shallower before a closing bracket, and pressing it between a
+  bracket pair opens an indented body with the closer on its own line.
+- **Tab** inserts one indentation unit in the file's own style — tabs in a
+  tab-indented file, two spaces in a two-space file — rather than four literal
+  spaces. With a selection it indents the selected lines; `Shift+Tab` outdents.
+- **Typing an opening bracket or quote** inserts its partner; typing the closer
+  steps over it rather than doubling it. Typing `}` re-indents the line onto the
+  line that opened the block.
+- **The bracket under the cursor** and its partner are drawn bold and
+  underlined, including when the cursor sits just past the closer.

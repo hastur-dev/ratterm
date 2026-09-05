@@ -3,6 +3,7 @@
 //! Provides an IPC interface for AI agents to control Ratterm.
 //! Uses Named Pipes on Windows and Unix domain sockets on Unix.
 
+pub mod auth;
 pub mod handler;
 pub mod protocol;
 pub mod server;
@@ -11,9 +12,10 @@ pub mod transport;
 use std::sync::mpsc;
 use thiserror::Error;
 
+pub use auth::{AuthError, ConnectionAuth, SessionToken};
 pub use handler::ApiHandler;
 pub use protocol::{ApiRequest, ApiResponse};
-pub use server::ApiServer;
+pub use server::{ApiEndpoint, ApiServer, ApiServerConfig};
 
 /// Maximum requests to process per frame (bounded loop).
 pub const MAX_REQUESTS_PER_FRAME: usize = 10;

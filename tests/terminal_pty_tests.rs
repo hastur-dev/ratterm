@@ -225,22 +225,29 @@ fn test_pty_large_output() {
 
     let _ = pty.write(cmd);
 
-    // Wait for output
-    std::thread::sleep(Duration::from_millis(500));
-
+    // Poll for a bounded time rather than sleeping a fixed amount: how long a
+    // shell takes to start and echo depends on machine load, and the whole
+    // test suite runs in parallel.
+    let deadline = std::time::Instant::now() + Duration::from_secs(20);
     let mut total_bytes = 0;
-    let max_iterations = 100;
 
-    for _ in 0..max_iterations {
+    while std::time::Instant::now() < deadline {
         match pty.read() {
-            Ok(data) if !data.is_empty() => {
+            Ok(data) => {
                 total_bytes += data.len();
+                if total_bytes > 0 {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(20));
             }
-            _ => break,
+            Err(_) => break,
         }
     }
 
-    assert!(total_bytes > 0, "Should receive some output");
+    assert!(
+        total_bytes > 0,
+        "expected output from the shell within the deadline"
+    );
 }
 
 /// Test PTY default config values.

@@ -107,14 +107,13 @@ pub fn cleanup_old_logs(retention_hours: u32) -> io::Result<u32> {
         }
 
         // Check file age
-        if let Ok(metadata) = entry.metadata() {
-            if let Ok(modified) = metadata.modified() {
-                if let Ok(age) = now.duration_since(modified) {
-                    if age > retention_duration && fs::remove_file(&path).is_ok() {
-                        deleted_count += 1;
-                    }
-                }
-            }
+        if let Ok(metadata) = entry.metadata()
+            && let Ok(modified) = metadata.modified()
+            && let Ok(age) = now.duration_since(modified)
+            && age > retention_duration
+            && fs::remove_file(&path).is_ok()
+        {
+            deleted_count += 1;
         }
     }
 
@@ -190,30 +189,27 @@ pub fn check_rotation() -> io::Result<bool> {
     if let Ok(entries) = fs::read_dir(&log_dir) {
         for entry in entries.flatten() {
             let path = entry.path();
-            if path.extension().and_then(|e| e.to_str()) == Some("log") {
-                if let Ok(metadata) = entry.metadata() {
-                    if let Ok(modified) = metadata.modified() {
-                        if newest_log.as_ref().is_none_or(|(_, t)| modified > *t) {
-                            newest_log = Some((path, modified));
-                        }
-                    }
-                }
+            if path.extension().and_then(|e| e.to_str()) == Some("log")
+                && let Ok(metadata) = entry.metadata()
+                && let Ok(modified) = metadata.modified()
+                && newest_log.as_ref().is_none_or(|(_, t)| modified > *t)
+            {
+                newest_log = Some((path, modified));
             }
         }
     }
 
     // Check if rotation is needed
-    if let Some((path, _)) = newest_log {
-        if let Ok(metadata) = fs::metadata(&path) {
-            if metadata.len() > MAX_LOG_SIZE_BYTES {
-                // Create new log file (rotation happens naturally with timestamped names)
-                tracing::info!(
-                    "Log rotation triggered, file size: {} bytes",
-                    metadata.len()
-                );
-                return Ok(true);
-            }
-        }
+    if let Some((path, _)) = newest_log
+        && let Ok(metadata) = fs::metadata(&path)
+        && metadata.len() > MAX_LOG_SIZE_BYTES
+    {
+        // Create new log file (rotation happens naturally with timestamped names)
+        tracing::info!(
+            "Log rotation triggered, file size: {} bytes",
+            metadata.len()
+        );
+        return Ok(true);
     }
 
     Ok(false)

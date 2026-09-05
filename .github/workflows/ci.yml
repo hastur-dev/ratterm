@@ -1,6 +1,8 @@
 name: CI
 
 on:
+  # Every branch, so a push is checked before a pull request exists.
+  push:
   pull_request:
     branches: [main, master]
   workflow_dispatch:
@@ -58,7 +60,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, ubuntu-24.04-arm, windows-latest, macos-latest]
+        # The three platforms the project supports, plus an ARM Linux runner.
+        # A PTY, a named pipe and a Unix socket behave differently enough that
+        # all three have to run the suite, not only compile it.
+        os:
+          - ubuntu-latest
+          - windows-latest
+          - macos-latest
+          - ubuntu-24.04-arm
 
     steps:
       - uses: actions/checkout@v4
@@ -223,7 +232,9 @@ jobs:
       - name: Install MSRV Rust
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: "1.85"  # Match rust-version in Cargo.toml
+          # Match rust-version in Cargo.toml. Raised from 1.85 because
+          # keyring 4 needs 1.88 and kube 4 needs 1.89.
+          toolchain: "1.89"
 
       - name: Cache cargo registry
         uses: actions/cache@v4
@@ -238,4 +249,234 @@ jobs:
 
       - name: Check MSRV
         run: cargo check --all-features
+
+  # Interface scenarios. The same YAML files run on every platform, which is
+  # the cross-platform check the project needs: a popup that draws on Linux
+  # and not on Windows fails here rather than in someone's terminal.
+  scenario:
+    name: Scenarios (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-scenario-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-scenario-
+
+      # A debug build. The release profile uses fat LTO and one codegen unit,
+      # which costs far more time than it saves in a run that renders frames
+      # and asserts on text.
+      - name: Build binary
+        run: cargo build
+
+      - name: Run scenarios
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            BIN=./target/debug/rat.exe
+          else
+            BIN=./target/debug/rat
+          fi
+          # Exits non-zero when any scenario fails, so no extra assertion is
+          # needed here.
+          "$BIN" --scenario-dir tests/scenarios \
+                 --fixtures tests/fixtures/fleet \
+                 --results-dir test-results \
+                 --no-update
+
+      # Always, including on failure: a failing scenario writes the snapshot
+      # that shows what was on screen, which is the whole point of keeping it.
+      - name: Upload scenario results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scenario-results-${{ matrix.os }}
+          path: test-results/
+          if-no-files-found: warn
+
+  # Proves the control API works on each platform, not only that it compiles
+  # there. A named pipe, a Unix socket and a loopback port are three different
+  # code paths, and the loopback port is the one this checks everywhere.
+  headless-smoke:
+    name: Headless smoke (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-smoke-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-smoke-
+            ${{ runner.os }}-cargo-scenario-
+
+      - name: Build binary
+        run: cargo build
+
+      # Start, probe and stop in one step. A process backgrounded in one step
+      # is not reliably still there in the next one.
+      - name: Drive a headless instance over the control API
+        shell: bash
+        env:
+          PYTHONIOENCODING: utf-8
+        run: |
+          # Not errexit: the probe's exit status is wanted, so the instance
+          # log can be printed before the step fails.
+          set +e -u -o pipefail
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            BIN=./target/debug/rat.exe
+          else
+            BIN=./target/debug/rat
+          fi
+
+          # --test-keys enables F2, which opens the SSH manager. The startup
+          # frame shows the terminal pane and no host names; the manager is
+          # where the fixture fleet appears.
+          "$BIN" --headless --api-tcp 47119 \
+                 --fixtures tests/fixtures/fleet \
+                 --no-update --test-keys > headless.log 2>&1 &
+          RAT_PID=$!
+
+          python - <<'PY'
+          import json
+          import socket
+          import sys
+          import time
+          from pathlib import Path
+
+          ADDRESS = ("127.0.0.1", 47119)
+          TOKEN_FILE = Path.home() / ".ratterm" / "api.token"
+          # The instance answers from its own event loop and gives up after
+          # five seconds; while it is attaching its terminal a frame can pass
+          # that. Both numbers below allow for it.
+          INSTANCE_TIMEOUT = -32000
+          DEADLINE = time.monotonic() + 120
+
+
+          def open_socket():
+              """Connects once the instance is listening."""
+              while time.monotonic() < DEADLINE:
+                  try:
+                      sock = socket.create_connection(ADDRESS, 5)
+                  except OSError:
+                      time.sleep(0.5)
+                      continue
+                  sock.settimeout(30)
+                  return sock
+              sys.exit("the control endpoint never answered")
+
+
+          sock = open_socket()
+          buffer = bytearray()
+          counter = 0
+
+
+          def call(method, params=None):
+              """Sends one request and returns the decoded reply."""
+              global counter
+              counter += 1
+              request = {"id": str(counter), "method": method, "params": params or {}}
+              sock.sendall(json.dumps(request).encode("utf-8") + b"\n")
+              while b"\n" not in buffer:
+                  chunk = sock.recv(1 << 20)
+                  if not chunk:
+                      sys.exit(f"the instance closed the connection during {method}")
+                  buffer.extend(chunk)
+              index = buffer.find(b"\n")
+              line = bytes(buffer[:index])
+              del buffer[: index + 1]
+              return json.loads(line.decode("utf-8"))
+
+
+          def result_of(method, params=None):
+              """Calls a method and fails the job if it errors."""
+              reply = call(method, params)
+              if "error" in reply:
+                  sys.exit(f"{method} failed: {reply['error']}")
+              return reply["result"]
+
+
+          # The token is read after the connection is accepted: an instance
+          # publishes its token and then binds, so a token read earlier can be
+          # a previous run's.
+          token = TOKEN_FILE.read_text(encoding="utf-8").strip()
+          result_of("session.authenticate", {"token": token})
+          print("authenticated; version", result_of("system.get_version"))
+
+          # Render until the event loop is warm, so the assertions below are
+          # about the interface and not about startup timing.
+          while True:
+              reply = call("app.snapshot", {})
+              if "error" not in reply:
+                  break
+              if reply["error"].get("code") != INSTANCE_TIMEOUT:
+                  sys.exit(f"app.snapshot failed: {reply['error']}")
+              if time.monotonic() > DEADLINE:
+                  sys.exit("the instance never rendered a frame")
+
+          result_of("app.send_key", {"key": "F2"})
+          frame = result_of("app.snapshot", {})
+          text = "\n".join(frame["lines"])
+
+          if not text.strip():
+              sys.exit("the instance rendered an empty frame")
+          if "fixture-gpu" not in text:
+              print(text.encode("ascii", "replace").decode("ascii"))
+              sys.exit("the fixture fleet is not on screen")
+
+          state = result_of("app.state")
+          print("frame", frame["width"], "x", frame["height"], "-", len(text), "chars")
+          print("status:", state["status"])
+          print("control API works on this platform")
+
+          result_of("system.quit", {"force": True})
+          sock.close()
+          PY
+          STATUS=$?
+
+          # The instance quits itself; kill it only if it is still there.
+          for _ in $(seq 1 50); do
+            kill -0 "$RAT_PID" 2>/dev/null || break
+            sleep 0.2
+          done
+          kill -9 "$RAT_PID" 2>/dev/null || true
+
+          if [ "$STATUS" -ne 0 ]; then
+            echo "--- instance log ---"
+            cat headless.log
+          fi
+          exit "$STATUS"
 

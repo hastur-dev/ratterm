@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::thread::{self, JoinHandle};
 
-use portable_pty::{CommandBuilder, MasterPty, PtySize, native_pty_system};
+use portable_pty::{Child, CommandBuilder, MasterPty, PtySize, native_pty_system};
 use thiserror::Error;
 
 /// Maximum read buffer size.
@@ -114,19 +114,34 @@ impl PtyConfig {
 }
 
 /// PTY instance.
+///
+/// Field order is load bearing. Rust drops fields in declaration order, and on
+/// Windows closing the pseudo-console master blocks until every process
+/// attached to it has exited. The child handle and the writer therefore come
+/// first, so the shell is already gone by the time the master closes.
 pub struct Pty {
-    /// Master PTY handle.
-    master: Box<dyn MasterPty + Send>,
+    /// Spawned shell process.
+    ///
+    /// Held so the PTY can actually terminate it. Without this handle
+    /// `kill` and `shutdown` had nothing to act on, and dropping the PTY
+    /// blocked for minutes waiting for a shell nobody had asked to stop.
+    child: Option<Box<dyn Child + Send + Sync>>,
     /// Writer to the PTY.
-    writer: Box<dyn Write + Send>,
+    ///
+    /// `None` only after the handle has been handed to the cleanup thread.
+    writer: Option<Box<dyn Write + Send>>,
     /// Receiver for PTY events.
     event_rx: Receiver<PtyEvent>,
+    /// Reader thread handle.
+    reader_thread: Option<JoinHandle<()>>,
+    /// Master PTY handle.
+    ///
+    /// `None` only after the handle has been handed to the cleanup thread.
+    master: Option<Box<dyn MasterPty + Send>>,
     /// Current columns.
     cols: u16,
     /// Current rows.
     rows: u16,
-    /// Reader thread handle.
-    reader_thread: Option<JoinHandle<()>>,
     /// Process ID.
     pid: Option<u32>,
     /// Running flag.
@@ -222,15 +237,64 @@ impl Pty {
         });
 
         Ok(Self {
-            master: pair.master,
-            writer,
+            child: Some(child),
+            writer: Some(writer),
             event_rx,
+            reader_thread: Some(reader_thread),
+            master: Some(pair.master),
             cols: config.cols,
             rows: config.rows,
-            reader_thread: Some(reader_thread),
             pid,
             running: true,
         })
+    }
+
+    /// Terminates the shell process, if it is still alive.
+    ///
+    /// Returns once the process is confirmed gone, which is what lets the
+    /// master handle close without blocking.
+    fn terminate_child(&mut self) {
+        let Some(mut child) = self.child.take() else {
+            return;
+        };
+
+        if matches!(child.try_wait(), Ok(Some(_))) {
+            return;
+        }
+
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+
+    /// Releases the master and writer handles on a detached thread.
+    ///
+    /// Closing a Windows pseudo-console waits for the console host to finish,
+    /// and the console host in turn waits for the last reader to let go of the
+    /// output pipe. Our reader thread is parked inside a blocking read that
+    /// nothing can cancel, so that wait has been measured at over three
+    /// minutes. Doing it on a detached thread keeps tab close, application
+    /// shutdown, and the test suite responsive; the handles are still released,
+    /// just not on the caller's thread.
+    ///
+    /// On Unix, closing the master sends `SIGHUP` and returns immediately, so
+    /// the detached thread finishes at once.
+    fn detach_handle_cleanup(&mut self) {
+        let master = self.master.take();
+        let writer = self.writer.take();
+
+        if master.is_none() && writer.is_none() {
+            return;
+        }
+
+        // The thread is deliberately not joined: joining is the wait we are
+        // trying to avoid.
+        let _ = thread::Builder::new()
+            .name("ratterm-pty-cleanup".to_string())
+            .spawn(move || {
+                // Input first, then the console itself.
+                drop(writer);
+                drop(master);
+            });
     }
 
     /// Returns the number of columns.
@@ -274,7 +338,8 @@ impl Pty {
         assert!(cols > 0, "Columns must be positive");
         assert!(rows > 0, "Rows must be positive");
 
-        self.master
+        let master = self.master.as_ref().ok_or(PtyError::Closed)?;
+        master
             .resize(PtySize {
                 rows,
                 cols,
@@ -298,8 +363,9 @@ impl Pty {
             return Err(PtyError::Closed);
         }
 
-        self.writer.write_all(data)?;
-        self.writer.flush()?;
+        let writer = self.writer.as_mut().ok_or(PtyError::Closed)?;
+        writer.write_all(data)?;
+        writer.flush()?;
 
         Ok(())
     }
@@ -359,36 +425,55 @@ impl Pty {
         }
     }
 
-    /// Shuts down the PTY gracefully.
-    /// This is a quick shutdown that doesn't wait for threads.
+    /// Shuts down the PTY, terminating the shell.
+    ///
+    /// The reader thread is not joined; it ends on its own once the process
+    /// is gone and the pipe reaches EOF.
     ///
     /// # Errors
-    /// Returns error if shutdown fails.
+    /// Never fails; the signature is kept for callers that treat shutdown as
+    /// a fallible operation.
     pub fn shutdown(&mut self) -> Result<(), PtyError> {
         self.running = false;
-        // Don't wait for reader thread - it will terminate when process exits
-        // This allows for fast application shutdown
+        self.terminate_child();
         let _ = self.reader_thread.take();
+        self.detach_handle_cleanup();
         Ok(())
     }
 
     /// Kills the PTY process.
-    /// This is a quick kill that doesn't wait for threads.
     ///
     /// # Errors
-    /// Returns error if kill fails.
+    /// Never fails; a process that has already exited is not an error.
     pub fn kill(&mut self) -> Result<(), PtyError> {
         self.running = false;
+        self.terminate_child();
         let _ = self.reader_thread.take();
+        self.detach_handle_cleanup();
         Ok(())
+    }
+
+    /// Returns true if the shell process has exited.
+    ///
+    /// Unlike [`Pty::is_running`], which reports the PTY's own state, this
+    /// asks the operating system.
+    pub fn child_has_exited(&mut self) -> bool {
+        match self.child.as_mut() {
+            None => true,
+            Some(child) => matches!(child.try_wait(), Ok(Some(_))),
+        }
     }
 }
 
 impl Drop for Pty {
     fn drop(&mut self) {
         self.running = false;
-        // Don't block on join during drop - let thread die with process
+        // Kill first: on Windows the master handle's close waits for every
+        // process attached to the pseudo-console, so dropping without this
+        // stalls the caller until the shell happens to exit on its own.
+        self.terminate_child();
         let _ = self.reader_thread.take();
+        self.detach_handle_cleanup();
     }
 }
 
@@ -537,10 +622,11 @@ fn get_process_cwd(pid: u32) -> Option<PathBuf> {
             let mut path = PathBuf::from(os_string);
 
             // Clean up trailing backslash for non-root paths
-            if let Some(path_str) = path.to_str() {
-                if path_str.len() > 3 && path_str.ends_with('\\') {
-                    path = PathBuf::from(&path_str[..path_str.len() - 1]);
-                }
+            if let Some(path_str) = path.to_str()
+                && path_str.len() > 3
+                && path_str.ends_with('\\')
+            {
+                path = PathBuf::from(&path_str[..path_str.len() - 1]);
             }
 
             Some(path)

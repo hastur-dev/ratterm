@@ -1,18 +1,36 @@
 //! Docker container connection operations.
 
+use tracing::{info, warn};
+
 use crate::docker::{DockerDiscovery, DockerHost};
 
 use super::App;
 
 impl App {
     /// Builds a command, wrapping with SSH for remote hosts.
+    ///
+    /// This produces a command line for a *terminal tab*, which still needs a
+    /// real `ssh` invocation the user can see and interrupt. Programmatic
+    /// Docker calls go through the pooled session instead and never build a
+    /// command line at all.
     fn build_command_for_host(&self, docker_cmd: &str) -> String {
         let host = &self.docker_items.selected_host;
-        match host {
-            DockerHost::Local => docker_cmd.to_string(),
-            DockerHost::Remote { .. } => {
-                DockerDiscovery::build_remote_docker_command(host, docker_cmd)
-            }
+        match host.host_id() {
+            None => docker_cmd.to_string(),
+            Some(host_id) => match self.ssh_hosts.target(host_id) {
+                Some(target) => {
+                    let port_flag = if target.port == 22 {
+                        String::new()
+                    } else {
+                        format!("-p {} ", target.port)
+                    };
+                    format!(
+                        "ssh {port_flag}{}@{} {docker_cmd}",
+                        target.username, target.hostname
+                    )
+                }
+                None => docker_cmd.to_string(),
+            },
         }
     }
 
@@ -26,6 +44,8 @@ impl App {
         let shell = self.docker_default_shell().to_string();
         let host = self.docker_items.selected_host.clone();
         let host_name = self.docker_host_display_name();
+        // Resolve before borrowing the terminal multiplexer mutably.
+        let target = host.host_id().and_then(|id| self.ssh_hosts.target(id));
 
         self.set_status(format!(
             "Connecting to {} on {}...",
@@ -42,25 +62,24 @@ impl App {
                 // Local container - use direct docker exec
                 terminals.add_docker_exec_tab(container_id, container_name, &shell)
             }
-            DockerHost::Remote {
-                host_id,
-                hostname,
-                port,
-                username,
-                password,
-                ..
-            } => {
-                // Remote container - use SSH + docker exec
-                terminals.add_docker_exec_ssh_tab(
-                    container_id,
-                    container_name,
-                    &shell,
-                    hostname,
-                    *port,
-                    username,
-                    *host_id,
-                    password.as_deref(),
-                )
+            DockerHost::Remote { host_id, .. } => {
+                // Remote container: resolve the connection from the registry
+                // rather than from a copy stored with the container entry.
+                match target {
+                    Some(target) => terminals.add_docker_exec_ssh_tab(
+                        container_id,
+                        container_name,
+                        &shell,
+                        &target.hostname,
+                        target.port,
+                        &target.username,
+                        *host_id,
+                        target.password.as_ref().map(|p| p.as_str()),
+                    ),
+                    None => Err(crate::terminal::pty::PtyError::Other(format!(
+                        "SSH host {host_id} is not configured; open the SSH manager and add credentials"
+                    ))),
+                }
             }
         };
 
@@ -202,15 +221,14 @@ impl App {
                 ..
             } => {
                 // Build SSH command to run Docker on remote host
-                let docker_host = DockerHost::Remote {
-                    host_id: 0,
-                    hostname: hostname.clone(),
-                    port: *port,
-                    username: username.clone(),
-                    password: None,
-                    display_name: None,
+                // The container's terminal already carries the SSH details,
+                // so build the remote invocation from those directly.
+                let port_flag = if *port == 22 {
+                    String::new()
+                } else {
+                    format!("-p {port} ")
                 };
-                DockerDiscovery::build_remote_docker_command(&docker_host, docker_cmd)
+                format!("ssh {port_flag}{username}@{hostname} {docker_cmd}")
             }
         }
     }
@@ -304,5 +322,96 @@ impl App {
             .as_ref()
             .and_then(|t| t.active_terminal())
             .and_then(|t| t.docker_context())
+    }
+
+    // =========================================================================
+    // Background Image Pull Operations
+    // =========================================================================
+
+    /// Spawns a background task to pull a Docker image.
+    ///
+    /// The result will be available via `check_docker_background_tasks()`.
+    pub fn spawn_background_image_pull(&mut self, host: DockerHost, image_name: String) {
+        use std::sync::mpsc::channel;
+        use std::thread;
+
+        info!(
+            "Spawning background pull for image '{}' on {:?}",
+            image_name, host
+        );
+
+        let (tx, rx) = channel();
+        self.docker_background_rx = Some(rx);
+
+        let image_clone = image_name.clone();
+        thread::spawn(move || {
+            let result = DockerDiscovery::pull_image_on_host(&host, &image_clone);
+            let msg = super::DockerBackgroundResult::ImagePulled {
+                image: image_clone,
+                success: result.is_ok(),
+                error: result.err(),
+            };
+            let _ = tx.send(msg);
+        });
+
+        self.set_status(format!("Downloading image '{}'...", image_name));
+    }
+
+    /// Checks for completed background Docker operations.
+    ///
+    /// Call this periodically (e.g., in the event loop) to handle results.
+    /// Returns `true` if a result was processed.
+    pub fn check_docker_background_tasks(&mut self) -> bool {
+        let result = if let Some(ref rx) = self.docker_background_rx {
+            match rx.try_recv() {
+                Ok(r) => Some(r),
+                Err(std::sync::mpsc::TryRecvError::Empty) => return false,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    self.docker_background_rx = None;
+                    return false;
+                }
+            }
+        } else {
+            return false;
+        };
+
+        if let Some(result) = result {
+            self.docker_background_rx = None;
+            self.handle_docker_background_result(result);
+            return true;
+        }
+
+        false
+    }
+
+    /// Handles a completed background Docker operation.
+    fn handle_docker_background_result(&mut self, result: super::DockerBackgroundResult) {
+        match result {
+            super::DockerBackgroundResult::ImagePulled {
+                image,
+                success,
+                error,
+            } => {
+                if success {
+                    info!("Background pull completed for '{}'", image);
+                    self.set_status(format!("Downloaded '{}' successfully", image));
+
+                    // Update creation state
+                    if let Some(ref mut manager) = self.docker_manager {
+                        manager.on_image_pull_complete(true, None);
+                    }
+                } else {
+                    let err_msg = error.unwrap_or_else(|| "Unknown error".to_string());
+                    warn!("Background pull failed for '{}': {}", image, err_msg);
+                    self.set_status(format!("Failed to download '{}': {}", image, err_msg));
+
+                    // Update creation state with error
+                    if let Some(ref mut manager) = self.docker_manager {
+                        manager.on_image_pull_complete(false, Some(err_msg));
+                    }
+                }
+                self.request_redraw();
+            }
+        }
     }
 }

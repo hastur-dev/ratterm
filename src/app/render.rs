@@ -7,12 +7,13 @@ use tracing::debug;
 use crate::config::PlatformKeys;
 use crate::ui::{
     debug_panel::DebugPanelWidget,
-    docker_manager::DockerManagerWidget,
+    docker_manager::{DockerManagerWidget, FleetViewWidget},
     editor_tabs::EditorTabBar,
     editor_widget::EditorWidget,
     file_picker::{FilePickerWidget, RemoteFilePickerWidget},
     git_dashboard::GitDashboardWidget,
     health_dashboard::HealthDashboardWidget,
+    k8s_manager::K8sManagerWidget,
     key_hint_bar::{KeyHintBar, hints_for},
     layout::FocusedPane,
     popup::{
@@ -26,6 +27,15 @@ use crate::ui::{
 };
 
 use super::App;
+
+/// How far back the dashboard's history charts look.
+///
+/// An hour is what "is this host struggling right now?" needs; longer windows
+/// belong to a query, not to a panel that redraws on every frame.
+const HISTORY_WINDOW: std::time::Duration = std::time::Duration::from_secs(3600);
+
+/// Buckets in a history chart, which is also its width in characters.
+const HISTORY_BUCKETS: usize = 40;
 
 impl App {
     /// Renders the application.
@@ -85,9 +95,15 @@ impl App {
             }
         }
 
-        // Render terminal pane or health dashboard (with split support)
+        // Render terminal pane, or whichever full-pane screen is open over it.
         if areas.has_terminal() {
-            if self.is_health_dashboard_open() {
+            if self.is_k8s_manager_open() {
+                debug!("RENDER: kubernetes");
+                self.render_k8s_manager(frame, areas.terminal);
+            } else if self.is_docker_fleet_open() {
+                debug!("RENDER: docker fleet");
+                self.render_docker_fleet(frame, areas.terminal);
+            } else if self.is_health_dashboard_open() {
                 debug!("RENDER: health dashboard");
                 self.render_health_dashboard(frame, &areas);
             } else {
@@ -108,18 +124,18 @@ impl App {
                     let mut boundary_info = Vec::new();
                     for x_offset in -3i16..6 {
                         let x = (boundary_x as i16 + x_offset) as u16;
-                        if x < area.width {
-                            if let Some(cell) = buf.cell((x, y)) {
-                                let symbol = cell.symbol();
-                                let first_char = symbol.chars().next().unwrap_or(' ');
-                                let char_code = first_char as u32;
-                                let display = if first_char.is_control() || char_code > 0x7F {
-                                    format!("x{:02}U+{:04X}", x, char_code)
-                                } else {
-                                    format!("x{}='{}'", x, first_char)
-                                };
-                                boundary_info.push(display);
-                            }
+                        if x < area.width
+                            && let Some(cell) = buf.cell((x, y))
+                        {
+                            let symbol = cell.symbol();
+                            let first_char = symbol.chars().next().unwrap_or(' ');
+                            let char_code = first_char as u32;
+                            let display = if first_char.is_control() || char_code > 0x7F {
+                                format!("x{:02}U+{:04X}", x, char_code)
+                            } else {
+                                format!("x{}='{}'", x, first_char)
+                            };
+                            boundary_info.push(display);
                         }
                     }
                     debug!(
@@ -163,18 +179,18 @@ impl App {
                     let mut boundary_info = Vec::new();
                     for x_offset in -3i16..6 {
                         let x = (boundary_x as i16 + x_offset) as u16;
-                        if x < area.width {
-                            if let Some(cell) = buf.cell((x, y)) {
-                                let symbol = cell.symbol();
-                                let first_char = symbol.chars().next().unwrap_or(' ');
-                                let char_code = first_char as u32;
-                                let display = if first_char.is_control() || char_code > 0x7F {
-                                    format!("x{:02}U+{:04X}", x, char_code)
-                                } else {
-                                    format!("x{}='{}'", x, first_char)
-                                };
-                                boundary_info.push(display);
-                            }
+                        if x < area.width
+                            && let Some(cell) = buf.cell((x, y))
+                        {
+                            let symbol = cell.symbol();
+                            let first_char = symbol.chars().next().unwrap_or(' ');
+                            let char_code = first_char as u32;
+                            let display = if first_char.is_control() || char_code > 0x7F {
+                                format!("x{:02}U+{:04X}", x, char_code)
+                            } else {
+                                format!("x{}='{}'", x, first_char)
+                            };
+                            boundary_info.push(display);
                         }
                     }
                     debug!("AFTER_EDITOR y={}: | {}", y, boundary_info.join(" "));
@@ -199,14 +215,14 @@ impl App {
         self.render_lsp_overlays(frame, area);
 
         // Render hotkey overlay on top of everything
-        if let Some(ref overlay) = self.hotkey_overlay {
-            if overlay.is_visible() {
-                use crate::ui::hotkey_overlay::HotkeyOverlayWidget;
-                use ratatui::widgets::Widget as _;
-                let pos = self.config.window_position("hotkey_overlay");
-                let widget = HotkeyOverlayWidget::new(overlay).position(pos);
-                widget.render(area, frame.buffer_mut());
-            }
+        if let Some(ref overlay) = self.hotkey_overlay
+            && overlay.is_visible()
+        {
+            use crate::ui::hotkey_overlay::HotkeyOverlayWidget;
+            use ratatui::widgets::Widget as _;
+            let pos = self.config.window_position("hotkey_overlay");
+            let widget = HotkeyOverlayWidget::new(overlay).position(pos);
+            widget.render(area, frame.buffer_mut());
         }
 
         // On first 5 frames, log FINAL buffer state AFTER all rendering
@@ -247,25 +263,25 @@ impl App {
     /// Renders LSP overlay widgets (hover, references, code actions, etc.).
     fn render_lsp_overlays(&self, frame: &mut ratatui::Frame, screen: ratatui::layout::Rect) {
         // Hover popup
-        if let Some(ref hover) = self.lsp_hover {
+        if let Some(ref hover) = self.lsp.hover {
             use crate::ui::lsp_hover::LspHoverWidget;
-            let (cx, cy) = self.lsp_hover_cursor;
+            let (cx, cy) = self.lsp.hover_cursor;
             let widget = LspHoverWidget::new(hover, cx, cy);
             let popup_area = widget.calculate_area(screen);
             widget.render_in_area(popup_area, frame.buffer_mut());
         }
 
         // Signature help
-        if let Some(ref sig) = self.lsp_signature_help {
+        if let Some(ref sig) = self.lsp.signature_help {
             use crate::ui::lsp_signature::LspSignatureWidget;
-            let (cx, cy) = self.lsp_hover_cursor;
+            let (cx, cy) = self.lsp.hover_cursor;
             let widget = LspSignatureWidget::new(sig, cx, cy);
             let popup_area = widget.calculate_area(screen);
             widget.render_in_area(popup_area, frame.buffer_mut());
         }
 
         // References panel (takes half the screen)
-        if let Some(ref groups) = self.lsp_references {
+        if let Some(groups) = self.lsp.references.opened() {
             use crate::ui::lsp_references::LspReferencesWidget;
             use ratatui::widgets::Widget as _;
             let panel_area = ratatui::layout::Rect::new(
@@ -276,23 +292,23 @@ impl App {
             );
             let widget = LspReferencesWidget::new(
                 groups,
-                self.lsp_references_selected,
-                self.lsp_references_scroll,
+                self.lsp.references.selected(),
+                self.lsp.references.scroll(),
             );
             widget.render(panel_area, frame.buffer_mut());
         }
 
         // Code actions popup
-        if let Some(ref actions) = self.lsp_code_actions {
+        if let Some(actions) = self.lsp.code_actions.opened() {
             use crate::ui::lsp_actions::LspActionsWidget;
-            let (cx, cy) = self.lsp_hover_cursor;
-            let widget = LspActionsWidget::new(actions, self.lsp_code_action_selected);
+            let (cx, cy) = self.lsp.hover_cursor;
+            let widget = LspActionsWidget::new(actions, self.lsp.code_actions.selected());
             let popup_area = widget.calculate_area(cx, cy, screen);
             widget.render_in_area(popup_area, frame.buffer_mut());
         }
 
         // Document symbols panel
-        if let Some(ref symbols) = self.lsp_document_symbols {
+        if let Some(symbols) = self.lsp.document_symbols.opened() {
             use crate::ui::lsp_symbols::LspDocumentSymbolsWidget;
             use ratatui::widgets::Widget as _;
             let panel_area = ratatui::layout::Rect::new(
@@ -303,14 +319,14 @@ impl App {
             );
             let widget = LspDocumentSymbolsWidget::new(
                 symbols,
-                self.lsp_symbols_selected,
-                self.lsp_symbols_scroll,
+                self.lsp.document_symbols.selected(),
+                self.lsp.document_symbols.scroll(),
             );
             widget.render(panel_area, frame.buffer_mut());
         }
 
         // Workspace symbols panel
-        if let Some(ref symbols) = self.lsp_workspace_symbols {
+        if let Some(symbols) = self.lsp.workspace_symbols.opened() {
             use crate::ui::lsp_symbols::LspWorkspaceSymbolsWidget;
             use ratatui::widgets::Widget as _;
             let panel_area = ratatui::layout::Rect::new(
@@ -321,18 +337,18 @@ impl App {
             );
             let widget = LspWorkspaceSymbolsWidget::new(
                 symbols,
-                self.lsp_workspace_selected,
+                self.lsp.workspace_symbols.selected(),
                 0,
-                &self.lsp_workspace_query,
+                &self.lsp.workspace_query,
             );
             widget.render(panel_area, frame.buffer_mut());
         }
 
         // Diagnostics panel (bottom quarter of screen)
-        if self.lsp_diagnostics_panel_visible {
+        if self.lsp.diagnostics_panel.is_open() {
             use crate::ui::lsp_diagnostics::LspDiagnosticsWidget;
             use ratatui::widgets::Widget as _;
-            let all_diags = self.diagnostic_store.all();
+            let all_diags = self.lsp.diagnostics.all();
             let panel_area = ratatui::layout::Rect::new(
                 0,
                 screen.height * 3 / 4,
@@ -341,14 +357,14 @@ impl App {
             );
             let widget = LspDiagnosticsWidget::new(
                 &all_diags,
-                self.lsp_diagnostics_selected,
-                self.lsp_diagnostics_scroll,
+                self.lsp.diagnostics_panel.selected(),
+                self.lsp.diagnostics_panel.scroll(),
             );
             widget.render(panel_area, frame.buffer_mut());
         }
 
         // Rename input popup
-        if let Some(ref rename_text) = self.lsp_rename_input {
+        if let Some(rename_text) = self.lsp.rename.as_ref().map(|r| &r.input) {
             use ratatui::widgets::{Block, Borders, Clear, Paragraph, Widget as _};
             let width = 40u16.min(screen.width);
             let height = 3u16;
@@ -481,7 +497,64 @@ impl App {
                     }
                 }
             }
+        } else {
+            // No shell: a headless run, a scenario, or a machine where the PTY
+            // could not be created. Saying so beats an empty rectangle the
+            // reader has to interpret.
+            self.render_no_terminal_notice(frame, areas.terminal);
         }
+    }
+
+    /// Draws a placeholder where the terminal would be.
+    fn render_no_terminal_notice(&self, frame: &mut ratatui::Frame, area: ratatui::layout::Rect) {
+        use ratatui::text::{Line, Span};
+        use ratatui::widgets::{Block, Borders, Paragraph};
+
+        if area.width < 4 || area.height < 3 {
+            return;
+        }
+
+        self.last_terminal_area.set(area);
+
+        let theme = &self.config.theme_manager.current().terminal;
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .title(" No terminal ")
+            .style(Style::default().bg(theme.background));
+
+        let body = vec![
+            Line::from(Span::styled(
+                "No shell is attached to this instance.",
+                Style::default().fg(theme.foreground),
+            )),
+            Line::from(Span::styled(
+                "The editor, dashboards and the control API all work.",
+                Style::default().fg(Color::DarkGray),
+            )),
+        ];
+
+        frame.render_widget(Paragraph::new(body).block(block), area);
+    }
+
+    /// Renders the Kubernetes screens over the terminal pane.
+    fn render_k8s_manager(&self, frame: &mut ratatui::Frame, area: ratatui::layout::Rect) {
+        let Some(manager) = self.k8s_manager() else {
+            return;
+        };
+        let focused = self.layout.focused() == FocusedPane::Terminal;
+        frame.render_widget(K8sManagerWidget::new(manager).focused(focused), area);
+    }
+
+    /// Renders the Docker fleet view over the terminal pane.
+    fn render_docker_fleet(&self, frame: &mut ratatui::Frame, area: ratatui::layout::Rect) {
+        frame.render_widget(
+            FleetViewWidget::new(
+                &self.docker_fleet.fleet,
+                &self.docker_fleet.events,
+                &self.docker_fleet_view,
+            ),
+            area,
+        );
     }
 
     /// Renders the health dashboard in the terminal pane area.
@@ -507,8 +580,17 @@ impl App {
                 }
             }
 
-            // Render the dashboard widget
-            let widget = HealthDashboardWidget::new(dashboard).focused(true);
+            // Render the dashboard widget. The history is read here rather
+            // than held by the dashboard so the widget stays a pure function of
+            // its inputs and can be rendered in a test.
+            let history = dashboard.selected_host().map(|host| {
+                self.telemetry
+                    .host_history(host.host_id, HISTORY_WINDOW, HISTORY_BUCKETS)
+            });
+            let mut widget = HealthDashboardWidget::new(dashboard).focused(true);
+            if let Some(ref history) = history {
+                widget = widget.with_history(history);
+            }
             frame.render_widget(widget, areas.terminal);
         }
     }
@@ -628,18 +710,18 @@ impl App {
                     let mut boundary_info = Vec::new();
                     for x_offset in -3i16..6 {
                         let x = (boundary_x as i16 + x_offset) as u16;
-                        if x < areas.editor.x + areas.editor.width + 3 {
-                            if let Some(cell) = buf.cell((x, y)) {
-                                let symbol = cell.symbol();
-                                let first_char = symbol.chars().next().unwrap_or(' ');
-                                let char_code = first_char as u32;
-                                let display = if first_char.is_control() || char_code > 0x7F {
-                                    format!("x{:02}U+{:04X}", x, char_code)
-                                } else {
-                                    format!("x{}='{}'", x, first_char)
-                                };
-                                boundary_info.push(display);
-                            }
+                        if x < areas.editor.x + areas.editor.width + 3
+                            && let Some(cell) = buf.cell((x, y))
+                        {
+                            let symbol = cell.symbol();
+                            let first_char = symbol.chars().next().unwrap_or(' ');
+                            let char_code = first_char as u32;
+                            let display = if first_char.is_control() || char_code > 0x7F {
+                                format!("x{:02}U+{:04X}", x, char_code)
+                            } else {
+                                format!("x{}='{}'", x, first_char)
+                            };
+                            boundary_info.push(display);
                         }
                     }
                     debug!("AFTER_CLEAR y={}: | {}", y, boundary_info.join(" "));
@@ -692,7 +774,7 @@ impl App {
             frame.render_widget(tab_bar, editor_chunks[0]);
 
             // Split editor area for debug panel if active
-            let show_debug_panel = self.debug_panel_visible && self.debug_session.is_some();
+            let show_debug_panel = self.debug.is_panel_visible() && self.debug.session().is_some();
             let bp_lines = self.current_file_breakpoints();
 
             if show_debug_panel {
@@ -706,12 +788,12 @@ impl App {
                     .focused(is_focused)
                     .theme(&self.config.theme_manager.current().editor)
                     .suggestion(self.completion_suggestion())
-                    .git_gutter(&self.git_gutter)
+                    .git_gutter(self.git.gutter())
                     .breakpoints(&bp_lines);
                 frame.render_widget(widget, split[0]);
 
                 // Render debug panel
-                if let Some(ref session) = self.debug_session {
+                if let Some(session) = self.debug.session() {
                     let debug_widget = DebugPanelWidget::new(session);
                     frame.render_widget(debug_widget, split[1]);
                 }
@@ -721,7 +803,7 @@ impl App {
                     .focused(is_focused)
                     .theme(&self.config.theme_manager.current().editor)
                     .suggestion(self.completion_suggestion())
-                    .git_gutter(&self.git_gutter)
+                    .git_gutter(self.git.gutter())
                     .breakpoints(&bp_lines);
                 frame.render_widget(widget, editor_chunks[1]);
             }
@@ -805,44 +887,72 @@ impl App {
 
     /// Renders the popup overlay.
     fn render_popup(&self, frame: &mut ratatui::Frame, area: ratatui::layout::Rect) {
-        // Use special widget for mode switcher
-        if let Some(ref switcher) = self.mode_switcher {
-            let widget = ModeSwitcherWidget::new(switcher);
-            frame.render_widget(widget, area);
-        } else if let Some(ref selector) = self.shell_selector {
-            // Use special widget for shell selector
-            let widget = ShellSelectorWidget::new(selector);
-            frame.render_widget(widget, area);
-        } else if let Some(ref prompt) = self.shell_install_prompt {
-            // Use special widget for shell install prompt
-            let widget = ShellInstallPromptWidget::new(prompt);
-            frame.render_widget(widget, area);
-        } else if let Some(ref selector) = self.theme_selector {
-            // Use special widget for theme selector
-            let widget = ThemeSelectorWidget::new(selector);
-            frame.render_widget(widget, area);
-        } else if let Some(ref manager) = self.ssh_manager {
-            // Use special widget for SSH manager
-            let pos = self.config.window_position("ssh_manager");
-            let widget = SSHManagerWidget::new(manager).position(pos);
-            frame.render_widget(widget, area);
-        } else if let Some(ref manager) = self.docker_manager {
-            // Use special widget for Docker manager
-            let pos = self.config.window_position("docker_manager");
-            let widget = DockerManagerWidget::new(manager).position(pos);
-            frame.render_widget(widget, area);
-        } else if let Some(ref dashboard) = self.git_dashboard {
-            // Use special widget for Git dashboard
-            let pos = self.config.window_position("git_dashboard");
-            let widget = GitDashboardWidget::new(dashboard).position(pos);
-            frame.render_widget(widget, area);
-        } else if self.popup.kind().is_keybinding_notification() {
-            // Use special widget for Windows 11 keybinding notification
-            let widget = KeybindingNotificationWidget::new();
-            frame.render_widget(widget, area);
-        } else {
-            let popup_widget = PopupWidget::new(&self.popup);
-            frame.render_widget(popup_widget, area);
+        use crate::ui::popup::PopupKind;
+
+        // Dispatch on which popup is open, not on which manager object happens
+        // to exist. The previous order tried each manager in turn, so a manager
+        // left over from an earlier popup drew itself instead of the popup the
+        // user had just opened: after visiting the Docker manager once, the
+        // command palette rendered as an empty Docker window.
+        match self.popup.kind() {
+            PopupKind::ModeSwitcher => {
+                if let Some(ref switcher) = self.mode_switcher {
+                    frame.render_widget(ModeSwitcherWidget::new(switcher), area);
+                    return;
+                }
+            }
+            PopupKind::ShellSelector => {
+                if let Some(ref selector) = self.shell_selector {
+                    frame.render_widget(ShellSelectorWidget::new(selector), area);
+                    return;
+                }
+            }
+            PopupKind::ShellInstallPrompt => {
+                if let Some(ref prompt) = self.shell_install_prompt {
+                    frame.render_widget(ShellInstallPromptWidget::new(prompt), area);
+                    return;
+                }
+            }
+            PopupKind::ThemeSelector => {
+                if let Some(ref selector) = self.theme_selector {
+                    frame.render_widget(ThemeSelectorWidget::new(selector), area);
+                    return;
+                }
+            }
+            PopupKind::SSHManager
+            | PopupKind::SSHCredentialPrompt
+            | PopupKind::SSHStorageSetup
+            | PopupKind::SSHMasterPassword
+            | PopupKind::SSHSubnetEntry => {
+                if let Some(ref manager) = self.ssh_manager {
+                    let pos = self.config.window_position("ssh_manager");
+                    frame.render_widget(SSHManagerWidget::new(manager).position(pos), area);
+                    return;
+                }
+            }
+            PopupKind::DockerManager => {
+                if let Some(ref manager) = self.docker_manager {
+                    let pos = self.config.window_position("docker_manager");
+                    frame.render_widget(DockerManagerWidget::new(manager).position(pos), area);
+                    return;
+                }
+            }
+            PopupKind::GitDashboard => {
+                if let Some(ref dashboard) = self.git_dashboard {
+                    let pos = self.config.window_position("git_dashboard");
+                    frame.render_widget(GitDashboardWidget::new(dashboard).position(pos), area);
+                    return;
+                }
+            }
+            PopupKind::KeybindingChangeNotification => {
+                frame.render_widget(KeybindingNotificationWidget::new(), area);
+                return;
+            }
+            _ => {}
         }
+
+        // Everything else, including the command palette and the search and
+        // confirmation dialogs, is drawn by the general popup widget.
+        frame.render_widget(PopupWidget::new(&self.popup), area);
     }
 }

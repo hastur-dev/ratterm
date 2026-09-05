@@ -1,0 +1,23 @@
+# The Kubernetes screens open on the fixture kubeconfig and close again.
+#
+# Run with `--fixtures tests/fixtures/fleet`, which supplies its own kubeconfig
+# so the contexts are the same on every machine. The fixture servers are in the
+# RFC 5737 documentation range, so a connection attempt cannot reach anything.
+#
+# What this pins down: the panel opens, it covers the pane rather than leaving
+# the terminal showing through, the current context is the one selected, a
+# context whose cluster is undefined is listed rather than hidden, and Escape
+# closes it. Those are the parts that break when key routing, fixture
+# isolation, or render dispatch is wrong.
+name: kubernetes screen opens and closes
+steps:
+  - key: F6
+  - expect_text: "Kubernetes - Contexts"
+  - expect_text: "3 context(s)"
+  - expect_text: "fixture-staging"
+  - expect_text: "fixture-broken"
+  - expect_text: "cluster not defined"
+  - snapshot: contexts
+  - key: esc
+  - expect_not_text: "Kubernetes - Contexts"
+  - expect_status: "closed"

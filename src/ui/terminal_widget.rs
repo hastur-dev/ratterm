@@ -147,18 +147,10 @@ impl<'a> TerminalWidget<'a> {
                 let grid_start_row = grid_rows.saturating_sub(rows_from_grid);
                 let row_to_render = grid_start_row + (screen_row - scroll_offset);
 
-                if row_to_render < grid_rows {
-                    if let Some(row) = grid.row(row_to_render) {
-                        self.render_row_cells(
-                            row,
-                            row_to_render,
-                            screen_row,
-                            cols,
-                            area,
-                            buf,
-                            grid,
-                        );
-                    }
+                if row_to_render < grid_rows
+                    && let Some(row) = grid.row(row_to_render)
+                {
+                    self.render_row_cells(row, row_to_render, screen_row, cols, area, buf, grid);
                 }
             }
         }
@@ -175,12 +167,13 @@ impl<'a> TerminalWidget<'a> {
             let cursor_x = area.x + cursor_col;
             let cursor_y = area.y + cursor_row + y_offset;
 
-            if cursor_x < area.x + area.width && cursor_y < area.y + area.height {
-                if let Some(cell) = buf.cell_mut((cursor_x, cursor_y)) {
-                    let current_style = cell.style();
-                    let cursor_style = current_style.add_modifier(Modifier::REVERSED);
-                    cell.set_style(cursor_style);
-                }
+            if cursor_x < area.x + area.width
+                && cursor_y < area.y + area.height
+                && let Some(cell) = buf.cell_mut((cursor_x, cursor_y))
+            {
+                let current_style = cell.style();
+                let cursor_style = current_style.add_modifier(Modifier::REVERSED);
+                cell.set_style(cursor_style);
             }
         }
     }
@@ -204,21 +197,21 @@ impl<'a> TerminalWidget<'a> {
             for col in 0..cols {
                 if let Some(cell) = row.cell(col as u16) {
                     let x = area.x + col as u16;
-                    if x < area.x + area.width {
-                        if let Some(ratatui_cell) = buf.cell_mut((x, y)) {
-                            ratatui_cell.set_char(cell.character());
-                            // Use theme palette and default colors if available
-                            let style = if let Some(theme) = self.theme {
-                                cell.style().to_ratatui_with_palette_and_defaults(
-                                    &theme.palette,
-                                    Some(theme.foreground),
-                                    Some(theme.background),
-                                )
-                            } else {
-                                cell.style().to_ratatui()
-                            };
-                            ratatui_cell.set_style(style);
-                        }
+                    if x < area.x + area.width
+                        && let Some(ratatui_cell) = buf.cell_mut((x, y))
+                    {
+                        ratatui_cell.set_char(cell.character());
+                        // Use theme palette and default colors if available
+                        let style = if let Some(theme) = self.theme {
+                            cell.style().to_ratatui_with_palette_and_defaults(
+                                &theme.palette,
+                                Some(theme.foreground),
+                                Some(theme.background),
+                            )
+                        } else {
+                            cell.style().to_ratatui()
+                        };
+                        ratatui_cell.set_style(style);
                     }
                 }
             }

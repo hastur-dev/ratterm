@@ -188,12 +188,12 @@ impl NetworkScanner {
 
                 // Collect results
                 for (ip, handle) in chunk.iter().zip(handles) {
-                    if let Ok(is_open) = handle.join() {
-                        if is_open {
-                            let ip_str = ip.to_string();
-                            found_hosts.push(ip_str.clone());
-                            let _ = tx.send(ScanResult::HostFound(ip_str, 22));
-                        }
+                    if let Ok(is_open) = handle.join()
+                        && is_open
+                    {
+                        let ip_str = ip.to_string();
+                        found_hosts.push(ip_str.clone());
+                        let _ = tx.send(ScanResult::HostFound(ip_str, 22));
                     }
                     progress.fetch_add(1, Ordering::Relaxed);
                 }
@@ -328,12 +328,14 @@ impl NetworkScanner {
             }
         }
 
-        // Try platform-specific detection
-        #[cfg(windows)]
-        Self::detect_windows_interfaces(&mut interfaces);
-
-        #[cfg(unix)]
-        Self::detect_unix_interfaces(&mut interfaces);
+        // Try platform-specific detection. The branch is chosen with `cfg!`
+        // rather than `#[cfg]` so both detectors are type-checked, linted and
+        // tested on every host; only the call is compiled away.
+        if cfg!(windows) {
+            Self::detect_windows_interfaces(&mut interfaces);
+        } else if cfg!(unix) {
+            Self::detect_unix_interfaces(&mut interfaces);
+        }
 
         interfaces
     }
@@ -366,7 +368,6 @@ impl NetworkScanner {
     }
 
     /// Windows-specific interface detection using ipconfig.
-    #[cfg(windows)]
     fn detect_windows_interfaces(interfaces: &mut Vec<NetworkInterface>) {
         use std::process::Command;
 
@@ -375,7 +376,16 @@ impl NetworkScanner {
             Err(_) => return,
         };
 
-        let stdout = String::from_utf8_lossy(&output.stdout);
+        Self::parse_ipconfig(&String::from_utf8_lossy(&output.stdout), interfaces);
+    }
+
+    /// Extracts interfaces from the text `ipconfig` prints.
+    ///
+    /// Split out from the command so the Windows parser is compiled, linted and
+    /// tested on every platform. A parser that exists only on one target is a
+    /// parser no other target's build can catch a mistake in, which is how a
+    /// Windows-only edit reached this branch and broke every other job.
+    fn parse_ipconfig(stdout: &str, interfaces: &mut Vec<NetworkInterface>) {
         let mut current_adapter = String::new();
 
         for line in stdout.lines() {
@@ -385,34 +395,35 @@ impl NetworkScanner {
             }
 
             // Look for IPv4 addresses
-            if line.contains("IPv4") || line.contains("IP Address") {
-                if let Some(ip_str) = line.split(':').nth(1) {
-                    let ip_str = ip_str.trim();
-                    if let Ok(ip) = ip_str.parse::<Ipv4Addr>() {
-                        // Skip loopback and link-local
-                        if !ip.is_loopback() && !ip.is_link_local() {
-                            let octets = ip.octets();
-                            let subnet = format!("{}.{}.{}.0/24", octets[0], octets[1], octets[2]);
+            if (line.contains("IPv4") || line.contains("IP Address"))
+                && let Some(ip_str) = line.split(':').nth(1)
+            {
+                let ip_str = ip_str.trim();
+                // Skip loopback and link-local
+                if let Ok(ip) = ip_str.parse::<Ipv4Addr>()
+                    && !ip.is_loopback()
+                    && !ip.is_link_local()
+                {
+                    let octets = ip.octets();
+                    let subnet = format!("{}.{}.{}.0/24", octets[0], octets[1], octets[2]);
 
-                            // Don't add duplicates
-                            if !interfaces.iter().any(|i| i.subnet == subnet) {
-                                let name = if current_adapter.contains("Wi-Fi")
-                                    || current_adapter.contains("Wireless")
-                                {
-                                    format!("WiFi ({})", ip_str)
-                                } else if current_adapter.contains("Ethernet") {
-                                    format!("Ethernet ({})", ip_str)
-                                } else {
-                                    format!("{} ({})", current_adapter, ip_str)
-                                };
+                    // Don't add duplicates
+                    if !interfaces.iter().any(|i| i.subnet == subnet) {
+                        let name = if current_adapter.contains("Wi-Fi")
+                            || current_adapter.contains("Wireless")
+                        {
+                            format!("WiFi ({})", ip_str)
+                        } else if current_adapter.contains("Ethernet") {
+                            format!("Ethernet ({})", ip_str)
+                        } else {
+                            format!("{} ({})", current_adapter, ip_str)
+                        };
 
-                                interfaces.push(NetworkInterface {
-                                    name,
-                                    subnet,
-                                    is_primary: false,
-                                });
-                            }
-                        }
+                        interfaces.push(NetworkInterface {
+                            name,
+                            subnet,
+                            is_primary: false,
+                        });
                     }
                 }
             }
@@ -420,7 +431,6 @@ impl NetworkScanner {
     }
 
     /// Unix-specific interface detection.
-    #[cfg(unix)]
     fn detect_unix_interfaces(interfaces: &mut Vec<NetworkInterface>) {
         use std::process::Command;
 
@@ -435,34 +445,42 @@ impl NetworkScanner {
             Err(_) => return,
         };
 
-        let stdout = String::from_utf8_lossy(&output.stdout);
+        Self::parse_inet_lines(&String::from_utf8_lossy(&output.stdout), interfaces);
+    }
 
-        // Simple regex-free parsing for inet lines
+    /// Extracts interfaces from `ip addr show` or `ifconfig` output.
+    ///
+    /// Both spellings appear: `inet 192.168.1.5/24` from iproute2 on Linux, and
+    /// `inet 192.168.1.5 netmask 0xffffff00` from `ifconfig` on macOS and BSD.
+    fn parse_inet_lines(stdout: &str, interfaces: &mut Vec<NetworkInterface>) {
         for line in stdout.lines() {
             let line = line.trim();
 
             // Look for "inet X.X.X.X" patterns
-            if line.starts_with("inet ") {
-                let parts: Vec<&str> = line.split_whitespace().collect();
-                if parts.len() >= 2 {
-                    // Handle both "inet 192.168.1.5/24" and "inet 192.168.1.5 netmask"
-                    let ip_part = parts[1];
-                    let ip_str = ip_part.split('/').next().unwrap_or(ip_part);
+            if !line.starts_with("inet ") {
+                continue;
+            }
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if parts.len() < 2 {
+                continue;
+            }
+            // Handle both "inet 192.168.1.5/24" and "inet 192.168.1.5 netmask"
+            let ip_part = parts[1];
+            let ip_str = ip_part.split('/').next().unwrap_or(ip_part);
 
-                    if let Ok(ip) = ip_str.parse::<Ipv4Addr>() {
-                        if !ip.is_loopback() && !ip.is_link_local() {
-                            let octets = ip.octets();
-                            let subnet = format!("{}.{}.{}.0/24", octets[0], octets[1], octets[2]);
+            if let Ok(ip) = ip_str.parse::<Ipv4Addr>()
+                && !ip.is_loopback()
+                && !ip.is_link_local()
+            {
+                let octets = ip.octets();
+                let subnet = format!("{}.{}.{}.0/24", octets[0], octets[1], octets[2]);
 
-                            if !interfaces.iter().any(|i| i.subnet == subnet) {
-                                interfaces.push(NetworkInterface {
-                                    name: format!("Interface ({})", ip_str),
-                                    subnet,
-                                    is_primary: false,
-                                });
-                            }
-                        }
-                    }
+                if !interfaces.iter().any(|i| i.subnet == subnet) {
+                    interfaces.push(NetworkInterface {
+                        name: format!("Interface ({})", ip_str),
+                        subnet,
+                        is_primary: false,
+                    });
                 }
             }
         }
@@ -864,6 +882,193 @@ impl Drop for NetworkScanner {
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
+
+    /// A trimmed `ip addr show` listing, as iproute2 prints it on Linux.
+    const IP_ADDR_OUTPUT: &str = "\
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default
+    inet 127.0.0.1/8 scope host lo
+2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq state UP group default
+    inet 192.168.1.5/24 brd 192.168.1.255 scope global dynamic eth0
+3: eth1: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq state UP group default
+    inet 169.254.7.7/16 brd 169.254.255.255 scope link eth1
+4: eth2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq state UP group default
+    inet 10.20.30.40/24 brd 10.20.30.255 scope global eth2
+";
+
+    /// A trimmed `ifconfig` listing, as macOS and BSD print it. The netmask is
+    /// a hex word rather than a prefix, which is why the parser cannot simply
+    /// split on `/`.
+    const IFCONFIG_OUTPUT: &str = "\
+lo0: flags=8049<UP,LOOPBACK,RUNNING,MULTICAST> mtu 16384
+\tinet 127.0.0.1 netmask 0xff000000
+en0: flags=8863<UP,BROADCAST,SMART,RUNNING,SIMPLEX,MULTICAST> mtu 1500
+\tinet 192.168.1.5 netmask 0xffffff00 broadcast 192.168.1.255
+en1: flags=8863<UP,BROADCAST,SMART,RUNNING,SIMPLEX,MULTICAST> mtu 1500
+\tinet 169.254.7.7 netmask 0xffff0000 broadcast 169.254.255.255
+";
+
+    /// A trimmed `ipconfig` listing, as Windows prints it.
+    const IPCONFIG_OUTPUT: &str = "\
+Windows IP Configuration
+
+
+Wireless LAN adapter Wi-Fi:
+
+   Connection-specific DNS Suffix  . : lan
+   IPv4 Address. . . . . . . . . . . : 192.168.1.5
+   Subnet Mask . . . . . . . . . . . : 255.255.255.0
+
+Ethernet adapter Ethernet 2:
+
+   IPv4 Address. . . . . . . . . . . : 10.20.30.40
+   Subnet Mask . . . . . . . . . . . : 255.255.255.0
+
+Unknown adapter Tailscale:
+
+   IPv4 Address. . . . . . . . . . . : 100.64.0.7
+   Subnet Mask . . . . . . . . . . . : 255.255.255.255
+
+Tunnel adapter Loopback Pseudo-Interface 1:
+
+   IPv4 Address. . . . . . . . . . . : 127.0.0.1
+";
+
+    #[test]
+    fn parse_inet_lines_reads_iproute2_output() {
+        let mut interfaces = Vec::new();
+        NetworkScanner::parse_inet_lines(IP_ADDR_OUTPUT, &mut interfaces);
+
+        let subnets: Vec<&str> = interfaces.iter().map(|i| i.subnet.as_str()).collect();
+        assert_eq!(subnets, vec!["192.168.1.0/24", "10.20.30.0/24"]);
+        assert_eq!(interfaces[0].name, "Interface (192.168.1.5)");
+        assert!(interfaces.iter().all(|i| !i.is_primary));
+    }
+
+    #[test]
+    fn parse_inet_lines_reads_ifconfig_output() {
+        let mut interfaces = Vec::new();
+        NetworkScanner::parse_inet_lines(IFCONFIG_OUTPUT, &mut interfaces);
+
+        // The hex netmask must not be mistaken for part of the address, and
+        // 127.0.0.1 and 169.254.7.7 are both skipped.
+        let subnets: Vec<&str> = interfaces.iter().map(|i| i.subnet.as_str()).collect();
+        assert_eq!(subnets, vec!["192.168.1.0/24"]);
+    }
+
+    #[test]
+    fn parse_inet_lines_skips_loopback_and_link_local() {
+        let mut interfaces = Vec::new();
+        NetworkScanner::parse_inet_lines(
+            "    inet 127.0.0.1/8 scope host lo
+    inet 169.254.1.2/16 scope link eth0
+",
+            &mut interfaces,
+        );
+        assert!(interfaces.is_empty());
+    }
+
+    #[test]
+    fn parse_inet_lines_ignores_malformed_lines() {
+        let mut interfaces = Vec::new();
+        NetworkScanner::parse_inet_lines(
+            "inet
+inet not-an-address
+inet6 fe80::1/64 scope link
+",
+            &mut interfaces,
+        );
+        assert!(interfaces.is_empty());
+    }
+
+    #[test]
+    fn parse_inet_lines_does_not_repeat_a_subnet() {
+        let mut interfaces = Vec::new();
+        NetworkScanner::parse_inet_lines(
+            "    inet 192.168.1.5/24 scope global eth0
+    inet 192.168.1.9/24 scope global eth1
+",
+            &mut interfaces,
+        );
+        assert_eq!(interfaces.len(), 1);
+        assert_eq!(interfaces[0].subnet, "192.168.1.0/24");
+    }
+
+    #[test]
+    fn parse_inet_lines_keeps_entries_already_collected() {
+        let mut interfaces = vec![NetworkInterface {
+            name: "Common Home Network".to_string(),
+            subnet: "192.168.1.0/24".to_string(),
+            is_primary: false,
+        }];
+        NetworkScanner::parse_inet_lines(IP_ADDR_OUTPUT, &mut interfaces);
+
+        // The pre-seeded subnet is not duplicated, and the new one is appended.
+        assert_eq!(interfaces.len(), 2);
+        assert_eq!(interfaces[0].name, "Common Home Network");
+        assert_eq!(interfaces[1].subnet, "10.20.30.0/24");
+    }
+
+    #[test]
+    fn parse_ipconfig_names_the_adapter() {
+        let mut interfaces = Vec::new();
+        NetworkScanner::parse_ipconfig(IPCONFIG_OUTPUT, &mut interfaces);
+
+        let named: Vec<(&str, &str)> = interfaces
+            .iter()
+            .map(|i| (i.name.as_str(), i.subnet.as_str()))
+            .collect();
+        // A wireless adapter and an ethernet adapter get the short labels; an
+        // adapter matching neither keeps the name ipconfig printed. Loopback
+        // is dropped.
+        assert_eq!(
+            named,
+            vec![
+                ("WiFi (192.168.1.5)", "192.168.1.0/24"),
+                ("Ethernet (10.20.30.40)", "10.20.30.0/24"),
+                ("Unknown adapter Tailscale (100.64.0.7)", "100.64.0.0/24"),
+            ]
+        );
+    }
+
+    #[test]
+    fn parse_ipconfig_skips_loopback() {
+        let mut interfaces = Vec::new();
+        NetworkScanner::parse_ipconfig(
+            "Tunnel adapter Loopback Pseudo-Interface 1:
+                IPv4 Address. . . . . . . . . . . : 127.0.0.1
+",
+            &mut interfaces,
+        );
+        assert!(interfaces.is_empty());
+    }
+
+    #[test]
+    fn parse_ipconfig_accepts_the_older_ip_address_label() {
+        let mut interfaces = Vec::new();
+        NetworkScanner::parse_ipconfig(
+            "Ethernet adapter Local Area Connection:
+                IP Address. . . . . . . . . . . . : 10.1.2.3
+",
+            &mut interfaces,
+        );
+        assert_eq!(interfaces.len(), 1);
+        assert_eq!(interfaces[0].subnet, "10.1.2.0/24");
+    }
+
+    #[test]
+    fn detect_all_interfaces_runs_this_platforms_detector() {
+        // Whichever detector this target uses, the common subnets are always
+        // seeded and nothing may be listed twice. This is the assertion that
+        // fails if the platform dispatch stops calling anything at all.
+        let interfaces = NetworkScanner::detect_all_interfaces();
+        assert!(!interfaces.is_empty());
+
+        let mut seen: Vec<&str> = interfaces.iter().map(|i| i.subnet.as_str()).collect();
+        let before = seen.len();
+        seen.sort_unstable();
+        seen.dedup();
+        assert_eq!(seen.len(), before, "a subnet was listed twice");
+    }
 
     #[test]
     fn test_parse_subnet() {

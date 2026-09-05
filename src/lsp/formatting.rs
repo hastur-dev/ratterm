@@ -51,10 +51,11 @@ pub fn apply_edits_to_string(content: &str, edits: &[TextEditResult]) -> String 
             line_char_to_offset(&lines, edit.range.start_line, edit.range.start_char);
         let end_offset = line_char_to_offset(&lines, edit.range.end_line, edit.range.end_char);
 
-        if let (Some(start), Some(end)) = (start_offset, end_offset) {
-            if start <= end && end <= result.len() {
-                result.replace_range(start..end, &edit.new_text);
-            }
+        if let (Some(start), Some(end)) = (start_offset, end_offset)
+            && start <= end
+            && end <= result.len()
+        {
+            result.replace_range(start..end, &edit.new_text);
         }
     }
 

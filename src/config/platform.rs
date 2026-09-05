@@ -53,11 +53,11 @@ fn detect_windows_11() -> bool {
                     let output_str = String::from_utf8_lossy(&output.stdout);
                     // Parse output like: "CurrentBuildNumber    REG_SZ    22631"
                     for line in output_str.lines() {
-                        if line.contains("CurrentBuildNumber") {
-                            if let Some(build_str) = line.split_whitespace().last() {
-                                let build_num: u32 = build_str.parse().unwrap_or(0);
-                                return build_num >= 22000;
-                            }
+                        if line.contains("CurrentBuildNumber")
+                            && let Some(build_str) = line.split_whitespace().last()
+                        {
+                            let build_num: u32 = build_str.parse().unwrap_or(0);
+                            return build_num >= 22000;
                         }
                     }
                     false

@@ -476,10 +476,10 @@ impl App {
 
         if let Some(id) = id {
             // Set jump host if specified
-            if let Some(jump_id) = jump_host_id {
-                if !self.ssh_hosts.set_jump_host(id, Some(jump_id)) {
-                    warn!("Failed to set jump host {} for host {}", jump_id, id);
-                }
+            if let Some(jump_id) = jump_host_id
+                && !self.ssh_hosts.set_jump_host(id, Some(jump_id))
+            {
+                warn!("Failed to set jump host {} for host {}", jump_id, id);
             }
 
             if let Some(creds) = credentials {
@@ -520,7 +520,7 @@ impl App {
         match self.ssh_storage.set_master_password(password) {
             Ok(()) => {
                 if let Ok(list) = self.ssh_storage.load() {
-                    self.ssh_hosts = list;
+                    self.ssh_hosts.set_hosts(list);
                     if let Some(ref mut manager) = self.ssh_manager {
                         manager.update_from_list(&self.ssh_hosts);
                     }

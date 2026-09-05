@@ -88,6 +88,21 @@ impl ApiHandler {
             "docker.stats" => self.handle_docker_stats(&request, app),
             "docker.logs" => self.handle_docker_logs(&request, app),
 
+            // Interface inspection and control
+            "app.snapshot" => self.handle_app_snapshot(&request, app),
+            "app.send_key" => self.handle_app_send_key(&request, app),
+            "app.send_mouse" => self.handle_app_send_mouse(&request, app),
+            "app.type" => self.handle_app_type(&request, app),
+            "app.state" => self.handle_app_state(&request, app),
+
+            // Host registry
+            "hosts.list" => self.handle_hosts_list(&request, app),
+            "hosts.summary" => self.handle_hosts_summary(&request, app),
+
+            // Authentication is handled by the server before dispatch; a
+            // request that reaches here means authentication is disabled.
+            "session.authenticate" => Ok(json!({ "authenticated": true })),
+
             _ => Err(ApiError::MethodNotFound(request.method.clone())),
         };
 
@@ -95,6 +110,179 @@ impl ApiHandler {
             Ok(value) => ApiResponse::success(request.id, value),
             Err(e) => ApiResponse::error(request.id, e.to_error_code(), e.to_string()),
         }
+    }
+
+    // ========================================================================
+    // Interface inspection and control
+    //
+    // These are what let an agent see and drive the interface itself, rather
+    // than only the shell and the editor buffer behind it.
+    // ========================================================================
+
+    fn handle_app_snapshot(&self, request: &ApiRequest, app: &mut App) -> Result<Value, ApiError> {
+        use crate::app::snapshot::SnapshotOptions;
+
+        let (default_width, default_height) = app.screen_size();
+        let width = request
+            .params
+            .get("width")
+            .and_then(Value::as_u64)
+            .and_then(|v| u16::try_from(v).ok())
+            .unwrap_or(default_width);
+        let height = request
+            .params
+            .get("height")
+            .and_then(Value::as_u64)
+            .and_then(|v| u16::try_from(v).ok())
+            .unwrap_or(default_height);
+        let include_cells = request
+            .params
+            .get("cells")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+
+        let mut options = SnapshotOptions::sized(width, height);
+        if include_cells {
+            options = options.with_cells();
+        }
+
+        let snapshot = app
+            .snapshot(options)
+            .map_err(|e| ApiError::Internal(format!("could not render a snapshot: {e}")))?;
+
+        serde_json::to_value(snapshot).map_err(ApiError::Json)
+    }
+
+    fn handle_app_send_key(&self, request: &ApiRequest, app: &mut App) -> Result<Value, ApiError> {
+        // Two spellings: `{"key": "ctrl+q"}` for a whole description, or
+        // `{"code": "F2", "modifiers": ["ctrl"]}` for the structured form.
+        let description = match request.params.get("key").and_then(Value::as_str) {
+            Some(key) => key.to_string(),
+            None => {
+                let code = request
+                    .params
+                    .get("code")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| {
+                        ApiError::InvalidParams("expected \"key\" or \"code\"".to_string())
+                    })?;
+
+                let modifiers: Vec<String> = request
+                    .params
+                    .get("modifiers")
+                    .and_then(Value::as_array)
+                    .map(|values| {
+                        values
+                            .iter()
+                            .filter_map(Value::as_str)
+                            .map(str::to_string)
+                            .collect()
+                    })
+                    .unwrap_or_default();
+
+                let mut parts = modifiers;
+                parts.push(code.to_string());
+                parts.join("+")
+            }
+        };
+
+        app.inject_key_str(&description)
+            .map_err(ApiError::InvalidParams)?;
+
+        Ok(json!({ "sent": description }))
+    }
+
+    fn handle_app_send_mouse(
+        &self,
+        request: &ApiRequest,
+        app: &mut App,
+    ) -> Result<Value, ApiError> {
+        let description = request
+            .params
+            .get("event")
+            .and_then(Value::as_str)
+            .ok_or_else(|| {
+                ApiError::InvalidParams(
+                    "expected \"event\", such as \"left_down@10,4\"".to_string(),
+                )
+            })?;
+
+        let event =
+            crate::app::snapshot::parse_mouse(description).map_err(ApiError::InvalidParams)?;
+        app.inject_mouse(event);
+
+        Ok(json!({ "sent": description }))
+    }
+
+    fn handle_app_type(&self, request: &ApiRequest, app: &mut App) -> Result<Value, ApiError> {
+        let text = request
+            .params
+            .get("text")
+            .and_then(Value::as_str)
+            .ok_or_else(|| ApiError::InvalidParams("expected \"text\"".to_string()))?;
+
+        app.inject_text(text);
+        Ok(json!({ "typed": text.chars().count() }))
+    }
+
+    fn handle_app_state(&self, _request: &ApiRequest, app: &mut App) -> Result<Value, ApiError> {
+        let (width, height) = app.screen_size();
+        Ok(json!({
+            "mode": format!("{:?}", app.mode()),
+            "width": width,
+            "height": height,
+            "status": app.status(),
+            "editor_tabs": app.tab_count(),
+            "active_tab": app.active_tab_index(),
+            "any_tab_modified": app.any_tab_modified(),
+            "ide_visible": app.layout().ide_visible(),
+            "focused_pane": format!("{:?}", app.layout().focused()),
+            "running": app.is_running(),
+        }))
+    }
+
+    // ========================================================================
+    // Host registry
+    // ========================================================================
+
+    fn handle_hosts_list(&self, _request: &ApiRequest, app: &mut App) -> Result<Value, ApiError> {
+        let hosts: Vec<Value> = app
+            .host_registry()
+            .hosts()
+            .map(|host| {
+                let status = app.host_registry().status(host.id);
+                let caps = app.host_registry().capabilities(host.id);
+                json!({
+                    "id": host.id,
+                    "hostname": host.hostname,
+                    "port": host.port,
+                    "label": app.host_registry().label(host.id),
+                    "reachability": status.reachability.label(),
+                    "since": status.since_label(),
+                    "capabilities": caps.labels(),
+                })
+            })
+            .collect();
+
+        Ok(json!({ "hosts": hosts }))
+    }
+
+    fn handle_hosts_summary(
+        &self,
+        _request: &ApiRequest,
+        app: &mut App,
+    ) -> Result<Value, ApiError> {
+        let summary = app.host_registry().summary();
+        Ok(json!({
+            "total": summary.total,
+            "online": summary.online,
+            "offline": summary.offline,
+            "unknown": summary.unknown,
+            "with_docker": summary.with_docker,
+            "with_kubectl": summary.with_kubectl,
+            "with_gpu": summary.with_gpu,
+            "headline": summary.headline(),
+        }))
     }
 
     // ========================================================================

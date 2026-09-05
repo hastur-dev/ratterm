@@ -53,6 +53,9 @@ impl App {
         self.ssh_manager = None;
         self.ssh_scanner = None;
         self.hide_popup();
+        // The status line was showing the manager's key hints, which no longer
+        // do anything now that it is closed.
+        self.set_status("SSH manager closed");
     }
 
     /// Toggles the hotkey overlay for the SSH manager.
@@ -68,7 +71,16 @@ impl App {
     }
 
     /// Loads SSH hosts from storage.
+    ///
+    /// Does nothing under fixtures: the host list came from the fixture
+    /// directory, and reading the user's file would replace it with whatever
+    /// machines they actually have.
     pub(crate) fn load_ssh_hosts(&mut self) {
+        if self.is_fixture_mode() {
+            debug!("load_ssh_hosts: skipped, running on fixtures");
+            return;
+        }
+
         info!(
             "load_ssh_hosts: Starting load from {:?}",
             self.ssh_storage.path()
@@ -122,7 +134,7 @@ impl App {
                     "Loaded {} hosts, {} with credentials",
                     total_hosts, creds_count
                 ));
-                self.ssh_hosts = hosts;
+                self.ssh_hosts.set_hosts(hosts);
             }
             Err(e) => {
                 // Detailed error logging based on error type
@@ -159,7 +171,7 @@ impl App {
                 // This preserves in-memory state if disk load fails
                 if self.ssh_hosts.is_empty() {
                     info!("load_ssh_hosts: No existing hosts in memory, initializing empty list");
-                    self.ssh_hosts = crate::ssh::SSHHostList::new();
+                    self.ssh_hosts.set_hosts(crate::ssh::SSHHostList::new());
                 } else {
                     warn!(
                         "load_ssh_hosts: Preserving {} existing in-memory hosts despite load failure",
@@ -186,6 +198,11 @@ impl App {
                 "  - Host {}: {} (has_creds={})",
                 host.id, host.hostname, has_creds
             );
+        }
+
+        if self.is_fixture_mode() {
+            debug!("save_ssh_hosts: skipped, running on fixtures");
+            return;
         }
 
         if let Err(e) = self.ssh_storage.save(&self.ssh_hosts) {

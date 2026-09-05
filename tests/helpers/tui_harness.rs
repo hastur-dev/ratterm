@@ -36,14 +36,31 @@ pub const ENTER: u8 = 0x0D;
 pub const TAB: u8 = 0x09;
 
 /// Returns the path to the release binary.
+/// The `rat` binary these tests drive.
+///
+/// Prefers the release build and falls back to the debug one. Requiring
+/// release is why these tests were `#[ignore]`d and rarely run: the release
+/// profile here is fat LTO with one codegen unit, so building it to run a
+/// smoke test costs minutes. With the fallback, an ordinary `cargo build` is
+/// enough, and the message below says which build was used rather than
+/// failing with a path nobody recognises.
 fn binary_path() -> String {
-    let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    if cfg!(windows) {
-        path.push("target/release/rat.exe");
-    } else {
-        path.push("target/release/rat");
+    let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let name = if cfg!(windows) { "rat.exe" } else { "rat" };
+
+    let release = root.join("target/release").join(name);
+    if release.is_file() {
+        return release.to_string_lossy().to_string();
     }
-    path.to_string_lossy().to_string()
+
+    let debug = root.join("target/debug").join(name);
+    assert!(
+        debug.is_file(),
+        "neither {} nor {} exists; run `cargo build` first",
+        release.display(),
+        debug.display()
+    );
+    debug.to_string_lossy().to_string()
 }
 
 /// Wraps a ConPTY process with TUI-specific helpers.

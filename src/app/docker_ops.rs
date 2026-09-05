@@ -1,8 +1,11 @@
 //! Docker manager operations.
 
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
-use crate::docker::{DockerDiscovery, DockerHost, DockerHostManager};
+use crate::docker::scan::discovery_from_snapshot;
+use crate::docker::{
+    DockerClient, DockerDiscovery, DockerDiscoveryResult, DockerHost, DockerHostManager,
+};
 use crate::ui::docker_manager::{DockerItemDisplay, DockerManagerMode, DockerManagerSelector};
 use crate::ui::popup::PopupKind;
 
@@ -41,6 +44,7 @@ impl App {
     pub fn hide_docker_manager(&mut self) {
         self.popup.hide();
         self.mode = AppMode::Normal;
+        self.set_status("Docker manager closed");
         self.request_redraw();
     }
 
@@ -70,25 +74,22 @@ impl App {
         // Debug: show host details
         let host_debug = match &host {
             DockerHost::Local => "Local".to_string(),
-            DockerHost::Remote {
-                hostname,
-                username,
-                password,
-                ..
-            } => {
-                format!(
+            DockerHost::Remote { host_id, .. } => match self.ssh_hosts.target(*host_id) {
+                Some(target) => format!(
                     "Remote({}@{}, has_pwd={})",
-                    username,
-                    hostname,
-                    password.is_some()
-                )
-            }
+                    target.username,
+                    target.hostname,
+                    target.password.is_some()
+                ),
+                None => format!("Remote(host {host_id}, unresolved)"),
+            },
         };
         info!("refresh_docker_discovery: host={}", host_debug);
         self.set_status(format!("Discovery: host={}", host_debug));
 
-        // Perform discovery based on host
-        let result = DockerDiscovery::discover_all_for_host(&host);
+        // Prefer the typed API; fall back to the CLI when it is not reachable.
+        let result = Self::docker_typed_discovery(&host)
+            .unwrap_or_else(|| DockerDiscovery::discover_all_for_host(&host));
 
         // Show discovery result for remote hosts
         if host.is_remote() {
@@ -108,6 +109,32 @@ impl App {
             manager.update_from_discovery(result);
             manager.set_mode(DockerManagerMode::List);
         }
+    }
+
+    /// Runs discovery through the typed Docker API.
+    ///
+    /// Returns `None` when the daemon cannot be reached that way, so the
+    /// caller falls back to the CLI. Only the local daemon is tried here: a
+    /// remote host needs an SSH port forward, which costs seconds to find out
+    /// about when the remote daemon has no TCP listener, and this call is on
+    /// the render path. Remote hosts get the typed path through the fleet
+    /// view, which connects once and keeps the connection.
+    fn docker_typed_discovery(host: &DockerHost) -> Option<DockerDiscoveryResult> {
+        if !host.is_local() {
+            return None;
+        }
+
+        let client = DockerClient::connect(host)
+            .inspect_err(|e| debug!("typed Docker discovery unavailable: {e}"))
+            .ok()?;
+        let transport = client.transport().to_string();
+        let snapshot = client
+            .snapshot_blocking()
+            .inspect_err(|e| debug!("typed Docker discovery failed over {transport}: {e}"))
+            .ok()?;
+
+        debug!("Docker discovery used the API over {transport}");
+        Some(discovery_from_snapshot(&snapshot))
     }
 
     /// Starts host selection mode, loading available SSH hosts.
@@ -185,14 +212,9 @@ impl App {
     /// Returns display name for the currently selected host.
     #[must_use]
     pub fn docker_host_display_name(&self) -> String {
-        match &self.docker_items.selected_host {
-            DockerHost::Local => "Local".to_string(),
-            DockerHost::Remote {
-                display_name,
-                hostname,
-                ..
-            } => display_name.clone().unwrap_or_else(|| hostname.clone()),
-        }
+        self.docker_items
+            .selected_host
+            .display_name_in(&self.ssh_hosts)
     }
 
     /// Saves Docker items to storage.
@@ -297,23 +319,16 @@ impl App {
     ///
     /// This bypasses the UI and sets the host directly, useful for testing.
     /// After setting, call `refresh_docker_discovery()` to refresh the container list.
-    pub fn docker_set_remote_host(
-        &mut self,
-        host_id: u32,
-        hostname: &str,
-        port: u16,
-        username: &str,
-        password: &str,
-        display_name: Option<&str>,
-    ) {
-        let mut manager = DockerHostManager::new(&mut self.docker_items);
-        manager.set_remote_with_password(host_id, hostname, port, username, password, display_name);
+    pub fn docker_set_remote_host(&mut self, host_id: u32) {
+        let label = self
+            .ssh_hosts
+            .label(host_id)
+            .unwrap_or_else(|| format!("host {host_id}"));
 
-        let host_display = display_name.unwrap_or(hostname);
-        self.set_status(format!(
-            "Set Docker host: {}@{} (pwd=true)",
-            username, host_display
-        ));
+        let mut manager = DockerHostManager::new(&mut self.docker_items);
+        manager.set_remote_labelled(host_id, &label);
+
+        self.set_status(format!("Set Docker host: {label}"));
     }
 
     /// Sets the Docker host to local.
@@ -331,22 +346,21 @@ impl App {
             DockerHost::Local => "DockerHost::Local".to_string(),
             DockerHost::Remote {
                 host_id,
-                hostname,
-                port,
-                username,
-                display_name,
-                password,
-            } => {
-                format!(
-                    "DockerHost::Remote {{ id: {}, host: {}, port: {}, user: {}, name: {:?}, has_pwd: {} }}",
+                cached_label,
+            } => match self.ssh_hosts.target(*host_id) {
+                Some(target) => format!(
+                    "DockerHost::Remote {{ id: {}, host: {}, port: {}, user: {}, label: {:?}, has_pwd: {} }}",
                     host_id,
-                    hostname,
-                    port,
-                    username,
-                    display_name,
-                    password.is_some()
-                )
-            }
+                    target.hostname,
+                    target.port,
+                    target.username,
+                    cached_label,
+                    target.password.is_some()
+                ),
+                None => format!(
+                    "DockerHost::Remote {{ id: {host_id}, label: {cached_label:?}, unresolved }}"
+                ),
+            },
         }
     }
 
@@ -359,16 +373,8 @@ impl App {
     /// Convenience method to set a remote host and immediately discover containers.
     ///
     /// This is the recommended way to programmatically switch to a remote host.
-    pub fn docker_switch_to_remote(
-        &mut self,
-        host_id: u32,
-        hostname: &str,
-        port: u16,
-        username: &str,
-        password: &str,
-        display_name: Option<&str>,
-    ) {
-        self.docker_set_remote_host(host_id, hostname, port, username, password, display_name);
+    pub fn docker_switch_to_remote(&mut self, host_id: u32) {
+        self.docker_set_remote_host(host_id);
         self.refresh_docker_discovery();
     }
 
@@ -382,97 +388,6 @@ impl App {
     pub fn docker_show_host_debug(&mut self) {
         let info = self.docker_host_debug_info();
         self.set_status(format!("DEBUG: {}", info));
-    }
-
-    // =========================================================================
-    // Background Image Pull Operations
-    // =========================================================================
-
-    /// Spawns a background task to pull a Docker image.
-    ///
-    /// The result will be available via `check_docker_background_tasks()`.
-    pub fn spawn_background_image_pull(&mut self, host: DockerHost, image_name: String) {
-        use std::sync::mpsc::channel;
-        use std::thread;
-
-        info!(
-            "Spawning background pull for image '{}' on {:?}",
-            image_name, host
-        );
-
-        let (tx, rx) = channel();
-        self.docker_background_rx = Some(rx);
-
-        let image_clone = image_name.clone();
-        thread::spawn(move || {
-            let result = DockerDiscovery::pull_image_on_host(&host, &image_clone);
-            let msg = super::DockerBackgroundResult::ImagePulled {
-                image: image_clone,
-                success: result.is_ok(),
-                error: result.err(),
-            };
-            let _ = tx.send(msg);
-        });
-
-        self.set_status(format!("Downloading image '{}'...", image_name));
-    }
-
-    /// Checks for completed background Docker operations.
-    ///
-    /// Call this periodically (e.g., in the event loop) to handle results.
-    /// Returns `true` if a result was processed.
-    pub fn check_docker_background_tasks(&mut self) -> bool {
-        let result = if let Some(ref rx) = self.docker_background_rx {
-            match rx.try_recv() {
-                Ok(r) => Some(r),
-                Err(std::sync::mpsc::TryRecvError::Empty) => return false,
-                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
-                    self.docker_background_rx = None;
-                    return false;
-                }
-            }
-        } else {
-            return false;
-        };
-
-        if let Some(result) = result {
-            self.docker_background_rx = None;
-            self.handle_docker_background_result(result);
-            return true;
-        }
-
-        false
-    }
-
-    /// Handles a completed background Docker operation.
-    fn handle_docker_background_result(&mut self, result: super::DockerBackgroundResult) {
-        match result {
-            super::DockerBackgroundResult::ImagePulled {
-                image,
-                success,
-                error,
-            } => {
-                if success {
-                    info!("Background pull completed for '{}'", image);
-                    self.set_status(format!("Downloaded '{}' successfully", image));
-
-                    // Update creation state
-                    if let Some(ref mut manager) = self.docker_manager {
-                        manager.on_image_pull_complete(true, None);
-                    }
-                } else {
-                    let err_msg = error.unwrap_or_else(|| "Unknown error".to_string());
-                    warn!("Background pull failed for '{}': {}", image, err_msg);
-                    self.set_status(format!("Failed to download '{}': {}", image, err_msg));
-
-                    // Update creation state with error
-                    if let Some(ref mut manager) = self.docker_manager {
-                        manager.on_image_pull_complete(false, Some(err_msg));
-                    }
-                }
-                self.request_redraw();
-            }
-        }
     }
 
     // =========================================================================

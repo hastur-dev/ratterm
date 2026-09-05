@@ -1,5 +1,47 @@
 # Ratterm Configuration (.ratrc)
 
+## Two files, one schema
+
+Settings live in `~/.ratrc`, the format this document describes. They can also
+live in `~/.ratterm/config.toml`, the same settings grouped into TOML sections.
+Both are read and both are checked against the same schema; when both exist the
+TOML file wins, because writing one is a deliberate act.
+
+To convert:
+
+```sh
+rat --migrate-config     # writes ~/.ratterm/config.toml from ~/.ratrc
+```
+
+`~/.ratrc` is left in place and keeps working. A key the current build does not
+recognise is carried into an `[unknown]` section rather than dropped, so a file
+written by a newer version survives a round trip.
+
+## Checking a settings file
+
+```sh
+rat --check-config
+```
+
+Every problem is reported with its line number, and the command exits non-zero
+if there are any:
+
+```
+/home/me/.ratrc:
+  line 12: `metrics_hisory` is not a setting. Did you mean `metrics_history`?
+  line 18: `mode` expects one of vim, emacs, default.
+  line 24: `alert.cpu` expects a number from 0 to 100, not 150.
+  line 31: `shell` is set again here; the value on line 4 is overridden.
+
+4 problems found.
+```
+
+A misspelled key used to be ignored in silence, which meant a setting could
+appear to be on and do nothing. Starting ratterm normally now reports the first
+problem in the status bar and writes all of them to the log; it still starts,
+because an unrecognised key may simply belong to a newer build.
+
+
 The `.ratrc` file is Ratterm's configuration file, located at `~/.ratrc` (your home directory). It is automatically created on first launch with default settings.
 
 ## File Format
@@ -436,18 +478,41 @@ Ratterm includes an SSH Manager for managing SSH connections.
 ssh_storage_mode = <mode>
 ```
 
-Sets how SSH credentials are stored.
+Sets where SSH passwords and key passphrases are kept.
+
+The host file itself (`~/.ratterm/ssh_hosts.toml`) never holds a secret unless
+`plaintext` is chosen: it holds a reference such as `secret:ssh/5/password`,
+and the secret lives in the backend named here.
 
 | Value | Description |
 |-------|-------------|
-| `plaintext` | Store credentials in plain text (default) |
-| `masterpass` | Encrypt credentials with a master password |
-| `external` | Use external password manager (future) |
+| `keychain` | Operating system credential store: Windows Credential Manager, the macOS Keychain, or the Secret Service on Linux. **Default.** |
+| `encrypted` | `~/.ratterm/secrets.vault`, Argon2id key derivation plus XChaCha20-Poly1305, passphrase entered once per session |
+| `plaintext` | No protection; secrets sit in the host file in the clear. Not recommended. |
+
+`masterpass` and `masterpassword` are accepted as older names for `encrypted`,
+and `external` for `keychain`, so an existing `.ratrc` keeps working.
 
 **Example:**
 ```
-ssh_storage_mode = masterpass
+ssh_storage_mode = keychain
 ```
+
+### Migrating an existing installation
+
+Nothing needs to be done by hand. On the first load after upgrading:
+
+- a password stored in the clear is moved into the chosen backend and the host
+  file is rewritten with a reference;
+- a value written by the retired `enc:` scheme is read once, using the master
+  password entered at startup, and rewritten the same way;
+- a secret that cannot be read is left exactly as it is rather than destroyed.
+
+The retired scheme derived its key with a hand-written mixing loop and then
+XORed the password against it. A test in `src/ssh/storage.rs` demonstrates that
+after its 100,000 rounds the output depended on neither the salt nor the
+password, so every installation shared one key. Nothing is ever written in that
+form again.
 
 ---
 
@@ -598,6 +663,82 @@ docker_log_color = true
 docker_log_storage = true
 docker_log_retention = 336
 ```
+
+---
+
+### Fleet Metrics
+
+The health dashboard keeps the latest sample for each host in memory whether or
+not these settings are on. They control what is kept beyond that.
+
+| Setting | Description | Default |
+|---------|-------------|---------|
+| `metrics_history` | Write samples to `~/.ratterm/metrics.db` | `false` |
+| `metrics_raw_days` | Days of raw samples before per-minute averaging (1–90) | `1` |
+| `alert.cpu` | Fire when CPU use exceeds this percentage | off |
+| `alert.memory` | Fire when memory use exceeds this percentage (also `alert.ram`, `alert.mem`) | off |
+| `alert.disk` | Fire when disk use exceeds this percentage | off |
+| `alert.temperature` | Fire above this many degrees Celsius (also `alert.temp`) | off |
+
+`metrics-history` and `metrics-raw-days` are accepted as well, for consistency
+with the other dashed spellings.
+
+History is off by default: a database should not appear in your home directory
+because you opened a dashboard. With it on, the host detail view gains a
+sparkline of the last hour with minimum, mean and maximum, and a host that has
+stopped reporting shows how long it has been gone rather than only that it is
+down.
+
+Both collectors write to the same history. A host reporting through `rat-agent`
+and a host polled over SSH produce one series each, not two, and a host keeps
+building history while the dashboard is closed.
+
+Storage is bounded by three tiers rather than a single cut-off: raw samples for
+`metrics_raw_days`, per-minute averages for a month, per-hour averages for a
+year. Downsampling runs at most once an hour while ratterm is open.
+
+Alert thresholds are evaluated as each sample arrives, whichever collector
+produced it. A threshold outside its sensible range — a percentage above 100, a
+negative number, an unparseable value — turns that rule off rather than being
+clamped, because such a value is far more likely to be a typo than an intent.
+An alert is announced in the status bar when it starts firing, not on every
+sample.
+
+#### Example
+
+```
+# Keep a year of fleet history, with three days at full resolution
+metrics_history = true
+metrics_raw_days = 3
+
+alert.cpu = 90
+alert.memory = 85
+alert.disk = 90
+alert.temperature = 85
+```
+
+#### Reporting from a machine
+
+`rat-agent` is built alongside `rat` and reports the machine it runs on. It
+posts the same payload as the older shell daemon, so a fleet can be migrated one
+host at a time.
+
+```sh
+rat-agent --host-id 3                      # post to the local receiver
+rat-agent --host-id 3 --interval 30
+rat-agent --host-id 3 --once               # one sample, for a cron entry
+rat-agent --host-id 3 --dry-run            # print the payload, post nothing
+```
+
+The default endpoint is `http://127.0.0.1:19999/metrics`, which is reached from
+a remote host through a reverse tunnel:
+
+```sh
+ssh -R 19999:127.0.0.1:19999 <collector>
+```
+
+`--host-id` must match the host's id in ratterm's host list, which is how the
+sample is matched to a row in the dashboard.
 
 ---
 
@@ -843,6 +984,12 @@ lsp-format-on-save = <true|false>
 ```
 
 Automatically formats the file via the LSP server when saving.
+
+**Not implemented yet.** The setting is accepted and validated, and the request
+itself exists in `src/lsp/formatting.rs`, but the application holds a smaller
+language-server client that cannot send it. With this on, saving works and the
+status bar says the formatting did not happen, rather than the file being
+saved unformatted in silence.
 
 | Value | Description |
 |-------|-------------|

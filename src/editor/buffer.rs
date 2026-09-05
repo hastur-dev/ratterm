@@ -7,7 +7,6 @@ use thiserror::Error;
 
 use super::edit::Edit;
 pub use super::edit::Position;
-use super::find::{FindCaseInsensitiveIterator, FindIterator};
 
 /// Maximum undo history size.
 const MAX_UNDO_HISTORY: usize = 1000;
@@ -29,6 +28,7 @@ pub enum BufferError {
 }
 
 /// Text buffer with undo/redo support.
+#[derive(Debug, Clone)]
 pub struct Buffer {
     /// The rope holding the text.
     rope: Rope,
@@ -42,6 +42,13 @@ pub struct Buffer {
     grouping: bool,
     /// Modified flag.
     modified: bool,
+    /// Monotonic counter bumped by every mutation.
+    ///
+    /// Caches that are derived from the text — the syntax tree, the fold
+    /// ranges — compare this against the revision they were built from to know
+    /// whether they are stale. It changes on undo and redo too, because those
+    /// change the text.
+    revision: u64,
 }
 
 impl Buffer {
@@ -55,6 +62,7 @@ impl Buffer {
             current_group: Vec::new(),
             grouping: false,
             modified: false,
+            revision: 0,
         }
     }
 
@@ -69,7 +77,89 @@ impl Buffer {
             current_group: Vec::new(),
             grouping: false,
             modified: false,
+            revision: 0,
         }
+    }
+
+    /// Returns the mutation counter.
+    ///
+    /// Two buffers are unrelated, so the value is only meaningful when compared
+    /// against an earlier reading of the same buffer.
+    #[must_use]
+    pub const fn revision(&self) -> u64 {
+        self.revision
+    }
+
+    /// Returns the text length in bytes.
+    #[must_use]
+    pub fn len_bytes(&self) -> usize {
+        self.rope.len_bytes()
+    }
+
+    /// Converts a character index to a byte offset.
+    ///
+    /// Tree-sitter works in bytes while every position in this editor is a
+    /// character offset, so the conversion has to be cheap: the rope answers it
+    /// in logarithmic time rather than by walking the text.
+    #[must_use]
+    pub fn char_to_byte(&self, char_idx: usize) -> usize {
+        self.rope.char_to_byte(char_idx.min(self.rope.len_chars()))
+    }
+
+    /// Converts a byte offset to a character index.
+    #[must_use]
+    pub fn byte_to_char(&self, byte_idx: usize) -> usize {
+        self.rope.byte_to_char(byte_idx.min(self.rope.len_bytes()))
+    }
+
+    /// Returns the byte offset at which a line starts.
+    #[must_use]
+    pub fn line_to_byte(&self, line: usize) -> usize {
+        if line >= self.rope.len_lines() {
+            return self.rope.len_bytes();
+        }
+        self.rope.line_to_byte(line)
+    }
+
+    /// Returns the contiguous chunk of text that starts at `byte`.
+    ///
+    /// The slice is whatever the rope holds contiguously from that offset; a
+    /// reader must call again with the next offset until it gets an empty
+    /// slice. This is what lets tree-sitter reparse without the whole document
+    /// being copied into a `String` first.
+    #[must_use]
+    pub fn chunk_at_byte(&self, byte: usize) -> &str {
+        if byte >= self.rope.len_bytes() {
+            return "";
+        }
+        let (chunk, chunk_start, _, _) = self.rope.chunk_at_byte(byte);
+        let offset = byte - chunk_start;
+        // A caller that asks for the middle of a multi-byte character has a
+        // bug; returning nothing ends the read instead of panicking mid-render.
+        if !chunk.is_char_boundary(offset) {
+            return "";
+        }
+        &chunk[offset..]
+    }
+
+    /// Returns the bytes covering `range`, clamped to the buffer.
+    #[must_use]
+    pub fn byte_range(&self, range: std::ops::Range<usize>) -> Vec<u8> {
+        let len = self.rope.len_bytes();
+        let start = range.start.min(len);
+        let end = range.end.clamp(start, len);
+        let mut out = Vec::with_capacity(end - start);
+        let mut at = start;
+        while at < end {
+            let chunk = self.chunk_at_byte(at);
+            if chunk.is_empty() {
+                break;
+            }
+            let take = chunk.len().min(end - at);
+            out.extend_from_slice(&chunk.as_bytes()[..take]);
+            at += take;
+        }
+        out
     }
 
     /// Returns the number of lines.
@@ -196,6 +286,7 @@ impl Buffer {
 
         self.rope.insert(idx, text);
         self.modified = true;
+        self.revision = self.revision.wrapping_add(1);
     }
 
     /// Deletes the character at the given position (forward delete).
@@ -243,6 +334,7 @@ impl Buffer {
 
         self.rope.remove(idx..end_idx);
         self.modified = true;
+        self.revision = self.revision.wrapping_add(1);
     }
 
     /// Pushes an edit to the undo stack.
@@ -316,6 +408,7 @@ impl Buffer {
 
     /// Applies an edit without recording it.
     fn apply_edit_raw(&mut self, edit: &Edit) {
+        self.revision = self.revision.wrapping_add(1);
         match edit {
             Edit::Insert { pos, text } => {
                 let pos = (*pos).min(self.rope.len_chars());
@@ -323,7 +416,9 @@ impl Buffer {
             }
             Edit::Delete { pos, text } => {
                 let pos = (*pos).min(self.rope.len_chars());
-                let end = (pos + text.len()).min(self.rope.len_chars());
+                // Rope indices are character offsets, so the span to remove is
+                // the character count of the recorded text, not its byte length.
+                let end = (pos + text.chars().count()).min(self.rope.len_chars());
                 if pos < end {
                     self.rope.remove(pos..end);
                 }
@@ -354,8 +449,9 @@ impl Buffer {
 
         self.begin_undo_group();
 
+        let pattern_chars = pattern.chars().count();
         for pos in matches.into_iter().rev() {
-            let end_idx = self.position_to_index(pos) + pattern.len();
+            let end_idx = self.position_to_index(pos) + pattern_chars;
             let end = self.index_to_position(end_idx);
             self.delete_range(pos, end);
             self.insert_str(pos, replacement);
@@ -365,90 +461,6 @@ impl Buffer {
 
         count
     }
-
-    /// Finds all occurrences of a pattern.
-    pub fn find<'a>(&'a self, pattern: &'a str) -> impl Iterator<Item = Position> + 'a {
-        FindIterator::new(self, pattern)
-    }
-
-    /// Finds all occurrences of a pattern (case insensitive).
-    pub fn find_case_insensitive<'a>(
-        &'a self,
-        pattern: &'a str,
-    ) -> impl Iterator<Item = Position> + 'a {
-        FindCaseInsensitiveIterator::new(self, pattern)
-    }
-
-    /// Gets text in a range.
-    #[must_use]
-    pub fn get_range(&self, start: Position, end: Position) -> Option<String> {
-        let start_idx = self.position_to_index(start);
-        let end_idx = self.position_to_index(end);
-
-        if start_idx >= end_idx {
-            return None;
-        }
-
-        Some(self.rope.slice(start_idx..end_idx).to_string())
-    }
-
-    /// Returns the start of the word at position.
-    #[must_use]
-    pub fn word_start(&self, pos: Position) -> Position {
-        let idx = self.position_to_index(pos);
-        let mut start = idx;
-
-        let chars: Vec<char> = self.rope.chars().collect();
-        while start > 0 && !chars[start - 1].is_whitespace() {
-            start -= 1;
-        }
-
-        self.index_to_position(start)
-    }
-
-    /// Returns the end of the word at position.
-    #[must_use]
-    pub fn word_end(&self, pos: Position) -> Position {
-        let idx = self.position_to_index(pos);
-        let mut end = idx;
-        let len = self.rope.len_chars();
-
-        let chars: Vec<char> = self.rope.chars().collect();
-        while end < len && !chars[end].is_whitespace() {
-            end += 1;
-        }
-
-        self.index_to_position(end)
-    }
-
-    /// Returns the position at the start of a line.
-    #[must_use]
-    pub fn line_start(&self, line: usize) -> Position {
-        Position::new(line, 0)
-    }
-
-    /// Returns the position at the end of a line.
-    #[must_use]
-    pub fn line_end(&self, line: usize) -> Position {
-        Position::new(line, self.line_len_chars(line))
-    }
-
-    /// Returns the first non-whitespace position on a line.
-    #[must_use]
-    pub fn first_non_whitespace(&self, line: usize) -> Option<Position> {
-        if line >= self.len_lines() {
-            return None;
-        }
-
-        let line_text = self.rope.line(line);
-        for (i, c) in line_text.chars().enumerate() {
-            if !c.is_whitespace() {
-                return Some(Position::new(line, i));
-            }
-        }
-
-        None
-    }
 }
 
 impl Default for Buffer {
@@ -457,46 +469,7 @@ impl Default for Buffer {
     }
 }
 
+mod query;
+
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_buffer_new() {
-        let buffer = Buffer::new();
-        assert!(buffer.is_empty());
-        assert_eq!(buffer.len_lines(), 1);
-    }
-
-    #[test]
-    fn test_buffer_from_str() {
-        let buffer = Buffer::from_str("Hello\nWorld");
-        assert_eq!(buffer.len_lines(), 2);
-        assert_eq!(buffer.line(0), Some("Hello\n".to_string()));
-        assert_eq!(buffer.line(1), Some("World".to_string()));
-    }
-
-    #[test]
-    fn test_buffer_insert() {
-        let mut buffer = Buffer::from_str("Hello");
-        buffer.insert_char(Position::new(0, 5), '!');
-        assert_eq!(buffer.text(), "Hello!");
-    }
-
-    #[test]
-    fn test_buffer_undo() {
-        let mut buffer = Buffer::from_str("Hello");
-        buffer.insert_char(Position::new(0, 5), '!');
-        buffer.undo();
-        assert_eq!(buffer.text(), "Hello");
-    }
-
-    #[test]
-    fn test_buffer_redo() {
-        let mut buffer = Buffer::from_str("Hello");
-        buffer.insert_char(Position::new(0, 5), '!');
-        buffer.undo();
-        buffer.redo();
-        assert_eq!(buffer.text(), "Hello!");
-    }
-}
+mod tests;

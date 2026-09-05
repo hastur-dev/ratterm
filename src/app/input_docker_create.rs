@@ -352,10 +352,10 @@ impl App {
 
     /// Handles key events in creation error mode.
     fn handle_creation_error_key(&mut self, key: KeyEvent) {
-        if let (KeyModifiers::NONE, KeyCode::Esc | KeyCode::Enter) = (key.modifiers, key.code) {
-            if let Some(ref mut manager) = self.docker_manager {
-                manager.dismiss_creation_error();
-            }
+        if let (KeyModifiers::NONE, KeyCode::Esc | KeyCode::Enter) = (key.modifiers, key.code)
+            && let Some(ref mut manager) = self.docker_manager
+        {
+            manager.dismiss_creation_error();
         }
     }
 
@@ -394,22 +394,27 @@ impl App {
                 // Local: Create a new terminal tab and run the docker command
                 self.run_local_docker_command(&run_command, &image_name);
             }
-            crate::docker::DockerHost::Remote {
-                hostname,
-                port,
-                username,
-                password,
-                ..
-            } => {
-                // Remote: Create an SSH terminal tab that runs the docker command
-                self.run_remote_docker_command(
-                    &run_command,
-                    &image_name,
-                    &hostname,
-                    port,
-                    &username,
-                    password.as_deref(),
-                );
+            crate::docker::DockerHost::Remote { host_id, .. } => {
+                // Remote: resolve the connection from the registry, then create
+                // an SSH terminal tab that runs the docker command.
+                match self.ssh_hosts.target(host_id) {
+                    Some(target) => {
+                        let password = target.password.as_ref().map(|p| p.to_string());
+                        self.run_remote_docker_command(
+                            &run_command,
+                            &image_name,
+                            &target.hostname,
+                            target.port,
+                            &target.username,
+                            password.as_deref(),
+                        );
+                    }
+                    None => {
+                        self.set_status(format!(
+                            "SSH host {host_id} is not configured; add credentials in the SSH manager"
+                        ));
+                    }
+                }
             }
         }
 

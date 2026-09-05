@@ -80,15 +80,14 @@ impl DaemonDeployer {
                 .split("DAEMON_STARTED_")
                 .nth(1)
                 .and_then(|s| s.lines().next())
+                && let Ok(pid) = pid_str.trim().parse::<u32>()
             {
-                if let Ok(pid) = pid_str.trim().parse::<u32>() {
-                    info!(
-                        "Daemon deployed successfully to {} with PID {}",
-                        sftp.context().hostname,
-                        pid
-                    );
-                    return Ok(());
-                }
+                info!(
+                    "Daemon deployed successfully to {} with PID {}",
+                    sftp.context().hostname,
+                    pid
+                );
+                return Ok(());
             }
             // Even if we can't parse PID, deployment likely succeeded
             info!("Daemon deployed to {}", sftp.context().hostname);
@@ -164,10 +163,10 @@ impl DaemonDeployer {
 
         if output.contains("DAEMON_RUNNING") {
             // Try to extract PID from the first line
-            if let Some(pid_line) = output.lines().next() {
-                if let Ok(pid) = pid_line.trim().parse::<u32>() {
-                    return Ok(DaemonStatus::Running(pid));
-                }
+            if let Some(pid_line) = output.lines().next()
+                && let Ok(pid) = pid_line.trim().parse::<u32>()
+            {
+                return Ok(DaemonStatus::Running(pid));
             }
             // Running but couldn't get PID
             Ok(DaemonStatus::Running(0))

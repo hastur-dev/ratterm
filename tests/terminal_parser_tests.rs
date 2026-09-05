@@ -691,10 +691,10 @@ fn test_hyperlink_osc() {
 
     let mut found_link = false;
     for action in &actions {
-        if let ParsedAction::Hyperlink { url, .. } = action {
-            if url == "https://example.com" {
-                found_link = true;
-            }
+        if let ParsedAction::Hyperlink { url, .. } = action
+            && url == "https://example.com"
+        {
+            found_link = true;
         }
     }
 

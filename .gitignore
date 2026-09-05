@@ -2,3 +2,11 @@
 .claude/
 *.log
 upgrades.md 
+
+# Crash dumps left by MSYS/Cygwin tools
+*.stackdump
+
+# Scenario run output. Rewritten by every run and by every platform in CI, so
+# committing it produces a diff on each run that says nothing about the code.
+# CI uploads it as a build artefact instead.
+test-results/

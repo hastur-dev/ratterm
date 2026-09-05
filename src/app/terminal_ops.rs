@@ -38,7 +38,7 @@ impl App {
                 index: i,
                 name: file.name.clone(),
                 path: Some(file.path.to_string_lossy().into_owned()),
-                modified: i == self.current_file_idx && self.editor.is_modified(),
+                modified: self.tab_is_modified(i),
                 active: i == self.current_file_idx,
             })
             .collect()
