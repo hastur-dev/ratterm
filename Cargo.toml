@@ -1,6 +1,6 @@
 [package]
 name = "ratterm"
-version = "0.2.3"
+version = "0.2.4"
 edition = "2024"
 # Raised from 1.85: the OS-keychain backend (`keyring` 4) requires 1.88 and the
 # Kubernetes client (`kube` 4) requires 1.89.

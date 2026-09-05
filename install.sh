@@ -7,7 +7,7 @@ set -e
 
 # Fallback only; used when the GitHub API is unreachable. Bumped by the
 # release workflow, which anchors its sed on the start of this line.
-VERSION="0.2.3"
+VERSION="0.2.4"
 REPO="hastur-dev/ratterm"
 BINARY_NAME="rat"
 INSTALL_DIR="${RATTERM_INSTALL_DIR:-$HOME/.local/bin}"
