@@ -42,6 +42,7 @@ cargo test -- --nocapture        # with output
 | `editor_tab_state_tests.rs` | Per-tab editor state, kept separate across tab switches |
 | `health_dashboard_tests.rs` | Opening, closing and populating the health dashboard |
 | `lsp_integration_tests.rs` | LSP request and response handling |
+| `portability_tests.rs` | Platform gates and the CI matrix, read from the sources and the workflow |
 | `scenario_suite_tests.rs` | Runs every scenario in `tests/scenarios/` |
 | `terminal_grid_tests.rs` | The terminal cell buffer |
 | `terminal_parser_tests.rs` | ANSI and VT100 escape sequence parsing |
