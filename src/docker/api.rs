@@ -8,8 +8,10 @@
 //! The `DockerHostManager` provides methods to directly set and test Docker hosts,
 //! bypassing the UI for testing and automation purposes.
 
-use super::container::{DockerContainer, DockerHost, DockerImage, DockerItemList};
+use super::container::{DockerContainer, DockerImage};
 use super::discovery::{DockerDiscovery, DockerDiscoveryResult};
+use super::host::DockerHost;
+use super::items::DockerItemList;
 use crate::remote::{ExecError, exec_on_host};
 
 /// Host manager for programmatic Docker host manipulation.

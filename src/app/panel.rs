@@ -73,7 +73,7 @@ impl<T> ListPanel<T> {
     /// True if the panel is open and has something to show.
     #[must_use]
     pub fn has_items(&self) -> bool {
-        self.len() > 0
+        !self.is_empty()
     }
 
     /// The items, or an empty slice when closed.

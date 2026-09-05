@@ -55,6 +55,11 @@ impl App {
             return;
         }
 
+        // Same for the Docker fleet view.
+        if self.is_docker_fleet_open() && self.handle_docker_fleet_key(key) {
+            return;
+        }
+
         match self.mode {
             AppMode::Normal => {
                 tracing::info!("KEY_ROUTE: -> handle_normal_key");
@@ -174,8 +179,23 @@ impl App {
                 }
                 true
             }
-            // Test-keys mode: F1=Palette, F2=SSH, F3=Docker, F4=Health, F6=K8s.
-            // F5 is the debugger's "start", so it is not available here.
+            // The Docker fleet: every container on every host, one screen.
+            (m, KeyCode::Char('m') | KeyCode::Char('M'))
+                if m == KeyModifiers::CONTROL | KeyModifiers::SHIFT =>
+            {
+                if self.is_docker_fleet_open() {
+                    self.close_docker_fleet();
+                } else {
+                    self.open_docker_fleet();
+                }
+                true
+            }
+            (KeyModifiers::NONE, KeyCode::F(7)) if self.test_keys => {
+                self.open_docker_fleet();
+                true
+            }
+            // Test-keys mode: F1=Palette, F2=SSH, F3=Docker, F4=Health, F6=K8s,
+            // F7=Docker fleet. F5 is the debugger's "start".
             (KeyModifiers::NONE, KeyCode::F(6)) if self.test_keys => {
                 self.open_k8s_manager();
                 true

@@ -7,6 +7,7 @@ pub mod dashboard_hotkeys;
 pub mod dashboard_nav;
 mod debugger_ops;
 mod docker_connect;
+mod docker_fleet_ops;
 mod docker_logs_ops;
 mod docker_ops;
 mod extension_ops;
@@ -62,7 +63,7 @@ use crate::completion::CompletionHandle;
 use crate::config::{Config, KeybindingMode};
 use crate::daemon::DaemonManager;
 use crate::debugger::breakpoints::BreakpointStore;
-use crate::docker::{DockerItemList, DockerStorage};
+use crate::docker::{DockerFleetState, DockerItemList, DockerStorage};
 use crate::editor::{Editor, EditorState};
 use crate::extension::ExtensionManager;
 use crate::filebrowser::FileBrowser;
@@ -76,6 +77,7 @@ use crate::terminal::{BackgroundManager, TerminalMultiplexer, pty::PtyError};
 use self::lsp_state::LspUiState;
 use self::side_state::{DebugUiState, GitUiState};
 use crate::ui::health_dashboard::HealthDashboard;
+use crate::ui::docker_manager::FleetViewState;
 use crate::ui::k8s_manager::K8sManager;
 use crate::ui::{
     docker_manager::DockerManagerSelector,
@@ -249,6 +251,16 @@ pub struct App {
     pub(crate) docker_manager: Option<DockerManagerSelector>,
     /// Kubernetes screens, which own the cluster connection while they are open.
     pub(crate) k8s_manager: Option<K8sManager>,
+    /// Docker connections, container data and lifecycle events, for every host.
+    ///
+    /// Held whether or not the fleet view is showing: the connections are what
+    /// make reopening it fast, and the event subscriptions keep recording
+    /// while it is closed.
+    pub(crate) docker_fleet: DockerFleetState,
+    /// Where the cursor is in the fleet view.
+    pub(crate) docker_fleet_view: FleetViewState,
+    /// Whether the fleet view is on screen.
+    pub(crate) docker_fleet_open: bool,
     /// Docker storage for quick-connect settings.
     pub(crate) docker_storage: DockerStorage,
     /// Docker items (quick connect slots and settings).
@@ -531,6 +543,14 @@ impl App {
             remote_file_browser: None,
             docker_manager: None,
             k8s_manager: None,
+            docker_fleet: if fixture_mode {
+                // A scripted run must not write to the user's event history.
+                DockerFleetState::live_only()
+            } else {
+                DockerFleetState::with_history()
+            },
+            docker_fleet_view: FleetViewState::new(),
+            docker_fleet_open: false,
             docker_storage: DockerStorage::new(),
             docker_items: DockerItemList::new(),
             file_browser_context: FileBrowserContext::OpenFile,
@@ -945,6 +965,8 @@ impl App {
         self.update_completion_suggestion();
         // Cheap: returns immediately unless an hour has passed.
         self.telemetry.maybe_downsample();
+        // Drains the container event feed. Never blocks, and caps itself.
+        self.docker_fleet.pump_events();
 
         if !self.file_browser.is_visible()
             && !self.is_health_dashboard_open()

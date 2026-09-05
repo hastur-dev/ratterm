@@ -145,8 +145,8 @@ A misspelled step name fails the run rather than being skipped: a silently
 skipped assertion is a test that passes for the wrong reason. A scenario with
 no assertions at all is reported with a warning for the same reason.
 
-Scenarios enable the F1–F4 and F6 test keys by default (`test_keys: false` opts
-out; F5 is the debugger's, so it is not one of them).
+Scenarios enable the F1–F4, F6 and F7 test keys by default (`test_keys: false`
+opts out; F5 is the debugger's, so it is not one of them).
 The real shortcut for the command palette differs between Windows 11 and every
 other platform, so a scenario written against it would not be the same test
 everywhere.

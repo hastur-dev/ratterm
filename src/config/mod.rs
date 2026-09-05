@@ -12,7 +12,7 @@ pub mod validate;
 use std::collections::HashMap;
 use std::fs;
 use std::io::{self, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use tracing::warn;
 
@@ -346,9 +346,9 @@ impl Config {
     }
 
     /// Builds a configuration from file content already in hand.
-    fn from_content(content: &str, path: &PathBuf) -> Self {
+    fn from_content(content: &str, path: &Path) -> Self {
         let mut config = Self {
-            config_path: path.clone(),
+            config_path: path.to_path_buf(),
             ..Self::default()
         };
         config.parse(content);

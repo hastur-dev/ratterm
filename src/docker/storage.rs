@@ -3,7 +3,7 @@
 //! Persists Docker quick-connect assignments and settings to
 //! `~/.ratterm/docker_items.toml`.
 
-use super::container::DockerItemList;
+use super::items::DockerItemList;
 use std::fs;
 use std::io::{self, Write};
 use std::path::PathBuf;
@@ -161,7 +161,7 @@ impl DockerStorage {
         &mut self,
         items: &mut DockerItemList,
         index: usize,
-        item: super::container::DockerQuickConnectItem,
+        item: super::items::DockerQuickConnectItem,
     ) -> Result<(), DockerStorageError> {
         assert!(index < 9, "index must be 0-8");
 
@@ -204,7 +204,8 @@ impl Default for DockerStorage {
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
-    use crate::docker::container::{DockerItemType, DockerQuickConnectItem};
+    use crate::docker::container::DockerItemType;
+    use crate::docker::items::DockerQuickConnectItem;
     use tempfile::NamedTempFile;
 
     #[test]

@@ -1,5 +1,7 @@
 //! Docker container connection operations.
 
+use tracing::{info, warn};
+
 use crate::docker::{DockerDiscovery, DockerHost};
 
 use super::App;
@@ -320,5 +322,96 @@ impl App {
             .as_ref()
             .and_then(|t| t.active_terminal())
             .and_then(|t| t.docker_context())
+    }
+
+    // =========================================================================
+    // Background Image Pull Operations
+    // =========================================================================
+
+    /// Spawns a background task to pull a Docker image.
+    ///
+    /// The result will be available via `check_docker_background_tasks()`.
+    pub fn spawn_background_image_pull(&mut self, host: DockerHost, image_name: String) {
+        use std::sync::mpsc::channel;
+        use std::thread;
+
+        info!(
+            "Spawning background pull for image '{}' on {:?}",
+            image_name, host
+        );
+
+        let (tx, rx) = channel();
+        self.docker_background_rx = Some(rx);
+
+        let image_clone = image_name.clone();
+        thread::spawn(move || {
+            let result = DockerDiscovery::pull_image_on_host(&host, &image_clone);
+            let msg = super::DockerBackgroundResult::ImagePulled {
+                image: image_clone,
+                success: result.is_ok(),
+                error: result.err(),
+            };
+            let _ = tx.send(msg);
+        });
+
+        self.set_status(format!("Downloading image '{}'...", image_name));
+    }
+
+    /// Checks for completed background Docker operations.
+    ///
+    /// Call this periodically (e.g., in the event loop) to handle results.
+    /// Returns `true` if a result was processed.
+    pub fn check_docker_background_tasks(&mut self) -> bool {
+        let result = if let Some(ref rx) = self.docker_background_rx {
+            match rx.try_recv() {
+                Ok(r) => Some(r),
+                Err(std::sync::mpsc::TryRecvError::Empty) => return false,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    self.docker_background_rx = None;
+                    return false;
+                }
+            }
+        } else {
+            return false;
+        };
+
+        if let Some(result) = result {
+            self.docker_background_rx = None;
+            self.handle_docker_background_result(result);
+            return true;
+        }
+
+        false
+    }
+
+    /// Handles a completed background Docker operation.
+    fn handle_docker_background_result(&mut self, result: super::DockerBackgroundResult) {
+        match result {
+            super::DockerBackgroundResult::ImagePulled {
+                image,
+                success,
+                error,
+            } => {
+                if success {
+                    info!("Background pull completed for '{}'", image);
+                    self.set_status(format!("Downloaded '{}' successfully", image));
+
+                    // Update creation state
+                    if let Some(ref mut manager) = self.docker_manager {
+                        manager.on_image_pull_complete(true, None);
+                    }
+                } else {
+                    let err_msg = error.unwrap_or_else(|| "Unknown error".to_string());
+                    warn!("Background pull failed for '{}': {}", image, err_msg);
+                    self.set_status(format!("Failed to download '{}': {}", image, err_msg));
+
+                    // Update creation state with error
+                    if let Some(ref mut manager) = self.docker_manager {
+                        manager.on_image_pull_complete(false, Some(err_msg));
+                    }
+                }
+                self.request_redraw();
+            }
+        }
     }
 }

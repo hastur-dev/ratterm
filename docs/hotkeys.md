@@ -16,6 +16,7 @@ These hotkeys work regardless of which pane is focused or what mode you're in.
 | `Ctrl+Shift+Tab` | Switch Editor Mode (cycles Vim/Emacs/Default) |
 | `Ctrl+G` | Open Git Dashboard |
 | `Ctrl+Shift+K` | Open or close the Kubernetes screens |
+| `Ctrl+Shift+M` | Open or close the Docker fleet view (every container on every host) |
 | `Ctrl+O` | Open File Browser |
 | `Ctrl+T` | New editor tab (works whether or not the IDE pane is showing) |
 | `Ctrl+Shift+C` | Copy selection |
@@ -906,7 +907,7 @@ When running an image with options (`Ctrl+O`):
 
 ## Deterministic keys for scripted runs
 
-`--test-keys`, and every scenario unless it sets `test_keys: false`, enable five
+`--test-keys`, and every scenario unless it sets `test_keys: false`, enable six
 extra keys:
 
 | Hotkey | Action |
@@ -916,6 +917,7 @@ extra keys:
 | `F3` | Docker manager |
 | `F4` | SSH health dashboard |
 | `F6` | Kubernetes (F5 is the debugger) |
+| `F7` | Docker fleet view |
 
 They exist because the real shortcut for the command palette differs between
 Windows 11 and every other platform, so a scenario written against it would not

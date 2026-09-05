@@ -7,7 +7,7 @@ use tracing::debug;
 use crate::config::PlatformKeys;
 use crate::ui::{
     debug_panel::DebugPanelWidget,
-    docker_manager::DockerManagerWidget,
+    docker_manager::{DockerManagerWidget, FleetViewWidget},
     editor_tabs::EditorTabBar,
     editor_widget::EditorWidget,
     file_picker::{FilePickerWidget, RemoteFilePickerWidget},
@@ -100,6 +100,9 @@ impl App {
             if self.is_k8s_manager_open() {
                 debug!("RENDER: kubernetes");
                 self.render_k8s_manager(frame, areas.terminal);
+            } else if self.is_docker_fleet_open() {
+                debug!("RENDER: docker fleet");
+                self.render_docker_fleet(frame, areas.terminal);
             } else if self.is_health_dashboard_open() {
                 debug!("RENDER: health dashboard");
                 self.render_health_dashboard(frame, &areas);
@@ -540,6 +543,18 @@ impl App {
         };
         let focused = self.layout.focused() == FocusedPane::Terminal;
         frame.render_widget(K8sManagerWidget::new(manager).focused(focused), area);
+    }
+
+    /// Renders the Docker fleet view over the terminal pane.
+    fn render_docker_fleet(&self, frame: &mut ratatui::Frame, area: ratatui::layout::Rect) {
+        frame.render_widget(
+            FleetViewWidget::new(
+                &self.docker_fleet.fleet,
+                &self.docker_fleet.events,
+                &self.docker_fleet_view,
+            ),
+            area,
+        );
     }
 
     /// Renders the health dashboard in the terminal pane area.

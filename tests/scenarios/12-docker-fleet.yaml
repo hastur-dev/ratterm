@@ -1,0 +1,27 @@
+# The Docker fleet view opens, reports every host, and closes.
+#
+# Run with `--fixtures tests/fixtures/fleet`. The fixture hosts are in the RFC
+# 5737 documentation range and the shared remote executor is cleared, so no
+# host answers and no daemon is contacted. That is the interesting case: the
+# screen has to say which hosts failed and why, rather than showing an empty
+# list that looks like a fleet with nothing running on it.
+#
+# It deliberately does not assert a container count. That depends on whether
+# the machine running the test has a local Docker daemon, which is not
+# something a scenario should require either way.
+#
+# The closing assertion is on "sort:", which only appears inside the panel.
+# "Docker fleet" would not work: the status bar says "Docker fleet closed"
+# after Esc, which is the correct message and not the panel.
+name: docker fleet view opens and closes
+steps:
+  - key: F7
+  - expect_text: "Docker fleet"
+  - expect_text: "sort: host"
+  - expect_text: "unreachable"
+  - expect_text: "fixture-gpu"
+  - expect_text: "open the SSH manager"
+  - snapshot: fleet
+  - key: esc
+  - expect_not_text: "sort: host"
+  - expect_status: "closed"
