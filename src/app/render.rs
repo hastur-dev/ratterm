@@ -27,6 +27,15 @@ use crate::ui::{
 
 use super::App;
 
+/// How far back the dashboard's history charts look.
+///
+/// An hour is what "is this host struggling right now?" needs; longer windows
+/// belong to a query, not to a panel that redraws on every frame.
+const HISTORY_WINDOW: std::time::Duration = std::time::Duration::from_secs(3600);
+
+/// Buckets in a history chart, which is also its width in characters.
+const HISTORY_BUCKETS: usize = 40;
+
 impl App {
     /// Renders the application.
     pub fn render(&self, frame: &mut ratatui::Frame) {
@@ -543,8 +552,17 @@ impl App {
                 }
             }
 
-            // Render the dashboard widget
-            let widget = HealthDashboardWidget::new(dashboard).focused(true);
+            // Render the dashboard widget. The history is read here rather
+            // than held by the dashboard so the widget stays a pure function of
+            // its inputs and can be rendered in a test.
+            let history = dashboard.selected_host().map(|host| {
+                self.telemetry
+                    .host_history(host.host_id, HISTORY_WINDOW, HISTORY_BUCKETS)
+            });
+            let mut widget = HealthDashboardWidget::new(dashboard).focused(true);
+            if let Some(ref history) = history {
+                widget = widget.with_history(history);
+            }
             frame.render_widget(widget, areas.terminal);
         }
     }

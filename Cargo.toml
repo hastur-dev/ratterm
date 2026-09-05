@@ -13,6 +13,12 @@ authors = ["Hastur-Dev"]
 name = "rat"
 path = "src/main.rs"
 
+# The fleet metric reporter. Built from the same sources as the TUI, so it
+# runs anywhere ratterm builds rather than only on Linux hosts with curl.
+[[bin]]
+name = "rat-agent"
+path = "src/bin/rat-agent.rs"
+
 [features]
 default = []
 system-clipboard = ["arboard"]
@@ -91,6 +97,9 @@ base64 = "0.23"
 zeroize = { version = "1.9", features = ["derive"] }
 sha2 = "0.11.0"
 rusqlite = { version = "0.40", features = ["bundled"] }
+kube = { version = "4.2", features = ["client", "rustls-tls", "runtime", "ws"] }
+k8s-openapi = { version = "0.28", features = ["v1_33"] }
+sysinfo = { version = "0.37", default-features = false, features = ["system", "disk"] }
 
 [dev-dependencies]
 proptest = "1.6"

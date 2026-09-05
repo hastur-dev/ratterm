@@ -145,11 +145,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         return handle_uninstall();
     }
 
-    // Handle --test mode for automated testing
-    if args.iter().any(|a| a == "--test") {
-        return run_test_mode();
-    }
-
     // Automation flags: headless runs and scenarios never touch the terminal,
     // so they are handled before it is put into raw mode.
     let cli = match ratterm::cli::parse(&args[1..]) {
@@ -503,95 +498,6 @@ fn handle_extension_command(args: &[String]) -> Result<(), Box<dyn std::error::E
         }
     }
 
-    Ok(())
-}
-
-/// Runs automated test mode to diagnose rendering issues.
-fn run_test_mode() -> Result<(), Box<dyn std::error::Error>> {
-    use std::fs::File;
-    use std::io::Write;
-
-    println!("=== Ratterm Test Mode ===");
-    println!("This mode tests the file browser open/close cycle.");
-    println!();
-
-    // Set up terminal
-    enable_raw_mode()?;
-    let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
-    let backend = CrosstermBackend::new(stdout);
-    let mut terminal = Terminal::new(backend)?;
-
-    let size = terminal.size()?;
-    let mut app = App::new(size.width, size.height)?;
-    app.resize(size.width, size.height);
-
-    let mut log = File::create("test_output.txt")?;
-    writeln!(log, "=== Test Mode Started ===")?;
-    writeln!(log, "Terminal size: {}x{}", size.width, size.height)?;
-
-    // Step 1: Initial render
-    writeln!(log, "\n--- Step 1: Initial render ---")?;
-    terminal.draw(|frame| app.render(frame))?;
-    writeln!(log, "Initial render complete")?;
-
-    // Step 2: Show file browser
-    writeln!(log, "\n--- Step 2: Show file browser ---")?;
-    app.show_file_browser();
-    let redraw1 = app.take_redraw_request();
-    writeln!(log, "Redraw requested after show_file_browser: {}", redraw1)?;
-    if redraw1 {
-        terminal.clear()?;
-        writeln!(log, "Terminal cleared")?;
-    }
-    terminal.draw(|frame| app.render(frame))?;
-    writeln!(log, "File browser render complete")?;
-
-    // Step 3: Open a file (install.sh)
-    writeln!(log, "\n--- Step 3: Open install.sh ---")?;
-    let test_file = std::env::current_dir()?.join("install.sh");
-    writeln!(log, "Test file path: {:?}", test_file)?;
-    if test_file.exists() {
-        writeln!(log, "File exists, opening...")?;
-        let result = app.open_file(&test_file);
-        writeln!(log, "open_file result: {:?}", result.is_ok())?;
-    } else {
-        writeln!(log, "install.sh not found, skipping file open")?;
-    }
-
-    // Check redraw flag
-    let redraw2 = app.take_redraw_request();
-    writeln!(log, "Redraw requested after open_file: {}", redraw2)?;
-
-    if redraw2 {
-        writeln!(log, "Clearing terminal...")?;
-        terminal.clear()?;
-        execute!(
-            io::stdout(),
-            crossterm::terminal::Clear(crossterm::terminal::ClearType::All)
-        )?;
-        writeln!(log, "Terminal cleared with both methods")?;
-    }
-
-    terminal.draw(|frame| app.render(frame))?;
-    writeln!(log, "Post-open render complete")?;
-
-    // Step 4: Another render cycle
-    writeln!(log, "\n--- Step 4: Second render after file open ---")?;
-    terminal.draw(|frame| app.render(frame))?;
-    writeln!(log, "Second render complete")?;
-
-    // Wait a bit to let user see the result
-    std::thread::sleep(std::time::Duration::from_secs(2));
-
-    writeln!(log, "\n=== Test Complete ===")?;
-
-    // Cleanup
-    app.shutdown();
-    disable_raw_mode()?;
-    execute!(io::stdout(), LeaveAlternateScreen, DisableMouseCapture)?;
-
-    println!("Test complete. Check test_output.txt for results.");
     Ok(())
 }
 

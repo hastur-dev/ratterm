@@ -624,6 +624,82 @@ docker_log_retention = 336
 
 ---
 
+### Fleet Metrics
+
+The health dashboard keeps the latest sample for each host in memory whether or
+not these settings are on. They control what is kept beyond that.
+
+| Setting | Description | Default |
+|---------|-------------|---------|
+| `metrics_history` | Write samples to `~/.ratterm/metrics.db` | `false` |
+| `metrics_raw_days` | Days of raw samples before per-minute averaging (1–90) | `1` |
+| `alert.cpu` | Fire when CPU use exceeds this percentage | off |
+| `alert.memory` | Fire when memory use exceeds this percentage (also `alert.ram`, `alert.mem`) | off |
+| `alert.disk` | Fire when disk use exceeds this percentage | off |
+| `alert.temperature` | Fire above this many degrees Celsius (also `alert.temp`) | off |
+
+`metrics-history` and `metrics-raw-days` are accepted as well, for consistency
+with the other dashed spellings.
+
+History is off by default: a database should not appear in your home directory
+because you opened a dashboard. With it on, the host detail view gains a
+sparkline of the last hour with minimum, mean and maximum, and a host that has
+stopped reporting shows how long it has been gone rather than only that it is
+down.
+
+Both collectors write to the same history. A host reporting through `rat-agent`
+and a host polled over SSH produce one series each, not two, and a host keeps
+building history while the dashboard is closed.
+
+Storage is bounded by three tiers rather than a single cut-off: raw samples for
+`metrics_raw_days`, per-minute averages for a month, per-hour averages for a
+year. Downsampling runs at most once an hour while ratterm is open.
+
+Alert thresholds are evaluated as each sample arrives, whichever collector
+produced it. A threshold outside its sensible range — a percentage above 100, a
+negative number, an unparseable value — turns that rule off rather than being
+clamped, because such a value is far more likely to be a typo than an intent.
+An alert is announced in the status bar when it starts firing, not on every
+sample.
+
+#### Example
+
+```
+# Keep a year of fleet history, with three days at full resolution
+metrics_history = true
+metrics_raw_days = 3
+
+alert.cpu = 90
+alert.memory = 85
+alert.disk = 90
+alert.temperature = 85
+```
+
+#### Reporting from a machine
+
+`rat-agent` is built alongside `rat` and reports the machine it runs on. It
+posts the same payload as the older shell daemon, so a fleet can be migrated one
+host at a time.
+
+```sh
+rat-agent --host-id 3                      # post to the local receiver
+rat-agent --host-id 3 --interval 30
+rat-agent --host-id 3 --once               # one sample, for a cron entry
+rat-agent --host-id 3 --dry-run            # print the payload, post nothing
+```
+
+The default endpoint is `http://127.0.0.1:19999/metrics`, which is reached from
+a remote host through a reverse tunnel:
+
+```sh
+ssh -R 19999:127.0.0.1:19999 <collector>
+```
+
+`--host-id` must match the host's id in ratterm's host list, which is how the
+sample is matched to a row in the dashboard.
+
+---
+
 ## Example Configuration
 
 ```

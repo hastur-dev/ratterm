@@ -10,6 +10,8 @@ use ratatui::{
 
 use super::{DashboardHost, DashboardMode, HealthDashboard};
 use crate::ssh::MetricStatus;
+use crate::store::MetricKind;
+use crate::telemetry::{HostHistory, offline_for, sparkline};
 
 /// Progress bar width for metrics.
 const PROGRESS_WIDTH: u16 = 10;
@@ -20,6 +22,10 @@ pub struct HealthDashboardWidget<'a> {
     dashboard: &'a HealthDashboard,
     /// Whether the widget is focused.
     focused: bool,
+    /// Stored history for the selected host, when there is any.
+    history: Option<&'a HostHistory>,
+    /// Wall-clock seconds, for rendering an age.
+    now: i64,
 }
 
 impl<'a> HealthDashboardWidget<'a> {
@@ -29,6 +35,8 @@ impl<'a> HealthDashboardWidget<'a> {
         Self {
             dashboard,
             focused: true,
+            history: None,
+            now: crate::telemetry::unix_now(),
         }
     }
 
@@ -36,6 +44,20 @@ impl<'a> HealthDashboardWidget<'a> {
     #[must_use]
     pub fn focused(mut self, focused: bool) -> Self {
         self.focused = focused;
+        self
+    }
+
+    /// Supplies the selected host's stored history for the detail view.
+    #[must_use]
+    pub const fn with_history(mut self, history: &'a HostHistory) -> Self {
+        self.history = Some(history);
+        self
+    }
+
+    /// Overrides the clock, so a test can assert on a rendered age.
+    #[must_use]
+    pub const fn at(mut self, now: i64) -> Self {
+        self.now = now;
         self
     }
 }
@@ -85,7 +107,9 @@ impl Widget for HealthDashboardWidget<'_> {
 
         match self.dashboard.mode() {
             DashboardMode::Overview => render_overview(self.dashboard, chunks[1], buf),
-            DashboardMode::Detail => render_detail(self.dashboard, chunks[1], buf),
+            DashboardMode::Detail => {
+                render_detail(self.dashboard, self.history, self.now, chunks[1], buf);
+            }
         }
 
         render_footer(self.dashboard, chunks[2], buf);
@@ -321,7 +345,13 @@ fn progress_bar_span(percent: f32, width: u16, color: Color) -> Span<'static> {
 }
 
 /// Renders the detail mode for a single host.
-fn render_detail(dashboard: &HealthDashboard, area: Rect, buf: &mut Buffer) {
+fn render_detail(
+    dashboard: &HealthDashboard,
+    history: Option<&HostHistory>,
+    now: i64,
+    area: Rect,
+    buf: &mut Buffer,
+) {
     let host = match dashboard.selected_host() {
         Some(h) => h,
         None => {
@@ -365,6 +395,14 @@ fn render_detail(dashboard: &HealthDashboard, area: Rect, buf: &mut Buffer) {
                 format!("Error: {}", err),
                 Style::default().fg(Color::Red),
             )));
+        }
+        // "It is down" is less useful than "it has been down since breakfast",
+        // and the answer is in the history rather than in the live sample.
+        if let Some(age) = history.and_then(|h| offline_for(h.offline_since, now)) {
+            lines.push(Line::from(vec![
+                Span::styled("Last seen: ", Style::default().fg(Color::DarkGray)),
+                Span::styled(format!("{age} ago"), Style::default().fg(Color::Yellow)),
+            ]));
         }
         let para = Paragraph::new(lines);
         para.render(area, buf);
@@ -505,8 +543,86 @@ fn render_detail(dashboard: &HealthDashboard, area: Rect, buf: &mut Buffer) {
         )));
     }
 
+    if let Some(history) = history {
+        lines.push(Line::from(""));
+        lines.extend(history_lines(history));
+    }
+
     let para = Paragraph::new(lines);
     para.render(area, buf);
+}
+
+/// Renders the stored history as a sparkline and a min/max/mean line.
+fn history_lines(history: &HostHistory) -> Vec<Line<'static>> {
+    let mut lines = vec![Line::from(Span::styled(
+        format!("History ({})", window_label(history.window)),
+        Style::default()
+            .fg(Color::Cyan)
+            .add_modifier(Modifier::BOLD),
+    ))];
+
+    if !history.durable {
+        lines.push(Line::from(Span::styled(
+            "└─ Not kept. Set metrics_history = true in ~/.ratrc.",
+            Style::default().fg(Color::DarkGray),
+        )));
+        return lines;
+    }
+
+    if history.is_empty() {
+        lines.push(Line::from(Span::styled(
+            "└─ No samples yet.",
+            Style::default().fg(Color::DarkGray),
+        )));
+        return lines;
+    }
+
+    lines.push(series_line(
+        "├─ CPU:  ",
+        &history.cpu,
+        history.stats(MetricKind::CpuPercent),
+        Color::Green,
+    ));
+    lines.push(series_line(
+        "└─ Mem:  ",
+        &history.memory,
+        history.stats(MetricKind::MemUsedPercent),
+        Color::Blue,
+    ));
+
+    lines
+}
+
+/// One sparkline with its min, mean and max.
+fn series_line(
+    label: &str,
+    values: &[Option<f64>],
+    stats: Option<(f64, f64, f64)>,
+    color: Color,
+) -> Line<'static> {
+    let mut spans = vec![
+        Span::styled(label.to_string(), Style::default().fg(Color::DarkGray)),
+        Span::styled(sparkline(values), Style::default().fg(color)),
+    ];
+
+    if let Some((min, max, avg)) = stats {
+        spans.push(Span::styled(
+            format!("  min {min:.0}%  avg {avg:.0}%  max {max:.0}%"),
+            Style::default().fg(Color::White),
+        ));
+    }
+
+    Line::from(spans)
+}
+
+/// Names a window in the shortest unit that describes it exactly.
+fn window_label(window: std::time::Duration) -> String {
+    let seconds = window.as_secs();
+    match seconds {
+        0..=3599 => format!("{}m", seconds.max(60) / 60),
+        3600..=86_399 => format!("{}h", seconds / 3600),
+        _ => format!("{}d", seconds / 86_400),
+    }
 }
 
 /// Renders the footer with help text.

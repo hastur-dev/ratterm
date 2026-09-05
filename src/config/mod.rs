@@ -18,7 +18,18 @@ pub use shell::{ShellDetector, ShellInfo, ShellInstallInfo, ShellInstaller, Shel
 use crate::docker_logs::config::LogStreamConfig;
 use crate::logging::LogConfig;
 use crate::ssh::StorageMode;
+use crate::telemetry::AlertSettings;
 use crate::theme::{ThemeManager, ThemeSettings};
+
+/// Days of raw metric samples kept before they are averaged per minute.
+const DEFAULT_METRICS_RAW_DAYS: u32 = 1;
+
+/// Most raw days accepted from the config file.
+///
+/// A raw sample every five seconds is about 17,000 rows per host per day, so a
+/// year of raw data is a database nobody asked for. Beyond this the answer is
+/// to raise `metrics_raw_days` deliberately in code, not by typo.
+const MAX_METRICS_RAW_DAYS: u32 = 90;
 
 /// Default .ratrc file content with all commands documented.
 const DEFAULT_RATRC: &str = r#"# Ratatui Full IDE Configuration File
@@ -155,6 +166,23 @@ mode = vim
 # log_enabled = true       # Enable/disable file logging (true/false)
 # log_level = info         # Log level: trace, debug, info, warn, error, off
 # log_retention = 24       # Hours to keep log files (default: 24)
+
+# Fleet Metrics
+# -------------
+# Health dashboard samples are kept in memory. Turn history on to also write
+# them to ~/.ratterm/metrics.db, which survives a restart and is what the
+# sparkline and the "offline since" column read from.
+#
+# metrics_history = false  # Keep metric history on disk (true/false)
+# metrics_raw_days = 1     # Days of raw samples before per-minute averaging
+#
+# Alert thresholds. A sample crossing one is recorded against the host and
+# shown in the dashboard. Leave a line out, or set it to 0, for no rule.
+#
+# alert.cpu = 90           # Percent
+# alert.memory = 85        # Percent
+# alert.disk = 90          # Percent
+# alert.temperature = 85   # Degrees Celsius
 "#;
 
 /// Addon/extension command configuration.
@@ -207,6 +235,16 @@ pub struct Config {
     pub lsp_python: Option<String>,
     /// Format file on save via LSP.
     pub lsp_format_on_save: bool,
+    /// Alert thresholds evaluated on every metric sample.
+    pub alerts: AlertSettings,
+    /// Keep a durable metric history on disk.
+    ///
+    /// Off means the dashboard still works, from memory, and nothing is
+    /// written. That is the right default for a machine whose owner did not
+    /// ask for a database to appear in their home directory.
+    pub metrics_history: bool,
+    /// How many days of raw samples to keep before averaging them per minute.
+    pub metrics_raw_days: u32,
 }
 
 impl Default for Config {
@@ -232,6 +270,9 @@ impl Default for Config {
             lsp_rust: None,
             lsp_python: None,
             lsp_format_on_save: false,
+            alerts: AlertSettings::default(),
+            metrics_history: false,
+            metrics_raw_days: DEFAULT_METRICS_RAW_DAYS,
         }
     }
 }
@@ -406,6 +447,22 @@ impl Config {
             "log_retention" | "log_retention_hours" => {
                 self.log_config.retention_hours = LogConfig::parse_retention(value);
             }
+            "metrics_history" | "metrics-history" => {
+                self.metrics_history =
+                    matches!(value.to_lowercase().as_str(), "true" | "yes" | "1" | "on");
+            }
+            "metrics_raw_days" | "metrics-raw-days" => {
+                self.metrics_raw_days = value
+                    .parse::<u32>()
+                    .ok()
+                    .filter(|days| *days > 0 && *days <= MAX_METRICS_RAW_DAYS)
+                    .unwrap_or(DEFAULT_METRICS_RAW_DAYS);
+            }
+            k if k.starts_with("alert.") => {
+                if !self.alerts.apply(k, value) {
+                    tracing::warn!("unknown alert setting '{}'", k);
+                }
+            }
             "log_enabled" | "logging" => {
                 self.log_config.enabled =
                     matches!(value.to_lowercase().as_str(), "true" | "yes" | "1" | "on");
@@ -509,5 +566,116 @@ impl Config {
     /// Returns a mutable reference to the theme manager.
     pub fn theme_mut(&mut self) -> &mut ThemeManager {
         &mut self.theme_manager
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
+mod telemetry_settings_tests {
+    use super::*;
+
+    /// Parses a config body without touching the user's real `.ratrc`.
+    fn parse(body: &str) -> Config {
+        let mut config = Config::default();
+        config.parse(body);
+        config
+    }
+
+    #[test]
+    fn metric_history_is_off_unless_asked_for() {
+        let config = Config::default();
+        assert!(
+            !config.metrics_history,
+            "a database should not appear without being asked for"
+        );
+        assert_eq!(config.metrics_raw_days, DEFAULT_METRICS_RAW_DAYS);
+        assert!(config.alerts.is_empty());
+    }
+
+    #[test]
+    fn metric_history_can_be_turned_on() {
+        for value in ["true", "yes", "1", "on", "ON"] {
+            let config = parse(&format!("metrics_history = {value}\n"));
+            assert!(config.metrics_history, "value was {value}");
+        }
+    }
+
+    #[test]
+    fn the_dashed_spelling_works_too() {
+        let config = parse("metrics-history = true\nmetrics-raw-days = 7\n");
+        assert!(config.metrics_history);
+        assert_eq!(config.metrics_raw_days, 7);
+    }
+
+    #[test]
+    fn alert_lines_reach_the_settings() {
+        let config = parse("alert.cpu = 90\nalert.memory = 85\nalert.temperature = 80\n");
+        assert_eq!(config.alerts.cpu_percent, Some(90.0));
+        assert_eq!(config.alerts.memory_percent, Some(85.0));
+        assert_eq!(config.alerts.temperature_c, Some(80.0));
+        assert_eq!(config.alerts.to_rules().len(), 3);
+    }
+
+    #[test]
+    fn an_inline_comment_does_not_become_part_of_the_threshold() {
+        let config = parse("alert.cpu = 90   # shout at me\n");
+        assert_eq!(config.alerts.cpu_percent, Some(90.0));
+    }
+
+    #[test]
+    fn an_out_of_range_raw_window_falls_back_to_the_default() {
+        for body in [
+            "metrics_raw_days = 0",
+            "metrics_raw_days = 4000",
+            "metrics_raw_days = lots",
+        ] {
+            let config = parse(body);
+            assert_eq!(
+                config.metrics_raw_days, DEFAULT_METRICS_RAW_DAYS,
+                "body was {body}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_largest_accepted_raw_window_is_kept() {
+        let config = parse(&format!("metrics_raw_days = {MAX_METRICS_RAW_DAYS}\n"));
+        assert_eq!(config.metrics_raw_days, MAX_METRICS_RAW_DAYS);
+    }
+
+    #[test]
+    fn an_unknown_alert_key_does_not_disturb_the_rest_of_the_file() {
+        let config = parse("alert.gpu = 90\nalert.cpu = 70\nmode = emacs\n");
+        assert_eq!(config.alerts.cpu_percent, Some(70.0));
+        assert_eq!(config.mode, KeybindingMode::Emacs);
+    }
+
+    #[test]
+    fn the_shipped_default_file_documents_the_new_settings() {
+        // A setting nobody can discover may as well not exist.
+        for key in [
+            "metrics_history",
+            "metrics_raw_days",
+            "alert.cpu",
+            "alert.memory",
+            "alert.disk",
+            "alert.temperature",
+        ] {
+            assert!(DEFAULT_RATRC.contains(key), "{key} is undocumented");
+        }
+    }
+
+    #[test]
+    fn the_documented_defaults_parse_as_written() {
+        // Every commented line in the shipped file should be valid if
+        // uncommented; otherwise the documentation teaches a syntax error.
+        let uncommented: String = DEFAULT_RATRC
+            .lines()
+            .filter_map(|line| line.strip_prefix("# "))
+            .filter(|line| line.contains(" = ") && !line.contains("  #"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let config = parse(&uncommented);
+        assert!(!config.metrics_history, "documented default is false");
     }
 }

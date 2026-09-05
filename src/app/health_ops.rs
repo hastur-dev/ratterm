@@ -266,8 +266,20 @@ impl App {
         // First, collect daemon metrics if available
         let daemon_metrics = self.collect_daemon_metrics();
 
+        // Record them before the dashboard sees them, so a push-reporting host
+        // still builds a history while the dashboard is closed. The dashboard
+        // pass below hands over the same samples again; the second copy is
+        // recognised and dropped rather than stored twice.
+        let daemon_samples: Vec<(String, crate::ssh::DeviceMetrics)> = daemon_metrics
+            .iter()
+            .map(|(host_id, metrics)| (self.host_label(*host_id), metrics.clone()))
+            .collect();
+        self.record_samples(daemon_samples);
+
         // Derived statuses extracted after the dashboard borrow ends.
         let mut derived_statuses = Vec::new();
+        // Samples to record, extracted for the same reason.
+        let mut samples: Vec<(String, crate::ssh::DeviceMetrics)> = Vec::new();
 
         if let Some(ref mut dashboard) = self.health_dashboard {
             // Apply daemon metrics to dashboard hosts
@@ -292,6 +304,14 @@ impl App {
             // Extract statuses while we have the borrow
             derived_statuses = statuses_from_dashboard(dashboard.hosts());
 
+            // Both collectors have now written into the same host list, so one
+            // pass over it records one stream rather than two that disagree.
+            samples = dashboard
+                .hosts()
+                .iter()
+                .map(|host| (host.display_name.clone(), host.metrics.clone()))
+                .collect();
+
             // Check if we need an auto-refresh
             if dashboard.needs_refresh() {
                 dashboard.refresh(&self.ssh_hosts);
@@ -303,8 +323,50 @@ impl App {
             self.host_statuses.insert(host_id, status);
         }
 
+        self.record_samples(samples);
+
         // If the SSH manager is open, apply cached statuses live
         self.apply_cached_statuses_to_ssh_manager();
+    }
+
+    /// Returns the name a host should be recorded under.
+    ///
+    /// Falls back to the id so a sample is never dropped for want of a label:
+    /// a host removed from the registry mid-run still has history worth
+    /// keeping, and `host-7` is more use than nothing.
+    pub(crate) fn host_label(&self, host_id: u32) -> String {
+        self.ssh_hosts
+            .host_list()
+            .get_by_id(host_id)
+            .map(|host| {
+                host.display_name
+                    .clone()
+                    .unwrap_or_else(|| host.hostname.clone())
+            })
+            .unwrap_or_else(|| format!("host-{host_id}"))
+    }
+
+    /// Records samples and reports any alert that has just started firing.
+    ///
+    /// Alerts are announced once, on the transition, rather than on every
+    /// sample: a host that has been hot for an hour should not overwrite the
+    /// status bar twenty times a second.
+    pub(crate) fn record_samples(&mut self, samples: Vec<(String, crate::ssh::DeviceMetrics)>) {
+        let mut fired: Vec<String> = Vec::new();
+
+        for (label, metrics) in samples {
+            fired.extend(self.telemetry.ingest(&label, &metrics));
+        }
+
+        if let Some(first) = fired.first() {
+            let message = if fired.len() == 1 {
+                first.clone()
+            } else {
+                format!("{first} (+{} more)", fired.len() - 1)
+            };
+            warn!("alert: {}", message);
+            self.set_status(&message);
+        }
     }
 
     /// Applies cached `host_statuses` to the SSH manager's display list.
@@ -332,11 +394,10 @@ impl App {
             return Vec::new();
         }
 
-        // Get host IDs from dashboard
-        let host_ids: Vec<u32> = match self.health_dashboard.as_ref() {
-            Some(dashboard) => dashboard.hosts().iter().map(|h| h.host_id).collect(),
-            None => Vec::new(),
-        };
+        // Host IDs come from the registry, not the dashboard: the daemon keeps
+        // reporting whether or not anybody has the dashboard open, and those
+        // samples are exactly the ones a history is for.
+        let host_ids: Vec<u32> = self.ssh_hosts.host_list().hosts().map(|h| h.id).collect();
 
         // Collect daemon metrics for each host
         let mut results = Vec::new();

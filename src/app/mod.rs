@@ -68,6 +68,8 @@ use crate::git::gutter::GutterMark;
 use crate::hosts::HostRegistry;
 use crate::remote::{RemoteFileBrowser, RemoteFileManager};
 use crate::ssh::{NetworkScanner, SSHStorage, StatusChecker};
+use crate::store::RetentionPolicy;
+use crate::telemetry::Telemetry;
 use crate::terminal::{BackgroundManager, TerminalMultiplexer, pty::PtyError};
 use crate::ui::health_dashboard::HealthDashboard;
 use crate::ui::{
@@ -265,6 +267,12 @@ pub struct App {
     /// Persists across SSH manager open/close cycles so statuses
     /// survive navigation between dashboards.
     pub(crate) host_statuses: HashMap<u32, crate::ssh::ConnectionStatus>,
+    /// Metric history, alert evaluation and the live per-host view.
+    ///
+    /// Both collectors — the SSH poller and the push daemon — hand their
+    /// samples to this, so the dashboard and the database see one stream
+    /// rather than two that disagree.
+    pub(crate) telemetry: Telemetry,
     /// Whether --test-keys mode is active (F1/F2/F3 open palette/SSH/Docker).
     pub(crate) test_keys: bool,
     /// Whether state came from a fixture directory.
@@ -510,6 +518,8 @@ impl App {
             }
         };
 
+        let telemetry = Self::build_telemetry(&config, fixture_mode);
+
         Ok(Self {
             terminals,
             editor,
@@ -557,6 +567,7 @@ impl App {
             health_dashboard: None,
             daemon_manager: None,
             host_statuses: HashMap::new(),
+            telemetry,
             test_keys: false,
             fixture_mode,
             hotkey_overlay: None,
@@ -671,6 +682,40 @@ impl App {
     #[must_use]
     pub const fn is_fixture_mode(&self) -> bool {
         self.fixture_mode
+    }
+
+    /// Builds the telemetry layer this instance will use.
+    ///
+    /// A fixture run is always live-only: a scripted run must not append to the
+    /// user's real history, and a test that shares a database with the previous
+    /// test is not a test. Otherwise history is opened only when the config
+    /// asks for it, and a failure to open degrades to live-only rather than
+    /// stopping start-up — a broken database is not a reason to lose the
+    /// terminal.
+    fn build_telemetry(config: &Config, fixture_mode: bool) -> Telemetry {
+        let mut telemetry = if fixture_mode || !config.metrics_history {
+            Telemetry::in_memory_only()
+        } else {
+            Telemetry::open_or_live_only()
+        };
+
+        telemetry.set_rules(config.alerts.to_rules());
+        telemetry.set_policy(RetentionPolicy {
+            raw_for: Duration::from_secs(u64::from(config.metrics_raw_days) * 24 * 60 * 60),
+            ..RetentionPolicy::default()
+        });
+        telemetry
+    }
+
+    /// Returns the telemetry layer.
+    #[must_use]
+    pub const fn telemetry(&self) -> &Telemetry {
+        &self.telemetry
+    }
+
+    /// Returns a mutable telemetry layer.
+    pub const fn telemetry_mut(&mut self) -> &mut Telemetry {
+        &mut self.telemetry
     }
 
     /// Returns the control-API endpoint, if the server started.
@@ -941,6 +986,8 @@ impl App {
         self.poll_health_dashboard();
         self.poll_docker_log_stream();
         self.update_completion_suggestion();
+        // Cheap: returns immediately unless an hour has passed.
+        self.telemetry.maybe_downsample();
 
         if !self.file_browser.is_visible()
             && !self.is_health_dashboard_open()
