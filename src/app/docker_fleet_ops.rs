@@ -137,7 +137,10 @@ impl App {
                 // the next listing; refresh the one host rather than all.
                 let now = crate::telemetry::unix_now();
                 if let Err(e) = self.docker_fleet.refresh(host, now) {
-                    warn!("docker fleet: refresh after {} failed: {e}", action.as_str());
+                    warn!(
+                        "docker fleet: refresh after {} failed: {e}",
+                        action.as_str()
+                    );
                 }
             }
             Err(e) => self.set_status(format!("Could not {} {name}: {e}", action.as_str())),

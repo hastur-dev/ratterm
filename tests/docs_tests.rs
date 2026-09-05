@@ -211,5 +211,8 @@ fn documents_do_not_reference_source_files_that_are_gone() {
         }
     }
 
-    assert!(broken.is_empty(), "documents point at missing files: {broken:?}");
+    assert!(
+        broken.is_empty(),
+        "documents point at missing files: {broken:?}"
+    );
 }

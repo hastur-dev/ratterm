@@ -229,7 +229,10 @@ mod tests {
                 K8sAction::Down,
                 "vim keys work here too"
             );
-            assert_eq!(action_for(key(KeyCode::Home), view, false), K8sAction::First);
+            assert_eq!(
+                action_for(key(KeyCode::Home), view, false),
+                K8sAction::First
+            );
             assert_eq!(action_for(key(KeyCode::End), view, false), K8sAction::Last);
         }
     }
@@ -280,7 +283,10 @@ mod tests {
     #[test]
     fn the_resource_keys_work_on_the_resource_screen() {
         let view = K8sView::Resources;
-        assert_eq!(action_for(key(KeyCode::Tab), view, false), K8sAction::NextKind);
+        assert_eq!(
+            action_for(key(KeyCode::Tab), view, false),
+            K8sAction::NextKind
+        );
         assert_eq!(
             action_for(key(KeyCode::BackTab), view, false),
             K8sAction::PreviousKind

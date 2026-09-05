@@ -97,7 +97,6 @@ impl ResourceKind {
     }
 }
 
-
 #[cfg(test)]
 #[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
@@ -108,10 +107,7 @@ mod tests {
         assert_eq!(ResourceKind::Pods.next(), ResourceKind::Deployments);
         assert_eq!(ResourceKind::Events.next(), ResourceKind::Pods, "wraps");
         assert_eq!(ResourceKind::Pods.previous(), ResourceKind::Events, "wraps");
-        assert_eq!(
-            ResourceKind::Deployments.previous(),
-            ResourceKind::Pods
-        );
+        assert_eq!(ResourceKind::Deployments.previous(), ResourceKind::Pods);
     }
     #[test]
     fn every_kind_has_a_label_and_headings() {

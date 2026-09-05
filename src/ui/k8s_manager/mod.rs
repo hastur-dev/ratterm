@@ -10,37 +10,20 @@
 //! function of its inputs, so the behaviour can be checked without an API
 //! server, and the widget can be rendered from a state built by hand.
 
+mod connection;
 mod kinds;
 mod rows;
 mod widget;
 
+pub use connection::ConnectedCluster;
 pub use kinds::{K8sView, ResourceKind};
 pub use rows::{ResourceRow, filter_rows, row_matches};
 pub use widget::K8sManagerWidget;
 
 use crate::app::panel::ListPanel;
 use crate::k8s::{
-    ContextSet, DeploymentView, EventView, K8sClient, KubeContext, NodeView, PodView, ServiceView,
+    ContextSet, DeploymentView, EventView, KubeContext, NodeView, PodView, ServiceView,
 };
-
-/// The cluster currently connected, and what was loaded from it.
-pub struct ConnectedCluster {
-    /// The client, which owns any SSH forward the connection needed.
-    pub client: K8sClient,
-    /// The context this client was built from.
-    pub context: String,
-    /// Namespaces the cluster reports.
-    pub namespaces: Vec<String>,
-}
-
-impl std::fmt::Debug for ConnectedCluster {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ConnectedCluster")
-            .field("context", &self.context)
-            .field("namespaces", &self.namespaces.len())
-            .finish()
-    }
-}
 
 /// The Kubernetes manager's state.
 #[derive(Debug, Default)]
@@ -480,9 +463,16 @@ impl crate::app::panel::Panel for K8sManager {
         }
     }
 
-    fn render(&self, area: ratatui::layout::Rect, buf: &mut ratatui::buffer::Buffer, focused: bool) {
+    fn render(
+        &self,
+        area: ratatui::layout::Rect,
+        buf: &mut ratatui::buffer::Buffer,
+        focused: bool,
+    ) {
         use ratatui::widgets::Widget as _;
-        K8sManagerWidget::new(self).focused(focused).render(area, buf);
+        K8sManagerWidget::new(self)
+            .focused(focused)
+            .render(area, buf);
     }
 
     fn key_hints(&self) -> &'static str {
@@ -529,7 +519,10 @@ mod tests {
     fn the_panel_reports_what_it_did_with_a_key() {
         let mut manager = K8sManager::new(contexts());
         assert_eq!(manager.handle_key(press(KeyCode::Esc)), PanelOutcome::Close);
-        assert_eq!(manager.handle_key(press(KeyCode::Down)), PanelOutcome::Handled);
+        assert_eq!(
+            manager.handle_key(press(KeyCode::Down)),
+            PanelOutcome::Handled
+        );
         assert_eq!(
             manager.handle_key(press(KeyCode::F(9))),
             PanelOutcome::Ignored
@@ -616,8 +609,6 @@ mod tests {
             "an empty resource screen would look like an empty cluster"
         );
     }
-
-
 
     #[test]
     fn nodes_ignore_the_namespace_filter() {

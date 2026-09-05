@@ -10,12 +10,15 @@
 //! change for `.` all live in the state.
 
 pub mod command;
+pub mod exec;
+mod exec_simple;
 pub mod keys;
 pub mod motion;
 pub mod registers;
-mod state;
+pub mod state;
 mod tables;
 pub mod textobject;
+mod visual;
 mod walker;
 
 #[cfg(test)]
@@ -28,6 +31,7 @@ mod tests;
 pub use command::{
     Operator, OperatorTarget, SimpleCommand, Substitute, VimAction, VimCommand, parse_substitute,
 };
+pub use exec::{VimEffect, VimFeed, ex_effect};
 pub use keys::{VimKey, keys};
 pub use motion::{MAX_MOTION_COUNT, MAX_MOTION_STEPS, Motion, MotionKind, resolve_motion};
 pub use registers::{RegisterContent, Registers};

@@ -182,10 +182,7 @@ pub fn event_rows(events: &[EventView]) -> Vec<ResourceRow> {
             let object = event_object(event);
             let cells = vec![
                 event.event_type.clone(),
-                event
-                    .reason
-                    .clone()
-                    .unwrap_or_else(|| "<none>".to_string()),
+                event.reason.clone().unwrap_or_else(|| "<none>".to_string()),
                 object.clone(),
                 truncate(&event.message, MAX_EVENT_MESSAGE),
                 age_cell(event.last_seen),
@@ -247,7 +244,10 @@ fn event_object(event: &EventView) -> String {
 ///
 /// Takes the clock rather than reading it, so a test can assert on a rendered
 /// age instead of on whatever "now" happens to be while it runs.
-fn age_cell_at(created: Option<chrono::DateTime<chrono::Utc>>, now: chrono::DateTime<chrono::Utc>) -> String {
+fn age_cell_at(
+    created: Option<chrono::DateTime<chrono::Utc>>,
+    now: chrono::DateTime<chrono::Utc>,
+) -> String {
     age_at(created, now).map_or_else(|| "-".to_string(), format_age)
 }
 
@@ -477,7 +477,10 @@ mod tests {
 
     #[test]
     fn an_object_with_no_timestamp_ages_to_a_dash() {
-        let now = Utc.timestamp_opt(1_757_000_000, 0).single().expect("a time");
+        let now = Utc
+            .timestamp_opt(1_757_000_000, 0)
+            .single()
+            .expect("a time");
         assert_eq!(age_cell_at(None, now), "-");
     }
 
@@ -486,7 +489,10 @@ mod tests {
         // The cluster's clock ahead of this machine's is not a fault the user
         // can act on, and "-2h" would look like a bug in ratterm.
         let created = Utc.timestamp_opt(1_757_000_000 + 7_200, 0).single();
-        let now = Utc.timestamp_opt(1_757_000_000, 0).single().expect("a time");
+        let now = Utc
+            .timestamp_opt(1_757_000_000, 0)
+            .single()
+            .expect("a time");
         assert_eq!(age_cell_at(created, now), "0s");
     }
 

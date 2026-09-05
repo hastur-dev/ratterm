@@ -61,6 +61,32 @@ impl VimState {
         &self.command_line
     }
 
+    /// Takes the operator the machine is waiting to give a target to.
+    ///
+    /// Normal mode needs a motion or a text object before an operator can run.
+    /// Visual mode does not: the selection is the target, so `d` acts as soon
+    /// as it is typed. This hands that operator over and resets the sequence,
+    /// which also covers the two-key `gu`, `gU` and `g~`.
+    pub fn take_visual_operator(&mut self) -> Option<(Operator, Option<char>, usize)> {
+        if self.stage != Stage::AfterOperator {
+            return None;
+        }
+        let operator = self.operator?;
+        let register = self.register;
+        let count = self.total_count();
+        self.reset();
+        Some((operator, register, count))
+    }
+
+    /// Returns true while a `:` command line is being typed.
+    ///
+    /// The editor mirrors this into [`EditorMode::Command`](crate::editor::EditorMode)
+    /// so the status bar and the widget can show it.
+    #[must_use]
+    pub fn in_command_line(&self) -> bool {
+        self.stage == Stage::CommandLine
+    }
+
     /// Returns the command `.` would replay.
     #[must_use]
     pub const fn last_change(&self) -> Option<&VimCommand> {

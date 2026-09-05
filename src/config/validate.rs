@@ -58,7 +58,9 @@ impl fmt::Display for Issue {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "line {}: ", self.line)?;
         match &self.problem {
-            Problem::UnknownKey { suggestion: Some(s) } => {
+            Problem::UnknownKey {
+                suggestion: Some(s),
+            } => {
                 write!(f, "`{}` is not a setting. Did you mean `{s}`?", self.key)
             }
             Problem::UnknownKey { suggestion: None } => {
@@ -165,10 +167,9 @@ fn check_value(kind: ValueKind, value: &str) -> Option<Problem> {
     };
 
     match kind {
-        ValueKind::Flag => (schema::parse_flag(value).is_none())
-            .then(|| Problem::BadValue {
-                expected: format!("true or false, not {}", echo(value)),
-            }),
+        ValueKind::Flag => (schema::parse_flag(value).is_none()).then(|| Problem::BadValue {
+            expected: format!("true or false, not {}", echo(value)),
+        }),
         ValueKind::Choice(options) => {
             let lowered = value.to_lowercase();
             if options.contains(&lowered.as_str()) {
@@ -187,19 +188,19 @@ fn check_value(kind: ValueKind, value: &str) -> Option<Problem> {
             Ok(n) => bad(&format!("a number from {min} to {max}, not {n}")),
             Err(_) => bad(&format!("a number, not {}", echo(value))),
         },
-        ValueKind::Text | ValueKind::List => {
-            value.is_empty().then(|| Problem::BadValue {
-                expected: "a value".to_string(),
+        ValueKind::Text | ValueKind::List => value.is_empty().then(|| Problem::BadValue {
+            expected: "a value".to_string(),
+        }),
+        ValueKind::Color => {
+            (crate::theme::parse_color(value).is_none()).then(|| Problem::BadValue {
+                expected: format!("a colour name or #rrggbb, not {}", echo(value)),
             })
         }
-        ValueKind::Color => (crate::theme::parse_color(value).is_none())
-            .then(|| Problem::BadValue {
-                expected: format!("a colour name or #rrggbb, not {}", echo(value)),
-            }),
-        ValueKind::Binding => (super::KeyBinding::parse(value).is_none())
-            .then(|| Problem::BadValue {
+        ValueKind::Binding => {
+            (super::KeyBinding::parse(value).is_none()).then(|| Problem::BadValue {
                 expected: format!("a key combination, not {}", echo(value)),
-            }),
+            })
+        }
         ValueKind::Modifiers => {
             let ok = !value.is_empty()
                 && value
@@ -431,7 +432,11 @@ mod tests {
         let issues = validate(&format!("metrics_history = {long}\n"));
         let message = issues[0].to_string();
         assert!(message.contains("..."), "{message}");
-        assert!(message.len() < 150, "the message is {} chars", message.len());
+        assert!(
+            message.len() < 150,
+            "the message is {} chars",
+            message.len()
+        );
     }
 
     #[test]

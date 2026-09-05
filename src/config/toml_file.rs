@@ -53,7 +53,9 @@ pub enum TomlError {
         source: std::io::Error,
     },
     /// The file is not TOML.
-    #[error("{path} is not valid TOML: {message}. Fix the syntax, or delete the file to fall back to ~/.ratrc.")]
+    #[error(
+        "{path} is not valid TOML: {message}. Fix the syntax, or delete the file to fall back to ~/.ratrc."
+    )]
     Syntax {
         /// The path that failed.
         path: String,
@@ -61,7 +63,9 @@ pub enum TomlError {
         message: String,
     },
     /// The file is implausibly large.
-    #[error("{path} is {size} bytes, larger than the {max} byte limit. This is probably not a settings file.")]
+    #[error(
+        "{path} is {size} bytes, larger than the {max} byte limit. This is probably not a settings file."
+    )]
     TooLarge {
         /// The path that failed.
         path: String,
@@ -293,7 +297,10 @@ pub fn render(ratrc: &str) -> String {
         };
         out.push_str(&format!("\n[{}]\n", group.section()));
         for (key, value) in entries {
-            out.push_str(&format!("{key} = {}\n", quote(group_kind(*group, key), value)));
+            out.push_str(&format!(
+                "{key} = {}\n",
+                quote(group_kind(*group, key), value)
+            ));
         }
     }
 
@@ -355,10 +362,9 @@ mod tests {
 
     #[test]
     fn sections_map_to_canonical_keys() {
-        let settings = parse(
-            "[general]\nmode = \"vim\"\n\n[metrics]\nhistory = true\nraw_days = 3\n",
-        )
-        .expect("valid TOML");
+        let settings =
+            parse("[general]\nmode = \"vim\"\n\n[metrics]\nhistory = true\nraw_days = 3\n")
+                .expect("valid TOML");
 
         let pairs: Vec<(&str, &str)> = settings
             .pairs

@@ -99,7 +99,6 @@ pub fn offline_for(offline_since: Option<i64>, now: i64) -> Option<String> {
     })
 }
 
-
 #[cfg(test)]
 #[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
@@ -185,5 +184,4 @@ mod tests {
         let now = 1_700_000_000;
         assert_eq!(offline_for(Some(now + 500), now).as_deref(), Some("0s"));
     }
-
 }

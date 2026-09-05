@@ -11,13 +11,13 @@
 //! changes is that there is one implementation of "move down without falling
 //! off the end", and it is tested.
 
+use crate::lsp::DiagnosticStore;
 use crate::lsp::actions::CodeActionResult;
 use crate::lsp::hover::HoverResult;
 use crate::lsp::references::ReferenceGroup;
 use crate::lsp::rename::RenameRange;
 use crate::lsp::signature::SignatureHelpResult;
 use crate::lsp::symbols::{DocumentSymbolResult, SymbolInfoResult};
-use crate::lsp::DiagnosticStore;
 
 use super::panel::ListPanel;
 
@@ -216,7 +216,10 @@ mod tests {
         state.hover = Some(a_hover());
 
         assert!(state.is_showing_anything());
-        assert!(!state.is_capturing_keys(), "typing should still reach the editor");
+        assert!(
+            !state.is_capturing_keys(),
+            "typing should still reach the editor"
+        );
     }
 
     #[test]
@@ -271,7 +274,11 @@ mod tests {
         state.diagnostics_panel.select(7);
 
         state.sync_diagnostics(12);
-        assert_eq!(state.diagnostics_panel.selected(), 7, "still on the same row");
+        assert_eq!(
+            state.diagnostics_panel.selected(),
+            7,
+            "still on the same row"
+        );
 
         state.sync_diagnostics(3);
         assert_eq!(

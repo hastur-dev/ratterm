@@ -164,7 +164,16 @@ const FALSE_WORDS: [&str; 4] = ["false", "no", "0", "off"];
 const MODES: &[&str] = &["vim", "emacs", "default"];
 
 /// Shells the terminal can start.
-const SHELLS: &[&str] = &["system", "powershell", "pwsh", "ps", "bash", "cmd", "zsh", "fish"];
+const SHELLS: &[&str] = &[
+    "system",
+    "powershell",
+    "pwsh",
+    "ps",
+    "bash",
+    "cmd",
+    "zsh",
+    "fish",
+];
 
 /// Credential storage backends.
 const STORAGE_MODES: &[&str] = &["keychain", "encrypted", "plaintext"];
@@ -351,7 +360,6 @@ const ALERT_METRICS: &[(&str, f64)] = &[
     ("temp", 150.0),
 ];
 
-
 /// What a key in a config file turns out to be.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Classified {
@@ -431,7 +439,11 @@ pub fn known_keys() -> Vec<String> {
         .map(str::to_string)
         .collect();
 
-    keys.extend(ALERT_METRICS.iter().map(|(name, _)| format!("alert.{name}")));
+    keys.extend(
+        ALERT_METRICS
+            .iter()
+            .map(|(name, _)| format!("alert.{name}")),
+    );
     keys.extend(COLOR_KEYS.iter().map(|k| (*k).to_string()));
     keys.sort_unstable();
     keys.dedup();
@@ -470,7 +482,11 @@ mod tests {
     #[test]
     fn every_setting_has_a_summary_and_a_toml_name() {
         for setting in SETTINGS {
-            assert!(!setting.summary.is_empty(), "{} has no summary", setting.key);
+            assert!(
+                !setting.summary.is_empty(),
+                "{} has no summary",
+                setting.key
+            );
             assert!(
                 !setting.toml_key.is_empty(),
                 "{} has no TOML name",
@@ -592,8 +608,7 @@ mod tests {
         // A group missing from `all()` would silently drop its settings when a
         // TOML file is written.
         let listed = Group::all().len();
-        let used: std::collections::BTreeSet<Group> =
-            SETTINGS.iter().map(|s| s.group).collect();
+        let used: std::collections::BTreeSet<Group> = SETTINGS.iter().map(|s| s.group).collect();
         for group in used {
             assert!(Group::all().contains(&group), "{group:?} is not in all()");
         }

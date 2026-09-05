@@ -56,13 +56,10 @@ impl Widget for K8sManagerWidget<'_> {
 
         let title = match self.manager.view() {
             K8sView::Contexts => "Kubernetes - Contexts".to_string(),
-            K8sView::Resources => self
-                .manager
-                .connected()
-                .map_or_else(
-                    || "Kubernetes".to_string(),
-                    |cluster| format!("Kubernetes - {}", cluster.context),
-                ),
+            K8sView::Resources => self.manager.connected().map_or_else(
+                || "Kubernetes".to_string(),
+                |cluster| format!("Kubernetes - {}", cluster.context),
+            ),
         };
 
         let block = Block::default()
@@ -225,7 +222,11 @@ fn render_resources(manager: &K8sManager, area: Rect, buf: &mut Buffer) {
         let message = if manager.filter().is_empty() {
             format!("No {} found", manager.kind().label().to_lowercase())
         } else {
-            format!("No {} match '{}'", manager.kind().label().to_lowercase(), manager.filter())
+            format!(
+                "No {} match '{}'",
+                manager.kind().label().to_lowercase(),
+                manager.filter()
+            )
         };
         Paragraph::new(Line::from(Span::styled(
             message,
@@ -240,7 +241,10 @@ fn render_resources(manager: &K8sManager, area: Rect, buf: &mut Buffer) {
 
     let mut lines = vec![Line::from(Span::styled(
         format_cells(
-            &headings.iter().map(|h| (*h).to_string()).collect::<Vec<_>>(),
+            &headings
+                .iter()
+                .map(|h| (*h).to_string())
+                .collect::<Vec<_>>(),
             &widths,
         ),
         Style::default()

@@ -57,6 +57,8 @@ use crossterm::event::{self, Event};
 use ratatui::layout::Rect;
 use tracing::{debug, info, warn};
 
+use self::lsp_state::LspUiState;
+use self::side_state::{DebugUiState, GitUiState};
 use crate::api::{ApiHandler, ApiServer, ApiServerConfig, MAX_REQUESTS_PER_FRAME, RequestReceiver};
 use crate::clipboard::Clipboard;
 use crate::completion::CompletionHandle;
@@ -74,10 +76,8 @@ use crate::ssh::{NetworkScanner, SSHStorage, StatusChecker};
 use crate::store::RetentionPolicy;
 use crate::telemetry::Telemetry;
 use crate::terminal::{BackgroundManager, TerminalMultiplexer, pty::PtyError};
-use self::lsp_state::LspUiState;
-use self::side_state::{DebugUiState, GitUiState};
-use crate::ui::health_dashboard::HealthDashboard;
 use crate::ui::docker_manager::FleetViewState;
+use crate::ui::health_dashboard::HealthDashboard;
 use crate::ui::k8s_manager::K8sManager;
 use crate::ui::{
     docker_manager::DockerManagerSelector,

@@ -113,17 +113,18 @@ fn a_clean_settings_file_has_no_summary_to_show() {
     let config = Config::load_from(&path).expect("a config");
 
     assert!(config.issues().is_empty());
-    assert_eq!(config.issue_summary(), None, "nothing to say, so say nothing");
+    assert_eq!(
+        config.issue_summary(),
+        None,
+        "nothing to say, so say nothing"
+    );
 
     std::fs::remove_file(&path).expect("clean up");
 }
 
 #[test]
 fn several_problems_are_summarised_as_one_line_with_a_count() {
-    let path = write_settings(
-        "several",
-        "nonsense = 1\nmode = vi\nmetrics_raw_days = 0\n",
-    );
+    let path = write_settings("several", "nonsense = 1\nmode = vi\nmetrics_raw_days = 0\n");
     let config = Config::load_from(&path).expect("a config");
 
     assert_eq!(config.issues().len(), 3);

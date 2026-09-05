@@ -314,12 +314,16 @@ impl App {
 
     /// Saves the current file (handles both local and remote files).
     ///
-    /// When `lsp_format_on_save` is enabled in `.ratrc`, a
-    /// `textDocument/formatting` request is sent before writing.
+    /// `lsp-format-on-save` is accepted by the settings file but does nothing
+    /// yet: formatting needs `crate::lsp::LspManager`, and the application
+    /// holds the smaller `completion::lsp` client instead. Rather than log
+    /// that where nobody reads it, saying so in the status bar is the honest
+    /// behaviour for a setting that is on and has no effect.
     pub fn save_current_file(&mut self) {
-        if self.lsp_format_on_save {
-            // TODO: send textDocument/formatting via LSP before write
-            tracing::debug!("lsp_format_on_save enabled – formatting before save");
+        let mut unimplemented_format = false;
+        if self.lsp.format_on_save {
+            tracing::warn!("lsp-format-on-save is set but not implemented; saving unformatted");
+            unimplemented_format = true;
         }
 
         if let Some(remote_file) = self.editor.remote_file().cloned() {
@@ -335,6 +339,13 @@ impl App {
             }
         } else if let Err(e) = self.editor.save() {
             self.set_status(format!("Save failed: {}", e));
+        }
+
+        if unimplemented_format {
+            self.set_status(format!(
+                "{} (lsp-format-on-save is not implemented yet)",
+                self.status
+            ));
         }
     }
 

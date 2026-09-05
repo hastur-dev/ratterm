@@ -315,7 +315,10 @@ impl Config {
                 Ok(settings) => {
                     let mut config = Self::from_content(&settings.to_ratrc(), &toml_path);
                     for (key, _) in &settings.unrecognised {
-                        warn!("{}: `{key}` is not a setting this build knows", toml_path.display());
+                        warn!(
+                            "{}: `{key}` is not a setting this build knows",
+                            toml_path.display()
+                        );
                     }
                     config.issues = settings.issues();
                     config.report_issues();

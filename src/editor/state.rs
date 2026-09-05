@@ -13,6 +13,8 @@ use std::path::{Path, PathBuf};
 
 use super::buffer::Buffer;
 use super::cursor::Cursor;
+use super::fold::FoldState;
+use super::indent::IndentStyle;
 use super::view::View;
 use super::{EditorMode, Position};
 use crate::remote::RemoteFile;
@@ -34,6 +36,10 @@ pub struct EditorState {
     pub remote_file: Option<RemoteFile>,
     /// Whether edits are rejected (set for oversized files).
     pub read_only: bool,
+    /// Foldable regions and which of them the user collapsed.
+    pub folds: FoldState,
+    /// Indentation style detected for this document.
+    pub indent_style: IndentStyle,
 }
 
 impl EditorState {
@@ -48,6 +54,8 @@ impl EditorState {
             path: None,
             remote_file: None,
             read_only: false,
+            folds: FoldState::default(),
+            indent_style: IndentStyle::default(),
         }
     }
 

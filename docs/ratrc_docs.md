@@ -985,6 +985,12 @@ lsp-format-on-save = <true|false>
 
 Automatically formats the file via the LSP server when saving.
 
+**Not implemented yet.** The setting is accepted and validated, and the request
+itself exists in `src/lsp/formatting.rs`, but the application holds a smaller
+language-server client that cannot send it. With this on, saving works and the
+status bar says the formatting did not happen, rather than the file being
+saved unformatted in silence.
+
 | Value | Description |
 |-------|-------------|
 | `false` | Disabled (default) |

@@ -350,8 +350,15 @@ impl App {
                 self.close_editor_tab();
                 true
             }
+            // Find within the file happens in the editor's own bar, beside
+            // the text, with live match highlighting and a match count. The
+            // popup this used to open covered the thing being searched.
             (KeyModifiers::CONTROL, KeyCode::Char('f')) => {
-                self.show_popup(PopupKind::SearchInFile);
+                self.editor.open_search(false);
+                true
+            }
+            (KeyModifiers::CONTROL, KeyCode::Char('h')) => {
+                self.editor.open_search(true);
                 true
             }
             (m, KeyCode::Char('f') | KeyCode::Char('F'))

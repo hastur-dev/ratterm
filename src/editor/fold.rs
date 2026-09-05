@@ -222,6 +222,15 @@ impl FoldState {
         self.collapsed.contains(&line)
     }
 
+    /// Returns true when anything at all is collapsed.
+    ///
+    /// The renderer and the edit path both use this to skip work: with nothing
+    /// folded, no line can be hidden.
+    #[must_use]
+    pub fn any_collapsed(&self) -> bool {
+        !self.collapsed.is_empty()
+    }
+
     /// Returns the innermost region that `toggle` would act on.
     ///
     /// A region starting exactly at `line` wins; otherwise the smallest region
@@ -266,6 +275,9 @@ impl FoldState {
     /// Returns true when `line` is hidden by some collapsed region.
     #[must_use]
     pub fn is_hidden(&self, line: usize) -> bool {
+        if self.collapsed.is_empty() {
+            return false;
+        }
         self.ranges
             .iter()
             .any(|r| self.collapsed.contains(&r.start_line) && r.hides(line))
