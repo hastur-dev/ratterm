@@ -324,14 +324,7 @@ pub struct Keybindings {
 
 impl Default for Keybindings {
     fn default() -> Self {
-        let mut kb = Self {
-            bindings: HashMap::new(),
-            reverse: HashMap::new(),
-        };
-
-        // Set default bindings
-        kb.set_defaults();
-        kb
+        Self::for_mode(KeybindingMode::default())
     }
 }
 
@@ -339,6 +332,10 @@ impl Keybindings {
     /// Creates keybindings for a specific mode.
     #[must_use]
     pub fn for_mode(mode: KeybindingMode) -> Self {
+        Self::for_mode_on_platform(mode, cfg!(windows))
+    }
+
+    fn for_mode_on_platform(mode: KeybindingMode, windows: bool) -> Self {
         let mut kb = Self {
             bindings: HashMap::new(),
             reverse: HashMap::new(),
@@ -354,7 +351,79 @@ impl Keybindings {
             KeybindingMode::Default => kb.set_default_bindings(),
         }
 
+        if windows {
+            kb.set_windows_terminal_safe_bindings();
+        }
+
         kb
+    }
+
+    /// Replaces bindings consumed by Windows Terminal before a TUI can see them.
+    fn set_windows_terminal_safe_bindings(&mut self) {
+        use KeyAction::*;
+        use KeyCode::*;
+
+        self.set(FocusTerminal, KeyBinding::new(KeyModifiers::CONTROL, F(6)));
+        self.set(
+            FocusEditor,
+            KeyBinding::new(KeyModifiers::CONTROL | KeyModifiers::SHIFT, F(6)),
+        );
+        self.set(
+            ToggleFocus,
+            KeyBinding::new(KeyModifiers::CONTROL | KeyModifiers::ALT, F(6)),
+        );
+        self.set(NextFile, KeyBinding::new(KeyModifiers::ALT, PageDown));
+        self.set(PrevFile, KeyBinding::new(KeyModifiers::ALT, PageUp));
+        self.set(FindInFiles, KeyBinding::new(KeyModifiers::CONTROL, F(3)));
+        self.set(
+            SearchDirectories,
+            KeyBinding::new(KeyModifiers::CONTROL | KeyModifiers::SHIFT, F(3)),
+        );
+        self.set(
+            NewFolder,
+            KeyBinding::new(KeyModifiers::CONTROL | KeyModifiers::ALT, F(3)),
+        );
+        self.set(Copy, KeyBinding::new(KeyModifiers::CONTROL, F(2)));
+        self.set(
+            Paste,
+            KeyBinding::new(KeyModifiers::CONTROL | KeyModifiers::SHIFT, F(2)),
+        );
+        self.set(
+            TerminalNextTab,
+            KeyBinding::new(KeyModifiers::CONTROL, PageDown),
+        );
+        self.set(
+            TerminalPrevTab,
+            KeyBinding::new(KeyModifiers::CONTROL, PageUp),
+        );
+        self.set(
+            TerminalCloseTab,
+            KeyBinding::new(KeyModifiers::CONTROL, F(4)),
+        );
+        self.set(SSHManager, KeyBinding::new(KeyModifiers::CONTROL, F(8)));
+        self.set(DockerManager, KeyBinding::new(KeyModifiers::CONTROL, F(7)));
+
+        let quick_connect = [
+            DockerQuickConnect1,
+            DockerQuickConnect2,
+            DockerQuickConnect3,
+            DockerQuickConnect4,
+            DockerQuickConnect5,
+            DockerQuickConnect6,
+            DockerQuickConnect7,
+            DockerQuickConnect8,
+            DockerQuickConnect9,
+        ];
+        let digits = ['1', '2', '3', '4', '5', '6', '7', '8', '9'];
+        for (action, digit) in quick_connect.into_iter().zip(digits) {
+            self.set(
+                action,
+                KeyBinding::new(
+                    KeyModifiers::CONTROL | KeyModifiers::ALT | KeyModifiers::SHIFT,
+                    Char(digit),
+                ),
+            );
+        }
     }
 
     /// Sets common bindings (same across all modes).
@@ -723,12 +792,6 @@ impl Keybindings {
         self.set(EditorAppend, KeyBinding::new(KeyModifiers::NONE, Enter));
     }
 
-    /// Sets default keybindings (vim mode by default).
-    fn set_defaults(&mut self) {
-        self.set_common_bindings();
-        self.set_vim_bindings();
-    }
-
     /// Sets a keybinding for an action.
     pub fn set(&mut self, action: KeyAction, binding: KeyBinding) {
         // Remove old reverse mapping
@@ -770,6 +833,151 @@ impl Keybindings {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn binding(modifiers: KeyModifiers, code: KeyCode) -> KeyBinding {
+        KeyBinding::new(modifiers, code)
+    }
+
+    #[test]
+    fn windows_defaults_avoid_windows_terminal_bindings() {
+        let bindings = Keybindings::for_mode_on_platform(KeybindingMode::Vim, true);
+
+        let reserved = [
+            binding(
+                KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+                KeyCode::Char('p'),
+            ),
+            binding(KeyModifiers::CONTROL, KeyCode::Tab),
+            binding(KeyModifiers::CONTROL | KeyModifiers::SHIFT, KeyCode::Tab),
+            binding(KeyModifiers::ALT, KeyCode::Left),
+            binding(KeyModifiers::ALT, KeyCode::Right),
+            binding(KeyModifiers::ALT, KeyCode::Up),
+            binding(KeyModifiers::ALT, KeyCode::Down),
+            binding(
+                KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+                KeyCode::Char('w'),
+            ),
+            binding(
+                KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+                KeyCode::Char('c'),
+            ),
+            binding(KeyModifiers::CONTROL, KeyCode::Char('v')),
+            binding(
+                KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+                KeyCode::Char('v'),
+            ),
+            binding(
+                KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+                KeyCode::Char('f'),
+            ),
+            binding(
+                KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+                KeyCode::Char('d'),
+            ),
+            binding(
+                KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+                KeyCode::Char('n'),
+            ),
+            binding(
+                KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+                KeyCode::Char('m'),
+            ),
+            binding(KeyModifiers::NONE, KeyCode::F(11)),
+        ];
+        for reserved_binding in reserved {
+            assert!(
+                !bindings
+                    .bindings
+                    .values()
+                    .any(|binding| *binding == reserved_binding),
+                "Windows default still uses host-reserved {reserved_binding:?}"
+            );
+        }
+        for digit in '1'..='8' {
+            let reserved_binding = binding(
+                KeyModifiers::CONTROL | KeyModifiers::ALT,
+                KeyCode::Char(digit),
+            );
+            assert!(
+                !bindings
+                    .bindings
+                    .values()
+                    .any(|binding| *binding == reserved_binding),
+                "Windows default still uses host-reserved {reserved_binding:?}"
+            );
+        }
+
+        assert_eq!(
+            bindings.get(KeyAction::TerminalCloseTab),
+            Some(binding(KeyModifiers::CONTROL, KeyCode::F(4)))
+        );
+        assert_eq!(
+            bindings.get(KeyAction::Copy),
+            Some(binding(KeyModifiers::CONTROL, KeyCode::F(2)))
+        );
+        assert_eq!(
+            bindings.get(KeyAction::Paste),
+            Some(binding(
+                KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+                KeyCode::F(2)
+            ))
+        );
+        assert_eq!(
+            bindings.get(KeyAction::TerminalNextTab),
+            Some(binding(KeyModifiers::CONTROL, KeyCode::PageDown))
+        );
+        assert_eq!(
+            bindings.get(KeyAction::TerminalPrevTab),
+            Some(binding(KeyModifiers::CONTROL, KeyCode::PageUp))
+        );
+    }
+
+    #[test]
+    fn non_windows_defaults_remain_unchanged() {
+        let bindings = Keybindings::for_mode_on_platform(KeybindingMode::Vim, false);
+
+        assert_eq!(
+            bindings.get(KeyAction::TerminalCloseTab),
+            Some(binding(KeyModifiers::CONTROL, KeyCode::Char('w')))
+        );
+        assert_eq!(
+            bindings.get(KeyAction::Copy),
+            Some(binding(
+                KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+                KeyCode::Char('c')
+            ))
+        );
+        assert_eq!(
+            bindings.get(KeyAction::Paste),
+            Some(binding(KeyModifiers::CONTROL, KeyCode::Char('v')))
+        );
+        assert_eq!(
+            bindings.get(KeyAction::TerminalNextTab),
+            Some(binding(KeyModifiers::CONTROL, KeyCode::Right))
+        );
+        assert_eq!(
+            bindings.get(KeyAction::TerminalPrevTab),
+            Some(binding(KeyModifiers::CONTROL, KeyCode::Left))
+        );
+    }
+
+    #[test]
+    fn custom_binding_replaces_platform_default() {
+        let mut bindings = Keybindings::for_mode_on_platform(KeybindingMode::Vim, true);
+        let custom = binding(KeyModifiers::ALT, KeyCode::Char('w'));
+
+        bindings.set(KeyAction::TerminalCloseTab, custom);
+
+        assert_eq!(bindings.get(KeyAction::TerminalCloseTab), Some(custom));
+        assert_eq!(
+            bindings.action_for(KeyModifiers::ALT, KeyCode::Char('w')),
+            Some(KeyAction::TerminalCloseTab)
+        );
+        assert_eq!(
+            bindings.action_for(KeyModifiers::CONTROL, KeyCode::F(4)),
+            None
+        );
+    }
 
     #[test]
     #[allow(clippy::unwrap_used)]

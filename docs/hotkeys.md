@@ -1,6 +1,8 @@
 # Ratterm Hotkeys Reference
 
-This document lists all keyboard shortcuts available in Ratterm.
+This document lists Ratterm's default keyboard shortcuts. Unless a Windows
+override is shown, the detailed tables use the non-Windows default. Every
+configurable action can still be overridden in `.ratrc`.
 
 ## Global Hotkeys (Work Everywhere)
 
@@ -10,9 +12,9 @@ These hotkeys work regardless of which pane is focused or what mode you're in.
 |--------|--------|
 | `Ctrl+Q` | Quit application |
 | `Ctrl+I` | Toggle IDE pane visibility |
-| `F1` | Open Command Palette (Windows 11) |
-| `Ctrl+P` | Open Command Palette (non-Windows 11) |
-| `Ctrl+Shift+P` | Open Command Palette (non-Windows 11) |
+| `F1` | Open Command Palette (Windows) |
+| `Ctrl+P` | Open Command Palette (non-Windows alias) |
+| `Ctrl+Shift+P` | Open Command Palette (non-Windows) |
 | `Ctrl+Shift+Tab` | Switch Editor Mode (cycles Vim/Emacs/Default) |
 | `Ctrl+G` | Open Git Dashboard |
 | `Ctrl+Shift+K` | Open or close the Kubernetes screens |
@@ -35,10 +37,27 @@ These hotkeys work regardless of which pane is focused or what mode you're in.
 The key hint bar at the bottom of the screen adapts to the host operating
 system, so it always shows hotkeys that actually reach Ratterm.
 
-| Action | Non-Windows | Windows 10 | Windows 11 | Why |
-|--------|-------------|------------|------------|-----|
-| Command Palette | `Ctrl+Shift+P` | `Ctrl+Shift+P` | `F1` | Windows 11 reserves `Ctrl+Shift+P` for its own terminal command palette |
-| Switch Pane | `Alt+Tab` | `Alt+Left` / `Alt+Right` (shown as `Alt+Arrows`) | `Alt+Left` / `Alt+Right` (shown as `Alt+Arrows`) | Windows reserves `Alt+Tab` for the system window switcher, so the application never receives it |
+Windows Terminal consumes several shortcuts before a terminal application can
+receive them. Ratterm therefore uses the following defaults on all Windows
+versions. `Alt+Tab` is an operating-system shortcut; the others below avoid
+Windows Terminal defaults. `Ctrl+W` is not a current Windows Terminal default,
+but Ratterm avoids it too because it is commonly configured as a close action.
+
+| Action | Non-Windows | Windows |
+|--------|-------------|---------|
+| Command Palette | `Ctrl+Shift+P` | `F1` |
+| Switch Pane | `Alt+Tab` | `Ctrl+F6` |
+| Focus Editor | `Alt+Right` | `Ctrl+Shift+F6` |
+| Toggle Pane Focus | `Alt+Tab` | `Ctrl+Alt+F6` |
+| Copy / Paste | `Ctrl+Shift+C` / `Ctrl+V` | `Ctrl+F2` / `Ctrl+Shift+F2` |
+| Find / Search Directories | `Ctrl+Shift+F` / `Ctrl+Shift+D` | `Ctrl+F3` / `Ctrl+Shift+F3` |
+| New Folder | `Ctrl+Shift+N` | `Ctrl+Alt+F3` |
+| Terminal Tabs | `Ctrl+Left` / `Ctrl+Right` / `Ctrl+W` | `Ctrl+PageUp` / `Ctrl+PageDown` / `Ctrl+F4` |
+| Close / Cycle Split | `Ctrl+Shift+W` / `Ctrl+Tab` | `Ctrl+Shift+F4` / `Alt+F6` |
+| SSH / Docker Manager | `Ctrl+Shift+U` / `Ctrl+Shift+D` | `Ctrl+F8` / `Ctrl+F7` |
+| Docker Fleet | `Ctrl+Shift+M` | `Ctrl+Shift+F7` |
+| Debug Step Into / Out | `F11` / `Shift+F11` | `Ctrl+F11` / `Ctrl+Shift+F11` |
+| Docker Quick Connect | `Ctrl+Alt+1` … `9` | `Ctrl+Alt+Shift+1` … `9` |
 
 Windows consoles report every keystroke twice — once as a key-press event and
 once as a key-release event. Ratterm pairs the two so each hotkey fires once.
@@ -69,8 +88,8 @@ These hotkeys control the integrated debugger (DAP).
 | Hotkey | Action |
 |--------|--------|
 | `F10` | Step over |
-| `F11` | Step into |
-| `Shift+F11` | Step out |
+| `F11` (`Ctrl+F11` on Windows) | Step into |
+| `Shift+F11` (`Ctrl+Shift+F11` on Windows) | Step out |
 
 ### Debug Panel
 
@@ -91,9 +110,9 @@ These hotkeys work when the terminal pane is focused.
 | Hotkey | Action |
 |--------|--------|
 | `Ctrl+T` | New terminal tab |
-| `Ctrl+W` | Close current terminal tab |
-| `Ctrl+Left` | Previous terminal tab |
-| `Ctrl+Right` | Next terminal tab |
+| `Ctrl+W` (`Ctrl+F4` on Windows) | Close current terminal tab |
+| `Ctrl+Left` (`Ctrl+PageUp` on Windows) | Previous terminal tab |
+| `Ctrl+Right` (`Ctrl+PageDown` on Windows) | Next terminal tab |
 
 ### Terminal Grid (Split Management)
 
@@ -105,8 +124,8 @@ Terminals can be split into a 2x2 grid:
 |--------|--------|
 | `Ctrl+S` | Split current terminal (progressive: 1→2→4) |
 | `Ctrl+Shift+S` | Split current terminal (same as Ctrl+S) |
-| `Ctrl+Shift+W` | Close current terminal pane |
-| `Ctrl+Tab` | Cycle focus between grid panes |
+| `Ctrl+Shift+W` (`Ctrl+Shift+F4` on Windows) | Close current terminal pane |
+| `Ctrl+Tab` (`Alt+F6` on Windows) | Cycle focus between grid panes |
 | `Alt+Up` / `Alt+Down` | Navigate grid vertically |
 | `Alt+Left` / `Alt+Right` | Navigate grid horizontally (when in grid) |
 
@@ -127,7 +146,7 @@ Terminals can be split into a 2x2 grid:
 | `Shift+Right` | Extend selection right by one character |
 | `Shift+Up` | Extend selection up by one line |
 | `Shift+Down` | Extend selection down by one line |
-| `Ctrl+Shift+C` | Copy selection (or current line if no selection) |
+| `Ctrl+Shift+C` (`Ctrl+F2` on Windows) | Copy selection (or current line if no selection) |
 | `Mouse Scroll` | Scroll terminal view up/down |
 
 ### Terminal Commands
@@ -151,7 +170,7 @@ These hotkeys work in the editor regardless of keybinding mode.
 | Hotkey | Action |
 |--------|--------|
 | `Ctrl+T` | New editor tab (untitled buffer) |
-| `Ctrl+W` | Close current editor tab |
+| `Ctrl+W` (`Ctrl+F4` on Windows) | Close current editor tab |
 | `Ctrl+F` | Find in file |
 | `Ctrl+Shift+F` | Find in all files |
 | `Ctrl+Shift+D` | Search directories |
@@ -387,9 +406,11 @@ When the file browser is open.
 
 ## Command Palette
 
-Press `F1` (Windows 11) or `Ctrl+Shift+P` (other platforms) to open.
+Press `F1` (Windows) or `Ctrl+Shift+P` (other platforms) to open.
 
-> **Note for Windows 11 users:** The command palette keybinding has been changed from `Ctrl+Shift+P` to `F1` because Windows 11 uses `Ctrl+Shift+P` for its system-wide command palette in terminals and other applications.
+> **Windows:** The command palette uses `F1` because Windows Terminal uses
+> `Ctrl+Shift+P` for its own command palette. This is a terminal-host default,
+> not a system-wide Windows shortcut.
 
 | Hotkey | Action |
 |--------|--------|

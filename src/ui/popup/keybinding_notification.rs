@@ -21,7 +21,7 @@ impl KeybindingNotificationWidget {
     /// Calculates the popup area (centered).
     fn popup_area(&self, area: Rect) -> Rect {
         let width = 56_u16.min(area.width.saturating_sub(4));
-        let height = 10_u16.min(area.height.saturating_sub(4));
+        let height = 11_u16.min(area.height.saturating_sub(4));
 
         let x = (area.width.saturating_sub(width)) / 2;
         let y = (area.height.saturating_sub(height)) / 2;
@@ -53,7 +53,7 @@ impl Widget for KeybindingNotificationWidget {
 
         // Draw border with explicit background
         let block = Block::default()
-            .title(" Windows 11 Keybinding Notice ")
+            .title(" Windows Keybinding Notice ")
             .title_alignment(Alignment::Center)
             .borders(Borders::ALL)
             .border_style(Style::default().fg(Color::Yellow).bg(bg_color));
@@ -68,8 +68,8 @@ impl Widget for KeybindingNotificationWidget {
             .constraints([
                 Constraint::Length(1), // Title
                 Constraint::Length(1), // Spacer
-                Constraint::Length(1), // Old keybinding
-                Constraint::Length(1), // New keybinding
+                Constraint::Length(1), // Summary
+                Constraint::Length(2), // Examples
                 Constraint::Length(1), // Spacer
                 Constraint::Min(1),    // Dismiss instruction
             ])
@@ -77,7 +77,7 @@ impl Widget for KeybindingNotificationWidget {
 
         // Title
         let title_line = Line::from(vec![Span::styled(
-            "Command Palette Keybinding Changed",
+            "Windows Terminal-safe keybindings enabled",
             Style::default()
                 .fg(Color::Yellow)
                 .bg(bg_color)
@@ -87,28 +87,17 @@ impl Widget for KeybindingNotificationWidget {
             .alignment(Alignment::Center)
             .render(chunks[0], buf);
 
-        // Old keybinding
-        let old_line = Line::from(vec![
-            Span::styled("Old: ", Style::default().fg(Color::DarkGray).bg(bg_color)),
-            Span::styled(
-                "Ctrl+Shift+P",
-                Style::default()
-                    .fg(Color::Red)
-                    .bg(bg_color)
-                    .add_modifier(Modifier::CROSSED_OUT),
-            ),
-            Span::styled(
-                " (conflicts with Windows 11)",
-                Style::default().fg(Color::DarkGray).bg(bg_color),
-            ),
-        ]);
+        // Summary
+        let old_line = Line::from(vec![Span::styled(
+            "Host-reserved shortcuts were replaced on Windows.",
+            Style::default().fg(Color::White).bg(bg_color),
+        )]);
         Paragraph::new(old_line)
             .alignment(Alignment::Center)
             .render(chunks[2], buf);
 
-        // New keybinding
+        // Examples
         let new_line = Line::from(vec![
-            Span::styled("New: ", Style::default().fg(Color::DarkGray).bg(bg_color)),
             Span::styled(
                 "F1",
                 Style::default()
@@ -117,7 +106,7 @@ impl Widget for KeybindingNotificationWidget {
                     .add_modifier(Modifier::BOLD),
             ),
             Span::styled(
-                " to open Command Palette",
+                " Palette   Ctrl+F6 Pane   Ctrl+F4 Close Tab",
                 Style::default().fg(Color::White).bg(bg_color),
             ),
         ]);

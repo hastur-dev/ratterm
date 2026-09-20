@@ -4,11 +4,29 @@
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
+use crate::config::PlatformKeys;
+
 use super::App;
 
 impl App {
     /// Handles debugger-related global key events. Returns true if handled.
     pub(super) fn handle_debugger_key(&mut self, key: KeyEvent) -> bool {
+        let platform = PlatformKeys::detect();
+        if platform
+            .debug_step_into_binding()
+            .matches(key.modifiers, key.code)
+        {
+            self.debug_step_in();
+            return true;
+        }
+        if platform
+            .debug_step_out_binding()
+            .matches(key.modifiers, key.code)
+        {
+            self.debug_step_out();
+            return true;
+        }
+
         match (key.modifiers, key.code) {
             // F9: Toggle breakpoint on current editor line
             (KeyModifiers::NONE, KeyCode::F(9)) => {
@@ -37,18 +55,6 @@ impl App {
             // F10: Step over
             (KeyModifiers::NONE, KeyCode::F(10)) => {
                 self.debug_step_over();
-                true
-            }
-
-            // F11: Step in
-            (KeyModifiers::NONE, KeyCode::F(11)) => {
-                self.debug_step_in();
-                true
-            }
-
-            // Shift+F11: Step out
-            (KeyModifiers::SHIFT, KeyCode::F(11)) => {
-                self.debug_step_out();
                 true
             }
 
@@ -121,21 +127,23 @@ mod tests {
     }
 
     #[test]
-    fn test_f11_steps_in() {
+    fn test_platform_step_in_binding() {
         let Some(mut app) = create_test_app() else {
             return;
         };
-        let handled = app.handle_debugger_key(key_event(KeyCode::F(11)));
-        assert!(handled, "F11 should be handled");
+        let binding = PlatformKeys::detect().debug_step_into_binding();
+        let handled = app.handle_debugger_key(key_event_mod(binding.code, binding.modifiers));
+        assert!(handled, "the platform step-in binding should be handled");
     }
 
     #[test]
-    fn test_shift_f11_steps_out() {
+    fn test_platform_step_out_binding() {
         let Some(mut app) = create_test_app() else {
             return;
         };
-        let handled = app.handle_debugger_key(key_event_mod(KeyCode::F(11), KeyModifiers::SHIFT));
-        assert!(handled, "Shift+F11 should be handled");
+        let binding = PlatformKeys::detect().debug_step_out_binding();
+        let handled = app.handle_debugger_key(key_event_mod(binding.code, binding.modifiers));
+        assert!(handled, "the platform step-out binding should be handled");
     }
 
     #[test]

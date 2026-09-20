@@ -3,7 +3,7 @@
 use fuzzy_matcher::FuzzyMatcher;
 use fuzzy_matcher::skim::SkimMatcherV2;
 
-use crate::config::command_palette_hotkey;
+use crate::config::{PlatformKeys, command_palette_hotkey};
 
 /// A command that can be executed from the command palette.
 #[derive(Debug, Clone)]
@@ -38,11 +38,25 @@ impl Command {
     /// Returns formatted display string for command palette.
     #[must_use]
     pub fn display(&self) -> String {
-        // Special handling for the command palette keybinding on Windows 11
-        let kb = if self.id == "app.commandPalette" {
-            Some(command_palette_hotkey())
-        } else {
-            self.keybinding
+        let keys = PlatformKeys::detect();
+        let kb = match (keys.windows, self.id) {
+            (_, "app.commandPalette") => Some(command_palette_hotkey()),
+            (true, "app.switchEditorMode") => Some(keys.mode_switcher()),
+            (true, "edit.copy") => Some("Ctrl+F2"),
+            (true, "edit.paste") => Some("Ctrl+Shift+F2"),
+            (true, "file.newFolder") => Some("Ctrl+Alt+F3"),
+            (true, "search.inFiles") => Some("Ctrl+F3"),
+            (true, "search.directories") => Some("Ctrl+Shift+F3"),
+            (true, "view.focusTerminal") => Some("Ctrl+F6"),
+            (true, "view.focusEditor") => Some("Ctrl+Shift+F6"),
+            (true, "view.toggleFocus") => Some("Ctrl+Alt+F6"),
+            (true, "terminal.close") => Some("Ctrl+F4"),
+            (true, "terminal.nextTab") => Some("Ctrl+PageDown"),
+            (true, "terminal.prevTab") => Some("Ctrl+PageUp"),
+            (true, "ssh.manager") => Some("Ctrl+F8"),
+            (true, "docker.manager") => Some("Ctrl+F7"),
+            (true, id) if id.starts_with("docker.connect") => Some("Ctrl+Alt+Shift+number"),
+            _ => self.keybinding,
         };
 
         if let Some(key) = kb {
@@ -377,5 +391,27 @@ impl CommandPalette {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.filtered.is_empty()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn command_display_uses_host_platform_shortcuts() {
+        let command = Command::new(
+            "terminal.close",
+            "Close Terminal",
+            "Terminal",
+            Some("Ctrl+W"),
+        );
+        let display = command.display();
+        if cfg!(windows) {
+            assert!(display.contains("Ctrl+F4"));
+            assert!(!display.contains("Ctrl+W"));
+        } else {
+            assert!(display.contains("Ctrl+W"));
+        }
     }
 }

@@ -3,6 +3,8 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use tracing::debug;
 
+use crate::config::{KeyAction, PlatformKeys};
+
 use super::App;
 use super::keymap::key_to_bytes;
 
@@ -24,21 +26,50 @@ impl App {
             }
         }
 
+        if self
+            .config
+            .keybindings
+            .matches(KeyAction::TerminalCloseTab, key.modifiers, key.code)
+        {
+            self.close_terminal_tab();
+            return;
+        }
+        if self
+            .config
+            .keybindings
+            .matches(KeyAction::TerminalPrevTab, key.modifiers, key.code)
+        {
+            self.prev_terminal_tab();
+            return;
+        }
+        if self
+            .config
+            .keybindings
+            .matches(KeyAction::TerminalNextTab, key.modifiers, key.code)
+        {
+            self.next_terminal_tab();
+            return;
+        }
+
+        let platform = PlatformKeys::detect();
+        if platform
+            .close_split_binding()
+            .matches(key.modifiers, key.code)
+        {
+            self.close_terminal_split();
+            return;
+        }
+        if platform
+            .split_focus_binding()
+            .matches(key.modifiers, key.code)
+        {
+            self.toggle_terminal_split_focus();
+            return;
+        }
+
         match (key.modifiers, key.code) {
             (KeyModifiers::CONTROL, KeyCode::Char('t')) => {
                 self.add_terminal_tab();
-                return;
-            }
-            (KeyModifiers::CONTROL, KeyCode::Char('w')) => {
-                self.close_terminal_tab();
-                return;
-            }
-            (KeyModifiers::CONTROL, KeyCode::Left) => {
-                self.prev_terminal_tab();
-                return;
-            }
-            (KeyModifiers::CONTROL, KeyCode::Right) => {
-                self.next_terminal_tab();
                 return;
             }
             (KeyModifiers::CONTROL, KeyCode::Char('s')) => {
@@ -52,23 +83,9 @@ impl App {
                 return;
             }
             (m, KeyCode::Char('w') | KeyCode::Char('W'))
-                if m == KeyModifiers::CONTROL | KeyModifiers::SHIFT =>
+                if m == KeyModifiers::CONTROL | KeyModifiers::SHIFT && !cfg!(windows) =>
             {
                 self.close_terminal_split();
-                return;
-            }
-            (KeyModifiers::CONTROL, KeyCode::Tab) => {
-                self.toggle_terminal_split_focus();
-                return;
-            }
-            (m, KeyCode::Char('c') | KeyCode::Char('C'))
-                if m == KeyModifiers::CONTROL | KeyModifiers::SHIFT =>
-            {
-                self.copy_terminal_selection();
-                return;
-            }
-            (KeyModifiers::CONTROL, KeyCode::Char('v')) => {
-                self.paste_to_terminal();
                 return;
             }
             (KeyModifiers::SHIFT, KeyCode::Left) => {

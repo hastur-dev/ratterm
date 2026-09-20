@@ -3,7 +3,7 @@
 //! Each function returns the complete list of available hotkeys for
 //! a specific dashboard screen, enumerated from the actual input handlers.
 
-use crate::ui::hotkey_overlay::HotkeyEntry;
+use crate::{config::PlatformKeys, ui::hotkey_overlay::HotkeyEntry};
 
 /// Returns hotkey entries for the Health Dashboard overview mode.
 #[must_use]
@@ -343,6 +343,7 @@ pub fn git_dashboard_hotkeys() -> Vec<HotkeyEntry> {
 /// Returns hotkey entries for the Debugger.
 #[must_use]
 pub fn debugger_hotkeys() -> Vec<HotkeyEntry> {
+    let platform = PlatformKeys::detect();
     vec![
         // Session control
         HotkeyEntry {
@@ -372,12 +373,16 @@ pub fn debugger_hotkeys() -> Vec<HotkeyEntry> {
             category: "Stepping",
         },
         HotkeyEntry {
-            key: "F11",
+            key: platform.debug_step_into(),
             description: "Step into",
             category: "Stepping",
         },
         HotkeyEntry {
-            key: "Shift+F11",
+            key: if platform.windows {
+                "Ctrl+Shift+F11"
+            } else {
+                "Shift+F11"
+            },
             description: "Step out",
             category: "Stepping",
         },

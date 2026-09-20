@@ -73,6 +73,8 @@ mode = vim
 # ------------------
 # Format: action = modifier+key
 # Modifiers: ctrl, alt, shift (combine with +)
+# Defaults shown below are non-Windows. Windows automatically substitutes
+# Windows Terminal-safe defaults; explicit values in this file win.
 #
 # quit                  = ctrl+q           # Quit the application
 # focus_terminal        = alt+left         # Focus terminal pane

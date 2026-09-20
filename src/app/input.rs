@@ -4,7 +4,7 @@
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use crate::config::{KeyBinding, is_windows_11};
+use crate::config::{KeyAction, KeyBinding, PlatformKeys};
 use crate::ui::layout::FocusedPane;
 use crate::ui::popup::PopupKind;
 
@@ -118,29 +118,128 @@ impl App {
             return true;
         }
 
+        if self
+            .config
+            .keybindings
+            .matches(KeyAction::FocusTerminal, key.modifiers, key.code)
+        {
+            self.layout.set_focused(FocusedPane::Terminal);
+            return true;
+        }
+        if self
+            .config
+            .keybindings
+            .matches(KeyAction::FocusEditor, key.modifiers, key.code)
+        {
+            if self.layout.ide_visible() {
+                self.layout.set_focused(FocusedPane::Editor);
+            }
+            return true;
+        }
+        if self
+            .config
+            .keybindings
+            .matches(KeyAction::ToggleFocus, key.modifiers, key.code)
+        {
+            self.layout.toggle_focus();
+            return true;
+        }
+        if self
+            .config
+            .keybindings
+            .matches(KeyAction::Copy, key.modifiers, key.code)
+        {
+            self.copy_selection();
+            return true;
+        }
+        if self
+            .config
+            .keybindings
+            .matches(KeyAction::Paste, key.modifiers, key.code)
+        {
+            self.paste_clipboard();
+            return true;
+        }
+        if self
+            .config
+            .keybindings
+            .matches(KeyAction::NextFile, key.modifiers, key.code)
+        {
+            self.next_file();
+            return true;
+        }
+        if self
+            .config
+            .keybindings
+            .matches(KeyAction::PrevFile, key.modifiers, key.code)
+        {
+            self.prev_file();
+            return true;
+        }
+        if self
+            .config
+            .keybindings
+            .matches(KeyAction::SSHManager, key.modifiers, key.code)
+        {
+            self.show_ssh_manager();
+            return true;
+        }
+        if self
+            .config
+            .keybindings
+            .matches(KeyAction::DockerManager, key.modifiers, key.code)
+        {
+            self.show_docker_manager();
+            return true;
+        }
+
+        let platform = PlatformKeys::detect();
+        if platform
+            .command_palette_binding()
+            .matches(key.modifiers, key.code)
+        {
+            self.show_popup(PopupKind::CommandPalette);
+            return true;
+        }
+        if platform
+            .mode_switcher_binding()
+            .matches(key.modifiers, key.code)
+        {
+            if self.is_mode_switcher_active() {
+                self.cycle_mode_next();
+            } else {
+                self.show_mode_switcher();
+                self.cycle_mode_next();
+            }
+            return true;
+        }
+        if platform
+            .docker_fleet_binding()
+            .matches(key.modifiers, key.code)
+        {
+            if self.is_docker_fleet_open() {
+                self.close_docker_fleet();
+            } else {
+                self.open_docker_fleet();
+            }
+            return true;
+        }
+
         match (key.modifiers, key.code) {
+            (KeyModifiers::CONTROL, KeyCode::Char('p')) if !cfg!(windows) => {
+                self.show_popup(PopupKind::CommandPalette);
+                true
+            }
             (KeyModifiers::CONTROL, KeyCode::Char('i')) => {
                 self.toggle_ide();
                 true
             }
-            (KeyModifiers::ALT, KeyCode::Left) => {
-                self.layout.set_focused(FocusedPane::Terminal);
-                true
-            }
-            (KeyModifiers::ALT, KeyCode::Right) => {
-                if self.layout.ide_visible() {
-                    self.layout.set_focused(FocusedPane::Editor);
-                }
-                true
-            }
-            (KeyModifiers::ALT, KeyCode::Up) | (KeyModifiers::ALT, KeyCode::Down) => {
+            (KeyModifiers::ALT, KeyCode::Up) | (KeyModifiers::ALT, KeyCode::Down)
+                if !cfg!(windows) =>
+            {
                 if self.layout.focused() == FocusedPane::Terminal {
                     self.toggle_terminal_split_focus();
                 }
-                true
-            }
-            (KeyModifiers::ALT, KeyCode::Tab) => {
-                self.layout.toggle_focus();
                 true
             }
             (KeyModifiers::ALT, KeyCode::Char('[')) => {
@@ -179,17 +278,6 @@ impl App {
                 }
                 true
             }
-            // The Docker fleet: every container on every host, one screen.
-            (m, KeyCode::Char('m') | KeyCode::Char('M'))
-                if m == KeyModifiers::CONTROL | KeyModifiers::SHIFT =>
-            {
-                if self.is_docker_fleet_open() {
-                    self.close_docker_fleet();
-                } else {
-                    self.open_docker_fleet();
-                }
-                true
-            }
             (KeyModifiers::NONE, KeyCode::F(7)) if self.test_keys => {
                 self.open_docker_fleet();
                 true
@@ -216,66 +304,30 @@ impl App {
                 self.open_health_dashboard();
                 true
             }
-            // Command palette: F1 on Windows 11, Ctrl+Shift+P on other platforms
-            (KeyModifiers::NONE, KeyCode::F(1)) if is_windows_11() => {
-                self.show_popup(PopupKind::CommandPalette);
-                true
-            }
-            (m, KeyCode::Char('p') | KeyCode::Char('P'))
-                if m == KeyModifiers::CONTROL | KeyModifiers::SHIFT && !is_windows_11() =>
+            (m, KeyCode::Right)
+                if self.test_keys && m == KeyModifiers::ALT | KeyModifiers::SHIFT =>
             {
-                self.show_popup(PopupKind::CommandPalette);
-                true
-            }
-            (KeyModifiers::CONTROL, KeyCode::Char('p')) if !is_windows_11() => {
-                self.show_popup(PopupKind::CommandPalette);
-                true
-            }
-            (m, KeyCode::Tab) | (m, KeyCode::BackTab)
-                if m == KeyModifiers::CONTROL | KeyModifiers::SHIFT =>
-            {
-                if self.is_mode_switcher_active() {
-                    self.cycle_mode_next();
-                } else {
-                    self.show_mode_switcher();
-                    self.cycle_mode_next();
-                }
-                true
-            }
-            (m, KeyCode::Char('c') | KeyCode::Char('C'))
-                if m == KeyModifiers::CONTROL | KeyModifiers::SHIFT =>
-            {
-                self.copy_selection();
-                true
-            }
-            (KeyModifiers::CONTROL, KeyCode::Char('v')) => {
-                self.paste_clipboard();
-                true
-            }
-            (m, KeyCode::Right) if m == KeyModifiers::ALT | KeyModifiers::SHIFT => {
                 self.next_file();
                 true
             }
-            (m, KeyCode::Left) if m == KeyModifiers::ALT | KeyModifiers::SHIFT => {
+            (m, KeyCode::Left)
+                if self.test_keys && m == KeyModifiers::ALT | KeyModifiers::SHIFT =>
+            {
                 self.prev_file();
                 true
             }
             (m, KeyCode::Char('l') | KeyCode::Char('L'))
-                if m == KeyModifiers::ALT | KeyModifiers::SHIFT =>
+                if m == KeyModifiers::ALT | KeyModifiers::SHIFT
+                    && (!cfg!(windows) || self.test_keys) =>
             {
                 self.next_file();
                 true
             }
             (m, KeyCode::Char('h') | KeyCode::Char('H'))
-                if m == KeyModifiers::ALT | KeyModifiers::SHIFT =>
+                if m == KeyModifiers::ALT | KeyModifiers::SHIFT
+                    && (!cfg!(windows) || self.test_keys) =>
             {
                 self.prev_file();
-                true
-            }
-            (m, KeyCode::Char('u') | KeyCode::Char('U'))
-                if m == KeyModifiers::CONTROL | KeyModifiers::SHIFT =>
-            {
-                self.show_ssh_manager();
                 true
             }
             (KeyModifiers::CONTROL, KeyCode::Char(c @ '1'..='9'))
@@ -285,20 +337,31 @@ impl App {
                 self.ssh_connect_by_index(idx);
                 true
             }
-            // Docker Manager (Ctrl+Shift+D)
-            (m, KeyCode::Char('d') | KeyCode::Char('D'))
-                if m == KeyModifiers::CONTROL | KeyModifiers::SHIFT =>
-            {
-                self.show_docker_manager();
-                true
-            }
             // Git Dashboard (Ctrl+G)
             (KeyModifiers::CONTROL, KeyCode::Char('g')) => {
                 self.show_git_dashboard();
                 true
             }
-            // Docker quick connect (Ctrl+Alt+1-9)
-            (m, KeyCode::Char(c @ '1'..='9')) if m == KeyModifiers::CONTROL | KeyModifiers::ALT => {
+            (m, KeyCode::Char(c @ '1'..='9'))
+                if self
+                    .config
+                    .keybindings
+                    .action_for(m, KeyCode::Char(c))
+                    .is_some_and(|action| {
+                        matches!(
+                            action,
+                            KeyAction::DockerQuickConnect1
+                                | KeyAction::DockerQuickConnect2
+                                | KeyAction::DockerQuickConnect3
+                                | KeyAction::DockerQuickConnect4
+                                | KeyAction::DockerQuickConnect5
+                                | KeyAction::DockerQuickConnect6
+                                | KeyAction::DockerQuickConnect7
+                                | KeyAction::DockerQuickConnect8
+                                | KeyAction::DockerQuickConnect9
+                        )
+                    }) =>
+            {
                 let idx = (c as u8 - b'1') as usize;
                 self.docker_connect_by_index(idx);
                 true
@@ -345,11 +408,40 @@ impl App {
 
     /// Handles editor-specific global keybindings. Returns true if handled.
     fn handle_editor_global_key(&mut self, key: KeyEvent) -> bool {
+        if self
+            .config
+            .keybindings
+            .matches(KeyAction::TerminalCloseTab, key.modifiers, key.code)
+        {
+            self.close_editor_tab();
+            return true;
+        }
+        if self
+            .config
+            .keybindings
+            .matches(KeyAction::FindInFiles, key.modifiers, key.code)
+        {
+            self.show_popup(PopupKind::SearchInFiles);
+            return true;
+        }
+        if self
+            .config
+            .keybindings
+            .matches(KeyAction::SearchDirectories, key.modifiers, key.code)
+        {
+            self.show_popup(PopupKind::SearchDirectories);
+            return true;
+        }
+        if self
+            .config
+            .keybindings
+            .matches(KeyAction::NewFolder, key.modifiers, key.code)
+        {
+            self.show_popup(PopupKind::CreateFolder);
+            return true;
+        }
+
         match (key.modifiers, key.code) {
-            (KeyModifiers::CONTROL, KeyCode::Char('w')) => {
-                self.close_editor_tab();
-                true
-            }
             // Find within the file happens in the editor's own bar, beside
             // the text, with live match highlighting and a match count. The
             // popup this used to open covered the thing being searched.
@@ -362,13 +454,13 @@ impl App {
                 true
             }
             (m, KeyCode::Char('f') | KeyCode::Char('F'))
-                if m == KeyModifiers::CONTROL | KeyModifiers::SHIFT =>
+                if m == KeyModifiers::CONTROL | KeyModifiers::SHIFT && !cfg!(windows) =>
             {
                 self.show_popup(PopupKind::SearchInFiles);
                 true
             }
             (m, KeyCode::Char('d') | KeyCode::Char('D'))
-                if m == KeyModifiers::CONTROL | KeyModifiers::SHIFT =>
+                if m == KeyModifiers::CONTROL | KeyModifiers::SHIFT && !cfg!(windows) =>
             {
                 self.show_popup(PopupKind::SearchDirectories);
                 true
@@ -384,7 +476,7 @@ impl App {
                 true
             }
             (m, KeyCode::Char('n') | KeyCode::Char('N'))
-                if m == KeyModifiers::CONTROL | KeyModifiers::SHIFT =>
+                if m == KeyModifiers::CONTROL | KeyModifiers::SHIFT && !cfg!(windows) =>
             {
                 self.show_popup(PopupKind::CreateFolder);
                 true

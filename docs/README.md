@@ -34,7 +34,7 @@ Welcome to the Ratterm documentation. This folder contains detailed guides for a
 1. **Launch Ratterm**: Run `rat` or `rat <file>` to open with a file
 2. **Terminal-First Mode**: By default, only the terminal is visible
 3. **Open Editor**: Type `open` in terminal or press `Ctrl+I`
-4. **Command Palette**: Press `Ctrl+Shift+P` (or `F1` on Windows 11)
+4. **Command Palette**: Press `Ctrl+Shift+P` (or `F1` on Windows)
 
 ### Essential Hotkeys
 
@@ -44,7 +44,7 @@ Welcome to the Ratterm documentation. This folder contains detailed guides for a
 | Toggle IDE | `Ctrl+I` |
 | New Terminal Tab | `Ctrl+T` |
 | Open File Browser | `Ctrl+O` |
-| Switch Editor Mode | `Ctrl+Shift+Tab` |
+| Switch Editor Mode | `Ctrl+Shift+Tab` (`Ctrl+F1` on Windows) |
 | Quit | `Ctrl+Q` |
 
 ### Configuration

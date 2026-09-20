@@ -134,28 +134,28 @@ By default, Ratterm starts with only the terminal visible:
 ### Global
 | Key | Action |
 |-----|--------|
-| `Ctrl+Shift+P` | Open Command Palette (`F1` on Windows 11) |
+| `Ctrl+Shift+P` | Open Command Palette (`F1` on Windows) |
 | `Ctrl+Shift+Tab` | Switch Editor Mode (cycles through Vim/Emacs/Default) |
-| `Alt+Left` | Focus terminal pane |
-| `Alt+Right` | Focus editor pane |
-| `Alt+Up/Down` | Switch between split terminals |
-| `Alt+Tab` | Toggle focus between panes (not available on Windows — use `Alt+Left`/`Alt+Right`) |
+| `Alt+Left` | Focus terminal pane (`Ctrl+F6` on Windows) |
+| `Alt+Right` | Focus editor pane (`Ctrl+Shift+F6` on Windows) |
+| `Alt+Up/Down` | Switch between split terminals (host-reserved on Windows) |
+| `Alt+Tab` | Toggle focus (`Ctrl+Alt+F6` on Windows) |
 | `Alt+[` / `Alt+]` | Resize split |
 | `Ctrl+Q` | Quit |
 | `Ctrl+O` | Open file browser |
-| `Ctrl+Shift+C` | Copy |
-| `Ctrl+V` | Paste |
+| `Ctrl+Shift+C` | Copy (`Ctrl+F2` on Windows) |
+| `Ctrl+V` | Paste (`Ctrl+Shift+F2` on Windows) |
 
 ### Terminal
 | Key | Action |
 |-----|--------|
 | `Ctrl+T` | New terminal tab |
-| `Ctrl+W` | Close terminal tab |
-| `Ctrl+Left/Right` | Switch terminal tabs |
+| `Ctrl+W` | Close terminal tab (`Ctrl+F4` on Windows) |
+| `Ctrl+Left/Right` | Switch terminal tabs (`Ctrl+PageUp/PageDown` on Windows) |
 | `Ctrl+S` | Split horizontal |
 | `Ctrl+Shift+S` | Split vertical |
-| `Ctrl+Shift+W` | Close split |
-| `Ctrl+Tab` | Toggle split focus |
+| `Ctrl+Shift+W` | Close split (`Ctrl+Shift+F4` on Windows) |
+| `Ctrl+Tab` | Toggle split focus (`Alt+F6` on Windows) |
 | `Shift+PageUp/Down` | Scroll history |
 
 ### Editor (Vim Mode - Default)

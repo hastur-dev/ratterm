@@ -148,6 +148,12 @@ Sets the editor keybinding mode.
 mode = vim
 ```
 
+On Windows, built-in bindings that Windows Terminal consumes are replaced with
+Windows-safe defaults (for example, `F1` opens the palette, `Ctrl+F6` focuses
+the terminal, and `Ctrl+F4` closes a tab). An explicit action binding in
+`.ratrc` or `config.toml` always overrides the platform default. See
+[`hotkeys.md`](hotkeys.md#windows-differences) for the complete table.
+
 ---
 
 ### Theme Configuration

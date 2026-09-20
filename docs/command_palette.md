@@ -3,7 +3,12 @@
 The Command Palette provides quick access to all Ratterm commands. Open it with:
 
 - **Windows 11**: `F1`
+- **Windows**: `F1`
 - **Other platforms**: `Ctrl+Shift+P` or `Ctrl+P`
+
+Shortcut labels in the palette follow the Windows-safe defaults documented in
+[`hotkeys.md`](hotkeys.md#windows-differences). User overrides in `.ratrc` still
+take precedence when keys are dispatched.
 
 Type to filter commands, use `Up`/`Down` to navigate, and `Enter` to execute.
 

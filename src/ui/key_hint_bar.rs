@@ -116,8 +116,22 @@ pub fn hints_for(pane: FocusedPane, keys: PlatformKeys) -> Vec<KeyHint<'static>>
     match pane {
         FocusedPane::Terminal => vec![
             KeyHint::styled(keys.command_palette(), "Palette", KeyHintStyle::Highlighted),
-            KeyHint::new("Ctrl+Shift+U", "SSH"),
-            KeyHint::new("Ctrl+Shift+D", "Docker"),
+            KeyHint::new(
+                if keys.windows {
+                    "Ctrl+F8"
+                } else {
+                    "Ctrl+Shift+U"
+                },
+                "SSH",
+            ),
+            KeyHint::new(
+                if keys.windows {
+                    "Ctrl+F7"
+                } else {
+                    "Ctrl+Shift+D"
+                },
+                "Docker",
+            ),
             KeyHint::new("Ctrl+T", "New Tab"),
             KeyHint::new("Ctrl+S", "Split"),
             KeyHint::new(keys.switch_pane(), "Switch Pane"),
@@ -405,7 +419,7 @@ mod tests {
     fn test_hints_palette_label_follows_platform() {
         for pane in [FocusedPane::Terminal, FocusedPane::Editor] {
             assert_eq!(key_for(&hints_for(pane, UNIX), "Palette"), "Ctrl+Shift+P");
-            assert_eq!(key_for(&hints_for(pane, WIN10), "Palette"), "Ctrl+Shift+P");
+            assert_eq!(key_for(&hints_for(pane, WIN10), "Palette"), "F1");
             assert_eq!(
                 key_for(&hints_for(pane, WIN11), "Palette"),
                 "F1",
@@ -418,14 +432,8 @@ mod tests {
     fn test_hints_switch_pane_label_follows_platform() {
         for pane in [FocusedPane::Terminal, FocusedPane::Editor] {
             assert_eq!(key_for(&hints_for(pane, UNIX), "Switch Pane"), "Alt+Tab");
-            assert_eq!(
-                key_for(&hints_for(pane, WIN10), "Switch Pane"),
-                "Alt+Arrows"
-            );
-            assert_eq!(
-                key_for(&hints_for(pane, WIN11), "Switch Pane"),
-                "Alt+Arrows"
-            );
+            assert_eq!(key_for(&hints_for(pane, WIN10), "Switch Pane"), "Ctrl+F6");
+            assert_eq!(key_for(&hints_for(pane, WIN11), "Switch Pane"), "Ctrl+F6");
         }
     }
 
@@ -505,7 +513,7 @@ mod tests {
                     "Windows host must not be told to press Alt+Tab: '{content}'"
                 );
             }
-            if keys.windows_11 {
+            if keys.windows {
                 assert!(
                     !content.contains("Ctrl+Shift+P"),
                     "Windows 11 host must not be told to press Ctrl+Shift+P: '{content}'"
