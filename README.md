@@ -136,10 +136,10 @@ By default, Ratterm starts with only the terminal visible:
 |-----|--------|
 | `Ctrl+Shift+P` | Open Command Palette (`F1` on Windows 11) |
 | `Ctrl+Shift+Tab` | Switch Editor Mode (cycles through Vim/Emacs/Default) |
-| `Alt+Left` | Focus terminal pane |
-| `Alt+Right` | Focus editor pane |
-| `Alt+Up/Down` | Switch between split terminals |
-| `Alt+Tab` | Toggle focus between panes (not available on Windows — use `Alt+Left`/`Alt+Right`) |
+| `Alt+Left` | Move to the terminal on the left; from the IDE, enter the nearest terminal |
+| `Alt+Right` | Move to the terminal on the right; at the grid edge, enter the IDE |
+| `Alt+Up/Down` | Move to the terminal above or below |
+| `Alt+Tab` | Toggle focus between panes (not available on Windows) |
 | `Alt+[` / `Alt+]` | Resize split |
 | `Ctrl+Q` | Quit |
 | `Ctrl+O` | Open file browser |

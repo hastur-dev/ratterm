@@ -5,6 +5,7 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::config::{KeyBinding, is_windows_11};
+use crate::terminal::GridDirection;
 use crate::ui::layout::FocusedPane;
 use crate::ui::popup::PopupKind;
 
@@ -124,19 +125,19 @@ impl App {
                 true
             }
             (KeyModifiers::ALT, KeyCode::Left) => {
-                self.layout.set_focused(FocusedPane::Terminal);
+                self.navigate_panes(GridDirection::Left);
                 true
             }
             (KeyModifiers::ALT, KeyCode::Right) => {
-                if self.layout.ide_visible() {
-                    self.layout.set_focused(FocusedPane::Editor);
-                }
+                self.navigate_panes(GridDirection::Right);
                 true
             }
-            (KeyModifiers::ALT, KeyCode::Up) | (KeyModifiers::ALT, KeyCode::Down) => {
-                if self.layout.focused() == FocusedPane::Terminal {
-                    self.toggle_terminal_split_focus();
-                }
+            (KeyModifiers::ALT, KeyCode::Up) => {
+                self.navigate_panes(GridDirection::Up);
+                true
+            }
+            (KeyModifiers::ALT, KeyCode::Down) => {
+                self.navigate_panes(GridDirection::Down);
                 true
             }
             (KeyModifiers::ALT, KeyCode::Tab) => {
@@ -752,5 +753,121 @@ impl App {
             }
             _ => {}
         }
+    }
+}
+
+#[cfg(test)]
+mod navigation_tests {
+    use super::*;
+
+    #[test]
+    fn alt_arrows_follow_terminal_positions_and_enter_the_ide_at_the_right_edge() {
+        let mut app = App::new(100, 40).expect("create app");
+        app.config.addon_commands.clear();
+        let terminals = app.terminals.as_mut().expect("terminal available");
+        terminals.split().expect("create right terminal");
+        assert_eq!(terminals.current_grid_focus(), Some(1));
+
+        app.handle_global_key(KeyEvent::new(KeyCode::Right, KeyModifiers::ALT));
+        assert_eq!(app.layout.focused(), FocusedPane::Terminal);
+
+        app.layout.show_both();
+        app.handle_global_key(KeyEvent::new(KeyCode::Left, KeyModifiers::ALT));
+        assert_eq!(
+            app.terminals.as_ref().unwrap().current_grid_focus(),
+            Some(0)
+        );
+        app.handle_global_key(KeyEvent::new(KeyCode::Right, KeyModifiers::ALT));
+        assert_eq!(
+            app.terminals.as_ref().unwrap().current_grid_focus(),
+            Some(1)
+        );
+        app.handle_global_key(KeyEvent::new(KeyCode::Right, KeyModifiers::ALT));
+        assert_eq!(app.layout.focused(), FocusedPane::Editor);
+        app.handle_global_key(KeyEvent::new(KeyCode::Left, KeyModifiers::ALT));
+        assert_eq!(app.layout.focused(), FocusedPane::Terminal);
+        assert_eq!(
+            app.terminals.as_ref().unwrap().current_grid_focus(),
+            Some(1)
+        );
+
+        app.shutdown();
+        // Dropping Windows ConPTY terminals can block during test teardown.
+        #[cfg(windows)]
+        std::mem::forget(app);
+    }
+
+    #[test]
+    fn alt_arrows_navigate_all_four_terminals_by_direction() {
+        let mut app = App::new(100, 40).expect("create app");
+        app.config.addon_commands.clear();
+        app.layout.show_both();
+        let terminals = app.terminals.as_mut().expect("terminal available");
+        terminals.split().expect("create right terminal");
+        terminals.split().expect("create bottom row");
+        assert_eq!(terminals.current_grid_focus(), Some(3));
+
+        app.handle_global_key(KeyEvent::new(KeyCode::Up, KeyModifiers::ALT));
+        assert_eq!(
+            app.terminals.as_ref().unwrap().current_grid_focus(),
+            Some(1)
+        );
+        app.handle_global_key(KeyEvent::new(KeyCode::Left, KeyModifiers::ALT));
+        assert_eq!(
+            app.terminals.as_ref().unwrap().current_grid_focus(),
+            Some(0)
+        );
+        app.handle_global_key(KeyEvent::new(KeyCode::Down, KeyModifiers::ALT));
+        assert_eq!(
+            app.terminals.as_ref().unwrap().current_grid_focus(),
+            Some(2)
+        );
+        app.handle_global_key(KeyEvent::new(KeyCode::Right, KeyModifiers::ALT));
+        assert_eq!(
+            app.terminals.as_ref().unwrap().current_grid_focus(),
+            Some(3)
+        );
+
+        app.handle_global_key(KeyEvent::new(KeyCode::Down, KeyModifiers::ALT));
+        assert_eq!(
+            app.terminals.as_ref().unwrap().current_grid_focus(),
+            Some(3)
+        );
+        app.handle_global_key(KeyEvent::new(KeyCode::Right, KeyModifiers::ALT));
+        assert_eq!(app.layout.focused(), FocusedPane::Editor);
+        app.handle_global_key(KeyEvent::new(KeyCode::Left, KeyModifiers::ALT));
+        assert_eq!(app.layout.focused(), FocusedPane::Terminal);
+        assert_eq!(
+            app.terminals.as_ref().unwrap().current_grid_focus(),
+            Some(3)
+        );
+
+        app.layout.set_focused(FocusedPane::Editor);
+        app.handle_global_key(KeyEvent::new(KeyCode::Left, KeyModifiers::ALT));
+        assert_eq!(app.layout.focused(), FocusedPane::Terminal);
+        assert_eq!(
+            app.terminals.as_ref().unwrap().current_grid_focus(),
+            Some(3)
+        );
+
+        app.terminals
+            .as_mut()
+            .unwrap()
+            .move_grid_focus(GridDirection::Left);
+        assert_eq!(
+            app.terminals.as_ref().unwrap().current_grid_focus(),
+            Some(2)
+        );
+        app.layout.set_focused(FocusedPane::Editor);
+        app.handle_global_key(KeyEvent::new(KeyCode::Left, KeyModifiers::ALT));
+        assert_eq!(
+            app.terminals.as_ref().unwrap().current_grid_focus(),
+            Some(3)
+        );
+
+        app.shutdown();
+        // Dropping Windows ConPTY terminals can block during test teardown.
+        #[cfg(windows)]
+        std::mem::forget(app);
     }
 }

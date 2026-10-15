@@ -822,7 +822,13 @@ impl App {
             .terminals
             .as_ref()
             .and_then(|t| t.active_terminal())
-            .map(|t| t.title().to_string());
+            .map(|t| {
+                if t.is_ssh() || t.is_docker() {
+                    t.title().to_string()
+                } else {
+                    t.current_working_dir().display().to_string()
+                }
+            });
 
         let mut status_bar = StatusBar::new()
             .focused_pane(self.layout.focused())

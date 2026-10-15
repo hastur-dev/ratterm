@@ -21,10 +21,10 @@ These hotkeys work regardless of which pane is focused or what mode you're in.
 | `Ctrl+T` | New editor tab (works whether or not the IDE pane is showing) |
 | `Ctrl+Shift+C` | Copy selection |
 | `Ctrl+V` | Paste from clipboard |
-| `Alt+Left` | Focus Terminal pane |
-| `Alt+Right` | Focus Editor pane (when IDE visible) |
+| `Alt+Left` | Move left in the terminal grid; from the IDE, enter the nearest terminal |
+| `Alt+Right` | Move right in the terminal grid; at the right edge, enter the IDE when visible |
 | `Alt+Tab` | Toggle focus between panes (when IDE visible) — **not available on Windows** |
-| `Alt+Up` / `Alt+Down` | Navigate between terminal grid panes |
+| `Alt+Up` / `Alt+Down` | Move to the terminal directly above or below, without wrapping |
 | `Alt+[` | Shrink split (move divider left) |
 | `Alt+]` | Expand split (move divider right) |
 | `Alt+Shift+Left` | Previous file tab |
@@ -38,7 +38,7 @@ system, so it always shows hotkeys that actually reach Ratterm.
 | Action | Non-Windows | Windows 10 | Windows 11 | Why |
 |--------|-------------|------------|------------|-----|
 | Command Palette | `Ctrl+Shift+P` | `Ctrl+Shift+P` | `F1` | Windows 11 reserves `Ctrl+Shift+P` for its own terminal command palette |
-| Switch Pane | `Alt+Tab` | `Alt+Left` / `Alt+Right` (shown as `Alt+Arrows`) | `Alt+Left` / `Alt+Right` (shown as `Alt+Arrows`) | Windows reserves `Alt+Tab` for the system window switcher, so the application never receives it |
+| Switch Pane | `Alt+Tab` | `Alt+Arrows` | `Alt+Arrows` | Windows reserves `Alt+Tab` for the system window switcher, so the application never receives it |
 
 Windows consoles report every keystroke twice — once as a key-press event and
 once as a key-release event. Ratterm pairs the two so each hotkey fires once.
@@ -108,7 +108,7 @@ Terminals can be split into a 2x2 grid:
 | `Ctrl+Shift+W` | Close current terminal pane |
 | `Ctrl+Tab` | Cycle focus between grid panes |
 | `Alt+Up` / `Alt+Down` | Navigate grid vertically |
-| `Alt+Left` / `Alt+Right` | Navigate grid horizontally (when in grid) |
+| `Alt+Left` / `Alt+Right` | Navigate grid horizontally; `Alt+Right` at the right edge enters the IDE |
 
 ### Scrolling & Input
 

@@ -1,6 +1,7 @@
 //! Terminal operations for the App.
 
-use crate::terminal::{ProcessInfo, SSHContext};
+use crate::terminal::{GridDirection, ProcessInfo, SSHContext};
+use crate::ui::layout::FocusedPane;
 
 use super::App;
 
@@ -172,6 +173,33 @@ impl App {
                 crate::terminal::SplitFocus::Second => "second",
             };
             self.set_status(format!("Focus: {} pane", pane));
+        }
+    }
+
+    /// Moves focus to the adjacent terminal or IDE pane.
+    pub fn navigate_panes(&mut self, direction: GridDirection) {
+        if self.layout.focused() == FocusedPane::Editor {
+            if direction == GridDirection::Left && self.layout.terminal_visible() {
+                if let Some(ref mut terminals) = self.terminals {
+                    // Enter the terminal nearest the IDE in the current row.
+                    terminals.move_grid_focus(GridDirection::Right);
+                    self.layout.set_focused(FocusedPane::Terminal);
+                }
+            }
+            return;
+        }
+
+        let Some(ref mut terminals) = self.terminals else {
+            return;
+        };
+        let previous = terminals.current_grid_focus();
+        terminals.move_grid_focus(direction);
+
+        if direction == GridDirection::Right
+            && previous == terminals.current_grid_focus()
+            && self.layout.editor_visible()
+        {
+            self.layout.set_focused(FocusedPane::Editor);
         }
     }
 

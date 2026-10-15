@@ -220,6 +220,8 @@ pub struct Terminal {
     input_buffer: String,
     /// Current working directory (tracked via OSC 7 or process).
     cwd: Option<PathBuf>,
+    /// Process working directory when the last OSC 7 report arrived.
+    cwd_process_at_report: Option<PathBuf>,
     /// Initial working directory (set at creation).
     initial_cwd: PathBuf,
     /// Queue of pending passwords for SSH auto-login (supports multi-hop).
@@ -608,6 +610,7 @@ impl Terminal {
             scroll_offset: 0,
             input_buffer: String::new(),
             cwd: None,
+            cwd_process_at_report: None,
             initial_cwd,
             pending_passwords: std::collections::VecDeque::new(),
             output_buffer: String::new(),
@@ -713,18 +716,27 @@ impl Terminal {
     /// Returns the current working directory of the terminal.
     ///
     /// This returns the CWD in the following priority:
-    /// 1. CWD tracked via OSC 7 escape sequences
-    /// 2. CWD read from the PTY process (on supported platforms)
-    /// 3. The initial working directory
+    /// 1. A process CWD that changed since the last OSC 7 report
+    /// 2. CWD tracked via OSC 7 escape sequences
+    /// 3. CWD read from the PTY process (on supported platforms)
+    /// 4. The initial working directory
     #[must_use]
     pub fn current_working_dir(&self) -> PathBuf {
-        // First, check if we have a CWD from OSC 7
+        let process_cwd = self.pty.current_working_dir();
+
+        // A shell can emit OSC 7 at startup but stop reporting after `cd`.
+        // If its process moved since that report, use the newer location.
+        if let (Some(current), Some(at_report)) = (&process_cwd, &self.cwd_process_at_report) {
+            if current != at_report {
+                return current.clone();
+            }
+        }
+
         if let Some(ref cwd) = self.cwd {
             return cwd.clone();
         }
 
-        // Try to get CWD from the PTY process
-        if let Some(cwd) = self.pty.current_working_dir() {
+        if let Some(cwd) = process_cwd {
             return cwd;
         }
 
@@ -935,6 +947,7 @@ impl Terminal {
             }
             ParsedAction::SetCwd(path) => {
                 // Update the tracked current working directory
+                self.cwd_process_at_report = self.pty.current_working_dir();
                 self.cwd = Some(PathBuf::from(path));
             }
             ParsedAction::SetClipboard(text) => {
@@ -1156,5 +1169,60 @@ impl Terminal {
     /// Extends selection down by one row (keyboard selection).
     pub fn select_down(&mut self) {
         self.grid.extend_selection_down();
+    }
+}
+
+#[cfg(all(test, windows))]
+mod cwd_tests {
+    use super::{PtyConfig, Terminal};
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn shell_cd_supersedes_a_stale_osc_cwd() {
+        let start = tempfile::tempdir().expect("create starting directory");
+        let next = start.path().join("next");
+        std::fs::create_dir(&next).expect("create destination directory");
+
+        let mut terminal = Terminal::with_config(PtyConfig {
+            shell: Some("cmd.exe".to_string()),
+            working_dir: Some(start.path().to_path_buf()),
+            ..PtyConfig::default()
+        })
+        .expect("start shell");
+
+        let deadline = Instant::now() + Duration::from_secs(3);
+        let process_at_report = loop {
+            if let Some(cwd) = terminal.pty.current_working_dir() {
+                break cwd;
+            }
+            assert!(Instant::now() < deadline, "shell CWD was unavailable");
+            std::thread::sleep(Duration::from_millis(10));
+        };
+
+        let reported = start.path().join("reported");
+        terminal.cwd = Some(reported.clone());
+        terminal.cwd_process_at_report = Some(process_at_report);
+        assert_eq!(terminal.current_working_dir(), reported);
+
+        terminal
+            .write(format!("cd /d \"{}\"\r", next.display()).as_bytes())
+            .expect("change shell directory");
+
+        let expected = next.canonicalize().expect("canonical destination");
+        loop {
+            terminal.process().expect("read shell output");
+            if terminal
+                .current_working_dir()
+                .canonicalize()
+                .is_ok_and(|cwd| cwd == expected)
+            {
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "Rat kept the stale OSC directory"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
     }
 }

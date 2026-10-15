@@ -73,8 +73,8 @@ Type to filter commands, use `Up`/`Down` to navigate, and `Enter` to execute.
 
 | Command | Hotkey | Description |
 |---------|--------|-------------|
-| `View: Focus Terminal` | `Alt+Left` | Focus terminal pane |
-| `View: Focus Editor` | `Alt+Right` | Focus editor pane |
+| `View: Focus Terminal` | — | Focus terminal pane |
+| `View: Focus Editor` | — | Focus editor pane |
 | `View: Toggle Focus` | `Alt+Tab` | Toggle between panes |
 | `View: Toggle IDE` | `Ctrl+I` | Show/hide IDE pane |
 | `View: Shrink Split` | `Alt+[` | Move divider left |
